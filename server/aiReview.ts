@@ -1,4 +1,5 @@
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, safeJsonParse } from "./_core/llm";
+import { searchLiterature, formatLiteratureForPrompt } from "./literature";
 
 // Color codes: red = flag/stop, yellow = AI resolved needs review, green = OK, darkGreen = perfect
 export type FieldColor = "red" | "yellow" | "green" | "darkGreen";
@@ -224,7 +225,7 @@ For each field, provide:
     });
 
     const content = response.choices[0]?.message?.content;
-    const parsed = JSON.parse(typeof content === "string" ? content : "{}");
+    const parsed = safeJsonParse(typeof content === "string" ? content : "{}");
     const norm = normalizeReviewJson(parsed);
     const fieldScores: FieldScore[] = (norm.fieldScores || []).map((fs: any) => ({
       ...fs,
@@ -270,6 +271,23 @@ export async function runStage2AiReview(data: {
   confidentialityMeasures: string;
   conflictOfInterest: string;
 }): Promise<AiReviewResult> {
+  // Pull related work from PubMed / ClinicalTrials.gov / S2 / OpenAlex
+  // in parallel. The whole block is wrapped — any source failure (DNS,
+  // rate limit, schema drift) just yields a smaller context, never a
+  // failed review.
+  let literatureContext = "";
+  try {
+    const literatureQuery = [data.researchTitle, data.researchObjectives]
+      .filter(Boolean)
+      .join(" — ")
+      .slice(0, 400) || data.researchType;
+    const bundle = await searchLiterature(literatureQuery, { perSource: 4 });
+    const formatted = formatLiteratureForPrompt(bundle);
+    if (formatted) literatureContext = `${formatted}\n\n`;
+  } catch (err) {
+    console.warn("[AI Review] Literature search failed:", err);
+  }
+
   const prompt = `You are a senior IRB ethics reviewer and bioethics expert for the National Bioethics Committee of Saudi Arabia (NBCE). You hold deep expertise in:
 - Declaration of Helsinki (2013 revision)
 - ICH-GCP E6(R2) Guidelines
@@ -386,6 +404,14 @@ CROSS-PHASE ALIGNMENT VALIDATION
 - If research type is "survey", data collection should reference the survey instrument
 - If research type is "retrospective", consent may be waived but justification required
 
+═══════════════════════════════════════════════════
+PRIOR-ART & LITERATURE CHECK
+═══════════════════════════════════════════════════
+- Compare the proposal against the LITERATURE & PRIOR-ART CONTEXT block (when present)
+- Flag if an active or recently completed registered trial already addresses the same question and population
+- Note when the proposed sample size, design, or endpoints are inconsistent with what comparable studies in the literature have used
+- If the proposal cites no precedent and the literature shows substantial prior work, drop the methodology score and add a recommendation to engage with that body of evidence
+
 For each field, provide:
 - score (0-100 weighted by content quality)
 - feedback (specific strengths and weaknesses)
@@ -393,7 +419,7 @@ For each field, provide:
 
 Also provide fieldSuggestions: a complete replacement text for EVERY field that would achieve 100/100.
 
-APPLICATION DATA:
+${literatureContext}APPLICATION DATA:
 ${JSON.stringify(data, null, 2)}`;
 
   try {
@@ -456,7 +482,7 @@ ${JSON.stringify(data, null, 2)}`;
     });
 
     const content = response.choices[0]?.message?.content;
-    const parsed = JSON.parse(typeof content === "string" ? content : "{}");
+    const parsed = safeJsonParse(typeof content === "string" ? content : "{}");
     const norm = normalizeReviewJson(parsed);
     const fieldScores: FieldScore[] = (norm.fieldScores || []).map((fs: any) => ({
       ...fs,
@@ -585,7 +611,7 @@ IMPORTANT: The applicant is responsible for the truthfulness and accuracy of all
     });
 
     const content = response.choices[0]?.message?.content;
-    return JSON.parse(typeof content === "string" ? content : "{}");
+    return safeJsonParse(typeof content === "string" ? content : "{}");
   } catch (error) {
     console.error("[AI AutoComplete] Error:", error);
     return {};
@@ -655,7 +681,7 @@ IMPORTANT: The applicant is responsible for truth and accuracy. Enhance quality 
     });
 
     const content = response.choices[0]?.message?.content;
-    return JSON.parse(typeof content === "string" ? content : '{"enhancedValue":"","explanation":""}');
+    return safeJsonParse(typeof content === "string" ? content : '{"enhancedValue":"","explanation":""}');
   } catch (error) {
     console.error("[AI Resolve] Error:", error);
     return { enhancedValue: data.currentValue, explanation: "AI resolution failed. Please try again." };
@@ -738,7 +764,7 @@ Return ALL fields (both fixed and unchanged) as a complete set.`;
     });
 
     const content = response.choices[0]?.message?.content;
-    return JSON.parse(typeof content === "string" ? content : "{}");
+    return safeJsonParse(typeof content === "string" ? content : "{}");
   } catch (error) {
     console.error("[AI FixAll] Error:", error);
     return data.fields;

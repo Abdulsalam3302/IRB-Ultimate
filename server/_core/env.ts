@@ -21,4 +21,14 @@ export const ENV = {
   llmModel: process.env.LLM_MODEL ?? "MiniMax-M2",
   llmMaxTokens: parseInt(process.env.LLM_MAX_TOKENS ?? "8192", 10),
   llmProvider: (process.env.LLM_PROVIDER ?? "openai").toLowerCase(),
+
+  // Literature & evidence sources — used to cross-check submitted
+  // protocols against existing trials and prior art. All optional;
+  // any missing source silently degrades.
+  pubmedApiKey: process.env.PUBMED_API_KEY?.trim() || undefined,
+  semanticScholarApiKey: process.env.SEMANTIC_SCHOLAR_API_KEY?.trim() || undefined,
+  openAlexApiKey: process.env.OPENALEX_API_KEY?.trim() || undefined,
+  elicitApiKey: process.env.ELICIT_API_KEY?.trim() || undefined,
+  // Elicit endpoint is partner-gated; provide once support confirms.
+  elicitApiUrl: process.env.ELICIT_API_URL?.trim() || undefined,
 };

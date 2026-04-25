@@ -370,3 +370,66 @@ function stripReasoningTags(s: string): string {
   if (fenced) out = fenced[1].trim();
   return out;
 }
+
+/**
+ * Robust JSON.parse — tolerates the failure modes we see with reasoning
+ * models: leading prose, trailing commentary, truncated tail (token
+ * budget exhausted mid-object). Returns {} if nothing salvageable.
+ */
+export function safeJsonParse(s: string): any {
+  if (!s) return {};
+  try {
+    return JSON.parse(s);
+  } catch {
+    // 1) try carving the largest substring between the first `{` and last `}`
+    const first = s.indexOf("{");
+    const last = s.lastIndexOf("}");
+    if (first !== -1 && last > first) {
+      const slice = s.slice(first, last + 1);
+      try {
+        return JSON.parse(slice);
+      } catch {
+        /* keep trying */
+      }
+    }
+    // 2) walk from the end, dropping the last char until we get a parse
+    if (first !== -1) {
+      const head = s.slice(first);
+      let trimmed = head;
+      // try closing unclosed strings/objects/arrays — append closers up to 8 levels
+      for (let attempts = 0; attempts < 8; attempts++) {
+        try {
+          return JSON.parse(trimmed);
+        } catch {
+          // strip trailing comma/whitespace, append a closer
+          trimmed = trimmed.replace(/[,\s]+$/, "");
+          // count unbalanced braces/brackets
+          let braces = 0,
+            brackets = 0;
+          let inStr = false,
+            esc = false;
+          for (const c of trimmed) {
+            if (esc) {
+              esc = false;
+              continue;
+            }
+            if (c === "\\") {
+              esc = true;
+              continue;
+            }
+            if (c === '"') inStr = !inStr;
+            if (inStr) continue;
+            if (c === "{") braces++;
+            else if (c === "}") braces--;
+            else if (c === "[") brackets++;
+            else if (c === "]") brackets--;
+          }
+          if (inStr) trimmed += '"';
+          while (brackets-- > 0) trimmed += "]";
+          while (braces-- > 0) trimmed += "}";
+        }
+      }
+    }
+    return {};
+  }
+}

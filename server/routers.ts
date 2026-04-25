@@ -11,6 +11,7 @@ import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
 import { storagePut } from "./storage";
 import * as emailService from "./emailService";
+import { searchLiterature } from "./literature";
 
 // ─── Application Router ─────────────────────────────────────────────────────
 
@@ -1457,6 +1458,51 @@ const publicStatsRouter = router({
   }),
 });
 
+// ─── Literature Router ─────────────────────────────────────────────────────
+// Cross-checks proposals against PubMed, ClinicalTrials.gov, Semantic Scholar,
+// OpenAlex (and Elicit when configured). Each source is queried in parallel
+// and individual failures degrade gracefully.
+
+const literatureRouter = router({
+  // Free-form search — useful for the resource centre / browsing.
+  search: publicProcedure
+    .input(
+      z.object({
+        query: z.string().min(2).max(500),
+        perSource: z.number().int().min(1).max(10).optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      return searchLiterature(input.query, { perSource: input.perSource });
+    }),
+
+  // Application-scoped search — owner or admin only. Builds a query
+  // from the proposal's title + objectives so it's directly relevant.
+  searchByApplication: protectedProcedure
+    .input(z.object({ applicationId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const query = [app.researchTitle, app.researchObjectives]
+        .filter(Boolean)
+        .join(" — ")
+        .slice(0, 400) || (app.researchType ?? "");
+      if (query.length < 2) {
+        return {
+          query: "",
+          fetchedAt: new Date().toISOString(),
+          totals: {},
+          items: [],
+          errors: { input: "Application has no title or objectives yet" },
+        };
+      }
+      return searchLiterature(query, { perSource: 4 });
+    }),
+});
+
 // ─── Main Router ────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -1478,6 +1524,7 @@ export const appRouter = router({
   notification: notificationRouter,
   reports: reportsRouter,
   publicStats: publicStatsRouter,
+  literature: literatureRouter,
 });
 
 export type AppRouter = typeof appRouter;

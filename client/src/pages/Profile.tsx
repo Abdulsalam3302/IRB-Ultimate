@@ -1,0 +1,345 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
+import { getLoginUrl } from "@/const";
+import { useT } from "@/contexts/LanguageContext";
+import { Navbar } from "@/components/Navbar";
+import {
+  User, Mail, Calendar, Shield, FileText, Award, Download,
+  Clock, CheckCircle, XCircle, ArrowRight, Loader2, Eye,
+  TrendingUp, BarChart3, AlertTriangle, ExternalLink
+} from "lucide-react";
+import { STATUS_LABELS, STATUS_COLORS, RESEARCH_TYPE_LABELS } from "@shared/types";
+import type { ApplicationStatus, ResearchType } from "@shared/types";
+import { useMemo } from "react";
+
+export default function Profile() {
+  const { user, loading, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+  const { lang } = useT();
+  const isAr = lang === "ar";
+
+  const { data: applications, isLoading: appsLoading } = trpc.application.myApplications.useQuery(
+    undefined,
+    { enabled: isAuthenticated }
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardContent className="py-8 text-center">
+            <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-xl font-bold mb-2">{isAr ? "يرجى تسجيل الدخول" : "Please Sign In"}</h2>
+            <p className="text-muted-foreground mb-4">{isAr ? "تحتاج لتسجيل الدخول لعرض ملفك الشخصي." : "You need to sign in to view your profile."}</p>
+            <Button className="btn-apple" onClick={() => { window.location.href = getLoginUrl(); }}>
+              {isAr ? "تسجيل الدخول" : "Sign In"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const apps = applications || [];
+  const approvedApps = apps.filter((a: any) => a.status === "approved");
+  const pendingApps = apps.filter((a: any) => !["approved", "rejected", "permanently_rejected", "retracted", "hidden", "draft"].includes(a.status));
+  const rejectedApps = apps.filter((a: any) => ["rejected", "permanently_rejected"].includes(a.status));
+
+  const stats = useMemo(() => ({
+    total: apps.length,
+    approved: approvedApps.length,
+    pending: pendingApps.length,
+    rejected: rejectedApps.length,
+    approvalRate: apps.filter((a: any) => a.status !== "draft").length > 0
+      ? Math.round((approvedApps.length / apps.filter((a: any) => a.status !== "draft").length) * 100)
+      : 0,
+  }), [apps, approvedApps, pendingApps, rejectedApps]);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar showBack backTo="/dashboard" backLabel={isAr ? "لوحة التحكم" : "Dashboard"} />
+
+      <div className="container py-8 max-w-4xl">
+        {/* Profile Header */}
+        <Card className="mb-8 overflow-hidden">
+          <div className="h-24 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent" />
+          <CardContent className="-mt-12 pb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+              <div className="h-20 w-20 rounded-2xl bg-primary/10 border-4 border-background flex items-center justify-center shadow-lg">
+                <User className="h-10 w-10 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold">{user?.name || (isAr ? "باحث" : "Researcher")}</h1>
+                <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {user?.email}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {isAr ? "انضم" : "Joined"} {user?.createdAt ? new Date(user.createdAt).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long" }) : "—"}</span>
+                  {user?.role === "admin" && (
+                    <Badge variant="outline" className="text-primary border-primary/30">
+                      <Shield className="h-3 w-3 me-1" /> {isAr ? "مسؤول" : "Admin"}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setLocation("/dashboard")}>
+                {isAr ? "لوحة التحكم" : "Dashboard"} <ArrowRight className="h-3.5 w-3.5 ms-1" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardContent className="pt-5 pb-4 text-center">
+              <FileText className="h-5 w-5 text-primary mx-auto mb-1.5" />
+              <p className="text-2xl font-bold">{stats.total}</p>
+              <p className="text-xs text-muted-foreground">{isAr ? "إجمالي الطلبات" : "Total Applications"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4 text-center">
+              <CheckCircle className="h-5 w-5 text-emerald-600 mx-auto mb-1.5" />
+              <p className="text-2xl font-bold text-emerald-600">{stats.approved}</p>
+              <p className="text-xs text-muted-foreground">{isAr ? "موافق عليها" : "Approved"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4 text-center">
+              <Clock className="h-5 w-5 text-yellow-600 mx-auto mb-1.5" />
+              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+              <p className="text-xs text-muted-foreground">{isAr ? "قيد المراجعة" : "In Progress"}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4 text-center">
+              <TrendingUp className="h-5 w-5 text-blue-600 mx-auto mb-1.5" />
+              <p className="text-2xl font-bold text-blue-600">{stats.approvalRate}%</p>
+              <p className="text-xs text-muted-foreground">{isAr ? "معدل الموافقة" : "Approval Rate"}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabs: Certificates, All Applications, Activity */}
+        <Tabs defaultValue="certificates" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3 max-w-lg">
+            <TabsTrigger value="certificates"><Award className="h-4 w-4 me-1" /> {isAr ? "الشهادات" : "Certificates"}</TabsTrigger>
+            <TabsTrigger value="history"><FileText className="h-4 w-4 me-1" /> {isAr ? "السجل" : "History"}</TabsTrigger>
+            <TabsTrigger value="activity"><BarChart3 className="h-4 w-4 me-1" /> {isAr ? "النشاط" : "Activity"}</TabsTrigger>
+          </TabsList>
+
+          {/* Certificates Tab */}
+          <TabsContent value="certificates">
+            {approvedApps.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Award className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <h3 className="font-semibold mb-2">{isAr ? "لا توجد شهادات بعد" : "No Certificates Yet"}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{isAr ? "ستظهر شهادات IRB المعتمدة هنا بعد الموافقة على طلباتك." : "Your approved IRB certificates will appear here once your applications are approved."}</p>
+                  <Button variant="outline" onClick={() => setLocation("/dashboard")}>
+                    {isAr ? "تقديم طلب" : "Submit an Application"} <ArrowRight className="h-3.5 w-3.5 ms-1" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {approvedApps.map((app: any) => (
+                  <Card key={app.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="py-5">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                            <Award className="h-5 w-5 text-emerald-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-sm">{app.researchTitle || `${isAr ? "طلب" : "Application"} #${app.id}`}</h3>
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
+                              {app.irbNumber && (
+                                <Badge variant="outline" className="text-emerald-600 border-emerald-200 text-xs">
+                                  {app.irbNumber}
+                                </Badge>
+                              )}
+                              <span>{isAr ? "تمت الموافقة" : "Approved"}: {app.approvedAt ? new Date(app.approvedAt).toLocaleDateString(isAr ? "ar-SA" : "en-US") : "—"}</span>
+                              {app.researchType && (
+                                <span className="capitalize">{(RESEARCH_TYPE_LABELS as any)[app.researchType]?.[isAr ? "ar" : "en"] || app.researchType.replace(/_/g, " ")}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {app.certificateUrl && (
+                            <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50" asChild>
+                              <a href={app.certificateUrl} target="_blank" rel="noopener noreferrer">
+                                <Download className="h-3.5 w-3.5 me-1" /> {isAr ? "الشهادة" : "Certificate"}
+                              </a>
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => setLocation(`/application/${app.id}`)}>
+                            <Eye className="h-3.5 w-3.5 me-1" /> {isAr ? "عرض" : "View"}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Submission History Tab */}
+          <TabsContent value="history">
+            {appsLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : apps.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <FileText className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <h3 className="font-semibold mb-2">{isAr ? "لا توجد طلبات" : "No Applications"}</h3>
+                  <p className="text-sm text-muted-foreground">{isAr ? "لم تقم بتقديم أي طلبات بعد." : "You haven't submitted any applications yet."}</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {apps.map((app: any) => {
+                  const statusLabel = (STATUS_LABELS as any)[app.status]?.[isAr ? "ar" : "en"] || app.status;
+                  const statusColor = (STATUS_COLORS as any)[app.status] || "gray";
+                  const colorMap: Record<string, string> = {
+                    green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+                    red: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                    yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+                    blue: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+                    purple: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+                    orange: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+                    gray: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+                  };
+                  const badgeClass = colorMap[statusColor] || colorMap.gray;
+
+                  return (
+                    <Card key={app.id} className="hover:shadow-sm transition-shadow cursor-pointer" onClick={() => setLocation(`/application/${app.id}`)}>
+                      <CardContent className="py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-medium text-sm truncate">{app.researchTitle || `${isAr ? "طلب" : "Application"} #${app.id}`}</h3>
+                              {app.proceedDespiteStage1 && (
+                                <span title="Proceeded despite AI score"><AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" /></span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>{new Date(app.createdAt).toLocaleDateString(isAr ? "ar-SA" : "en-US")}</span>
+                              {app.researchType && (
+                                <span className="capitalize">{(RESEARCH_TYPE_LABELS as any)[app.researchType]?.[isAr ? "ar" : "en"] || app.researchType.replace(/_/g, " ")}</span>
+                              )}
+                              {app.irbNumber && <span className="text-emerald-600 font-medium">{app.irbNumber}</span>}
+                              {app.stage1AiScore != null && (
+                                <span className={`font-medium ${app.stage1AiScore >= 80 ? "text-emerald-600" : app.stage1AiScore >= 60 ? "text-yellow-600" : "text-red-500"}`}>
+                                  AI: {app.stage1AiScore}/100
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ms-3">
+                            <Badge className={`text-xs ${badgeClass}`}>{statusLabel}</Badge>
+                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Activity Tab */}
+          <TabsContent value="activity">
+            <div className="space-y-6">
+              {/* Timeline */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{isAr ? "النشاط الأخير" : "Recent Activity"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {apps.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">{isAr ? "لا يوجد نشاط بعد." : "No activity yet."}</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {apps.slice(0, 10).map((app: any, i: number) => {
+                        const events: { date: string; label: string; icon: typeof FileText; color: string }[] = [];
+                        if (app.approvedAt) events.push({ date: app.approvedAt, label: isAr ? "تمت الموافقة" : "Approved", icon: CheckCircle, color: "text-emerald-600" });
+                        if (app.submittedAt) events.push({ date: app.submittedAt, label: isAr ? "تم التقديم" : "Submitted", icon: FileText, color: "text-blue-600" });
+                        if (app.retractedAt) events.push({ date: app.retractedAt, label: isAr ? "تم السحب" : "Retracted", icon: XCircle, color: "text-red-600" });
+                        events.push({ date: app.createdAt, label: isAr ? "تم الإنشاء" : "Created", icon: FileText, color: "text-muted-foreground" });
+
+                        return events.map((event, j) => (
+                          <div key={`${app.id}-${j}`} className="flex items-start gap-3">
+                            <div className={`mt-0.5 ${event.color}`}>
+                              <event.icon className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{event.label}: <span className="font-normal text-muted-foreground truncate">{app.researchTitle || `#${app.id}`}</span></p>
+                              <p className="text-xs text-muted-foreground">{new Date(event.date).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                            </div>
+                          </div>
+                        ));
+                      }).flat().sort((a: any, b: any) => 0)}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Personal Info Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{isAr ? "المعلومات الشخصية" : "Personal Information"}</CardTitle>
+                  <CardDescription>{isAr ? "معلوماتك المسجلة في النظام." : "Your registered information in the system."}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{isAr ? "الاسم الكامل" : "Full Name"}</p>
+                      <p className="font-medium">{user?.name || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{isAr ? "البريد الإلكتروني" : "Email"}</p>
+                      <p className="font-medium">{user?.email || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{isAr ? "طريقة تسجيل الدخول" : "Login Method"}</p>
+                      <p className="font-medium capitalize">{user?.loginMethod || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{isAr ? "الدور" : "Role"}</p>
+                      <Badge variant="outline" className="capitalize">{user?.role || "user"}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{isAr ? "تاريخ الانضمام" : "Member Since"}</p>
+                      <p className="font-medium">{user?.createdAt ? new Date(user.createdAt).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long", day: "numeric" }) : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{isAr ? "آخر تسجيل دخول" : "Last Sign In"}</p>
+                      <p className="font-medium">{user?.lastSignedIn ? new Date(user.lastSignedIn).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}

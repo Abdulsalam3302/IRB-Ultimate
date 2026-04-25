@@ -209,14 +209,18 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+const resolveApiUrl = () => {
+  const raw = (ENV.llmApiUrl ?? "").trim();
+  if (!raw) return "https://forge.manus.im/v1/chat/completions";
+  // Allow callers to provide either a base ("https://api.minimax.io")
+  // or a full path ("https://…/v1/chat/completions"). Normalise both.
+  if (/\/v\d+\/chat\/completions$/.test(raw)) return raw;
+  return `${raw.replace(/\/$/, "")}/v1/chat/completions`;
+};
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  if (!ENV.llmApiKey) {
+    throw new Error("LLM API key is not configured (LLM_API_KEY or BUILT_IN_FORGE_API_KEY)");
   }
 };
 
@@ -280,7 +284,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: ENV.llmModel,
     messages: messages.map(normalizeMessage),
   };
 
@@ -296,9 +300,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
+  payload.max_tokens = ENV.llmMaxTokens;
+  // `thinking` is Anthropic-specific. Only emit it for providers that
+  // accept it; MiniMax / OpenAI / generic gateways will 400 on this field.
+  if (ENV.llmProvider === "anthropic" || ENV.llmProvider === "claude") {
+    payload.thinking = { budget_tokens: 128 };
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -316,7 +322,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${ENV.llmApiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -328,5 +334,39 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  const result = (await response.json()) as InvokeResult;
+  // Reasoning models (MiniMax M2, DeepSeek R1, …) emit <think>...</think>
+  // blocks before the real answer. Strip them so downstream JSON.parse works.
+  for (const choice of result.choices ?? []) {
+    const msg = choice?.message;
+    if (msg && typeof msg.content === "string") {
+      const before = msg.content;
+      msg.content = stripReasoningTags(msg.content);
+      if (process.env.LLM_DEBUG === "1") {
+        console.log(
+          "[LLM] finish=%s before-len=%d after-len=%d head=%j",
+          choice.finish_reason,
+          before.length,
+          msg.content.length,
+          msg.content.slice(0, 120)
+        );
+      }
+    }
+  }
+  return result;
+}
+
+const REASONING_TAG_RE = /<think>[\s\S]*?<\/think>\s*/gi;
+const MARKDOWN_FENCE_RE = /^\s*```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```\s*$/;
+
+/**
+ * Reasoning models (MiniMax M2, DeepSeek R1, …) often wrap structured
+ * output in `<think>...</think>` blocks AND markdown code fences. Strip
+ * both so JSON.parse downstream works.
+ */
+function stripReasoningTags(s: string): string {
+  let out = s.replace(REASONING_TAG_RE, "").trim();
+  const fenced = out.match(MARKDOWN_FENCE_RE);
+  if (fenced) out = fenced[1].trim();
+  return out;
 }

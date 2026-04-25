@@ -3,6 +3,81 @@ import { invokeLLM } from "./_core/llm";
 // Color codes: red = flag/stop, yellow = AI resolved needs review, green = OK, darkGreen = perfect
 export type FieldColor = "red" | "yellow" | "green" | "darkGreen";
 
+/**
+ * Some providers (MiniMax M2, …) don't strictly enforce response json_schema —
+ * they may nest the answer or rename keys. This helper walks the parsed JSON
+ * and pulls out the canonical fields the rest of the codebase expects.
+ */
+function normalizeReviewJson(input: unknown): {
+  score: number;
+  feedback: string;
+  recommendations: string[];
+  hasRedFlags: boolean;
+  fieldScores: any[];
+  fieldSuggestions: Record<string, string>;
+} {
+  const SCORE_KEYS = ["score", "overallScore", "overall_score", "totalScore", "total_score", "weightedScore", "weighted_score"];
+  const FEEDBACK_KEYS = ["feedback", "summary", "executiveSummary", "executive_summary", "overallFeedback", "overall_feedback"];
+  const REC_KEYS = ["recommendations", "recommendation", "actionItems", "action_items", "improvements"];
+  const RED_KEYS = ["hasRedFlags", "has_red_flags", "redFlags", "red_flags", "flagged"];
+  const FIELDS_KEYS = ["fieldScores", "field_scores", "fields", "fieldEvaluations", "field_evaluations"];
+  const FIELDSUG_KEYS = ["fieldSuggestions", "field_suggestions", "suggestions"];
+
+  const seen = new WeakSet<object>();
+  const candidates: Record<string, any>[] = [];
+  function walk(node: unknown) {
+    if (!node || typeof node !== "object" || seen.has(node as object)) return;
+    seen.add(node as object);
+    candidates.push(node as Record<string, any>);
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+    } else {
+      Object.values(node as Record<string, unknown>).forEach(walk);
+    }
+  }
+  walk(input);
+
+  const pick = (keys: string[]): any => {
+    for (const c of candidates) {
+      for (const k of keys) {
+        if (c[k] !== undefined && c[k] !== null) return c[k];
+      }
+    }
+    return undefined;
+  };
+
+  const rawScore = pick(SCORE_KEYS);
+  const score = typeof rawScore === "number"
+    ? Math.max(0, Math.min(100, Math.round(rawScore)))
+    : typeof rawScore === "string" && !Number.isNaN(parseFloat(rawScore))
+      ? Math.max(0, Math.min(100, Math.round(parseFloat(rawScore))))
+      : 0;
+
+  const rawFeedback = pick(FEEDBACK_KEYS);
+  const feedback = typeof rawFeedback === "string" ? rawFeedback : "";
+
+  const rawRecs = pick(REC_KEYS);
+  const recommendations = Array.isArray(rawRecs)
+    ? rawRecs.map(String)
+    : typeof rawRecs === "string"
+      ? [rawRecs]
+      : [];
+
+  const rawRed = pick(RED_KEYS);
+  const hasRedFlags = rawRed === true || rawRed === "true" || rawRed === 1;
+
+  const rawFields = pick(FIELDS_KEYS);
+  const fieldScores = Array.isArray(rawFields) ? rawFields : [];
+
+  const rawFieldSug = pick(FIELDSUG_KEYS);
+  const fieldSuggestions =
+    rawFieldSug && typeof rawFieldSug === "object" && !Array.isArray(rawFieldSug)
+      ? (rawFieldSug as Record<string, string>)
+      : {};
+
+  return { score, feedback, recommendations, hasRedFlags, fieldScores, fieldSuggestions };
+}
+
 export interface FieldScore {
   field: string;
   color: FieldColor;
@@ -150,19 +225,19 @@ For each field, provide:
 
     const content = response.choices[0]?.message?.content;
     const parsed = JSON.parse(typeof content === "string" ? content : "{}");
-    const score = Math.max(0, Math.min(100, parsed.score ?? 0));
-    const fieldScores: FieldScore[] = (parsed.fieldScores || []).map((fs: any) => ({
+    const norm = normalizeReviewJson(parsed);
+    const fieldScores: FieldScore[] = (norm.fieldScores || []).map((fs: any) => ({
       ...fs,
-      color: getColorFromScore(fs.score),
+      color: getColorFromScore(typeof fs.score === "number" ? fs.score : 0),
     }));
 
     return {
-      score,
-      passed: score >= PASS_THRESHOLD && !parsed.hasRedFlags,
-      feedback: parsed.feedback ?? "Review completed.",
-      recommendations: parsed.recommendations ?? [],
+      score: norm.score,
+      passed: norm.score >= PASS_THRESHOLD && !norm.hasRedFlags,
+      feedback: norm.feedback || "Review completed.",
+      recommendations: norm.recommendations,
       fieldScores,
-      hasRedFlags: parsed.hasRedFlags ?? false,
+      hasRedFlags: norm.hasRedFlags,
     };
   } catch (error) {
     console.error("[AI Review] Stage 1 error:", error);
@@ -382,20 +457,20 @@ ${JSON.stringify(data, null, 2)}`;
 
     const content = response.choices[0]?.message?.content;
     const parsed = JSON.parse(typeof content === "string" ? content : "{}");
-    const score = Math.max(0, Math.min(100, parsed.score ?? 0));
-    const fieldScores: FieldScore[] = (parsed.fieldScores || []).map((fs: any) => ({
+    const norm = normalizeReviewJson(parsed);
+    const fieldScores: FieldScore[] = (norm.fieldScores || []).map((fs: any) => ({
       ...fs,
-      color: getColorFromScore(fs.score),
+      color: getColorFromScore(typeof fs.score === "number" ? fs.score : 0),
     }));
 
     return {
-      score,
-      passed: score >= PASS_THRESHOLD && !parsed.hasRedFlags,
-      feedback: parsed.feedback ?? "Review completed.",
-      recommendations: parsed.recommendations ?? [],
-      fieldSuggestions: parsed.fieldSuggestions ?? {},
+      score: norm.score,
+      passed: norm.score >= PASS_THRESHOLD && !norm.hasRedFlags,
+      feedback: norm.feedback || "Review completed.",
+      recommendations: norm.recommendations,
+      fieldSuggestions: norm.fieldSuggestions,
       fieldScores,
-      hasRedFlags: parsed.hasRedFlags ?? false,
+      hasRedFlags: norm.hasRedFlags,
     };
   } catch (error) {
     console.error("[AI Review] Stage 2 error:", error);

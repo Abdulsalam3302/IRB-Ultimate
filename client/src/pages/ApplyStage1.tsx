@@ -17,8 +17,11 @@ import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
 import {
   ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle,
-  Loader2, Upload, Plus, Trash2, UserPlus, Users, FileUp, AlertCircle, Info
+  Loader2, Upload, Plus, Trash2, UserPlus, Users, FileUp, AlertCircle, Info,
+  ChevronDown
 } from "lucide-react";
+import ReviewFeedback from "@/components/ReviewFeedback";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RESEARCH_TYPE_LABELS, RESEARCH_TYPE_REQUIREMENTS } from "@shared/types";
 import type { ResearchType } from "@shared/types";
 
@@ -415,31 +418,63 @@ export default function ApplyStage1() {
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-lg mb-1">{aiResult.score >= 90 ? (isAr ? 'ممتاز' : 'Excellent') : aiResult.score >= 70 ? (isAr ? 'جيد' : 'Good') : aiResult.score >= 50 ? (isAr ? 'يحتاج تحسين' : 'Needs Improvement') : (isAr ? 'يحتاج مراجعة جذرية' : 'Needs Major Revision')}</p>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{aiResult.feedback}</p>
+                      <ReviewFeedback text={aiResult.feedback} isAr={isAr} />
                     </div>
                   </div>
-                  {/* Field-level scores with color badges */}
+                  {/* Field-level scores with color badges + expandable teaching feedback */}
                   {aiResult.fieldScores?.length > 0 && (
                     <div className="space-y-2 mb-4">
-                      <p className="text-sm font-medium">{isAr ? "تقييم الحقول:" : "Field Assessment:"}</p>
-                      {aiResult.fieldScores.map((fs: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg bg-background/50">
-                          <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${fs.color === 'red' ? 'bg-red-500' : fs.color === 'yellow' ? 'bg-amber-500' : fs.color === 'green' ? 'bg-emerald-500' : 'bg-emerald-700'}`} />
-                          <span className="font-medium min-w-[120px]">{fs.field}</span>
-                          <span className="text-muted-foreground flex-1 truncate">{fs.feedback}</span>
-                          <Badge variant="outline" className="text-xs shrink-0">{fs.score}/100</Badge>
-                        </div>
-                      ))}
+                      <p className="text-sm font-medium">{isAr ? "تقييم الحقول (انقر للتفاصيل):" : "Field assessment (click any row for details):"}</p>
+                      {aiResult.fieldScores.map((fs: any, i: number) => {
+                        const fieldKey = String(fs.field || "");
+                        const isInForm = fieldKey in form;
+                        return (
+                          <Collapsible key={i}>
+                            <CollapsibleTrigger className="w-full text-start group">
+                              <div className="flex items-center gap-2 text-sm p-2 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                                <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${fs.color === 'red' ? 'bg-red-500' : fs.color === 'yellow' ? 'bg-amber-500' : fs.color === 'green' ? 'bg-emerald-500' : 'bg-emerald-700'}`} />
+                                <span className="font-medium min-w-[120px]">{fs.field}</span>
+                                <span className="text-muted-foreground flex-1 truncate">{(fs.feedback || "").split("\n")[0]}</span>
+                                <Badge variant="outline" className="text-xs shrink-0">{fs.score}/100</Badge>
+                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                              </div>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="px-3 py-3 ms-4 border-l-2 border-muted-foreground/20">
+                              <ReviewFeedback
+                                text={fs.feedback}
+                                isAr={isAr}
+                                fieldKey={isInForm ? fieldKey : undefined}
+                                onApplyExample={isInForm ? (k, v) => setForm(prev => ({ ...prev, [k]: v })) : undefined}
+                              />
+                              {fs.suggestion && fs.suggestion !== fs.feedback && (
+                                <div className="mt-2 pt-2 border-t border-muted-foreground/10">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                                    {isAr ? "بديل كامل (100/100)" : "Drop-in replacement (100/100)"}
+                                  </p>
+                                  <p className="text-sm font-mono whitespace-pre-line bg-background/60 p-2 rounded">{fs.suggestion}</p>
+                                  {isInForm && (
+                                    <Button
+                                      type="button" size="sm" variant="outline"
+                                      className="mt-2 h-7 text-xs"
+                                      onClick={() => { setForm(prev => ({ ...prev, [fieldKey]: fs.suggestion })); toast.success(isAr ? "تم التطبيق" : "Replaced field"); }}
+                                    >{isAr ? "استبدل الحقل" : "Replace field"}</Button>
+                                  )}
+                                </div>
+                              )}
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })}
                     </div>
                   )}
                   {aiResult.recommendations?.length > 0 && (
                     <div>
                       <p className="text-sm font-medium mb-1">{isAr ? "التوصيات:" : "Recommendations:"}</p>
-                      <ul className="text-sm text-muted-foreground space-y-1">
+                      <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside marker:text-primary">
                         {aiResult.recommendations.map((r: string, i: number) => (
-                          <li key={i} className="flex items-start gap-2"><span className="text-primary mt-0.5">•</span><span>{r}</span></li>
+                          <li key={i}>{r}</li>
                         ))}
-                      </ul>
+                      </ol>
                     </div>
                   )}
                 </CardContent>

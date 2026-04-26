@@ -115,7 +115,32 @@ function normalizeReviewJson(input: unknown): {
       ? (rawFieldSug as Record<string, string>)
       : {};
 
-  return { score, feedback, recommendations, hasRedFlags, fieldScores, fieldSuggestions };
+  // Fallback: when M2 returns no fieldScores but recommendations are
+  // formatted as "<fieldName> — <severity> — <text>" (which it does
+  // sometimes), synthesise fieldScores so the UI can still show
+  // per-field rows. Severity → score: Critical 30, High 50, Medium 65,
+  // Low 80, otherwise 70.
+  let finalFieldScores = fieldScores;
+  if (finalFieldScores.length === 0 && recommendations.length > 0) {
+    const synthesized: any[] = [];
+    const sevToScore: Record<string, number> = {
+      critical: 30, high: 50, medium: 65, moderate: 65, low: 80,
+    };
+    for (const rec of recommendations) {
+      const m = rec.match(/^([a-zA-Z][a-zA-Z0-9_]+)\s*[—\-:]\s*([A-Za-z]+)\s*[—\-:]\s*(.+)$/);
+      if (m) {
+        const [, field, sev, body] = m;
+        synthesized.push({
+          field,
+          score: sevToScore[sev.toLowerCase()] ?? 70,
+          feedback: body.trim(),
+          suggestion: "",
+        });
+      }
+    }
+    if (synthesized.length > 0) finalFieldScores = synthesized;
+  }
+  return { score, feedback, recommendations, hasRedFlags, fieldScores: finalFieldScores, fieldSuggestions };
 }
 
 export interface FieldScore {
@@ -265,13 +290,48 @@ NOVELTY / DUPLICATION CHECK
 - Do NOT auto-fail for novelty alone — registries exist precisely so multi-site replication can happen — but DO recommend the applicant cite the precedent and explain how this study adds value
 - If no prior-art context is present, treat novelty as neutral (do not deduct)
 
+═══════════════════════════════════════════════════
+OUTPUT STYLE — TEACHING REPORT
+═══════════════════════════════════════════════════
+The applicant is a researcher, not an IRB expert. Your job is to TEACH, not just judge. Every "feedback" string MUST be written so that an applicant who has never seen an IRB form before can fix the field without asking anyone for help.
+
+For EACH field, the "feedback" string follows this exact structure (in plain language, NOT as bullet headings — write it as flowing prose):
+
+  1. Diagnosis (1 short sentence): what is wrong with the current value, in concrete terms (e.g. "the title is two words and contains a spelling error 'abcess'").
+  2. Why it matters (1 short clause): which IRB principle it violates (e.g. "vague titles prevent the committee from assessing scope").
+  3. ALWAYS — for any field scoring below 80 — append the literal token "EXAMPLE:" on its own line, followed by ONE fully-written, copy-pasteable example tailored to the applicant's apparent topic and Saudi context (use the LITERATURE & PRIOR-ART CONTEXT block when available to ground the example in real precedent). The example must be self-contained — no placeholders.
+  4. For fields scoring 80+, omit the EXAMPLE: line.
+
+The "suggestion" field must be a complete drop-in replacement that would score 100/100 — NOT a paraphrase of the diagnosis.
+
+The TOP-LEVEL "feedback" (overall) must end with the literal token "FASTEST FIX:" followed by exactly three numbered bullets ("1. …\n2. …\n3. …") naming the three highest-leverage fixes the applicant can make right now.
+
+The TOP-LEVEL "recommendations" array must be ordered by impact, with the highest-impact fix first.
+
+ILLUSTRATIVE EXAMPLE (for reference only, not your output):
+  feedback for researchTitle field: "The title 'brain abcess' is only two words and contains a spelling error ('abcess' should be 'abscess'); it does not state the study design, population, or setting. Vague titles prevent the IRB committee from assessing scope and risk class.
+  EXAMPLE: Cross-sectional study of clinical presentation, microbiology, and outcomes of brain abscess in adult patients at King Faisal Specialist Hospital and Research Centre, Riyadh (January 2020 – December 2024)."
+  suggestion: "Cross-sectional study of clinical presentation, microbiology, and outcomes of brain abscess in adult patients at King Faisal Specialist Hospital and Research Centre, Riyadh (January 2020 – December 2024)"
+
+═══════════════════════════════════════════════════
+HARD OUTPUT REQUIREMENTS — VALIDATION
+═══════════════════════════════════════════════════
+- The fieldScores array MUST contain ONE entry per Stage 1 field below, in this order: researchTitle, principalInvestigator, researchType, irbCategory, piInstitution, piDepartment, fundingSource, estimatedDuration. Eight entries total. NEVER return an empty fieldScores array.
+- For every fieldScores[i] where score < 80, the feedback string MUST contain the literal token "EXAMPLE:" followed by a copy-pasteable example.
+- The top-level feedback string MUST end with the literal token "FASTEST FIX:" followed by exactly three numbered bullets like "1. ...\n2. ...\n3. ...".
+
 ${noveltyContext}APPLICATION DATA:
 ${JSON.stringify(data, null, 2)}
 
 For each field, provide:
 - score (0-100)
-- feedback (what is good/bad about it)
-- suggestion (exact text that would score 100/100)`;
+- feedback (diagnosis + why it matters + EXAMPLE: block when score < 80)
+- suggestion (complete drop-in replacement that would score 100/100)
+
+REMEMBER:
+- fieldScores MUST have 8 entries.
+- feedback strings for low-score fields MUST contain "EXAMPLE:".
+- top-level feedback MUST end with "FASTEST FIX:" + 3 numbered bullets.`;
 
   try {
     const response = await invokeLLM({

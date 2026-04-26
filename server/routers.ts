@@ -524,13 +524,14 @@ const applicationRouter = router({
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       if (app.status !== "submitted") throw new TRPCError({ code: "BAD_REQUEST", message: "Application must pass both AI reviews before submission" });
 
+      // Committee assignment is an admin/operations concern, not the
+      // applicant's. We always accept the submission. If there are
+      // fewer than 5 active members right now, the application sits in
+      // `pending_admin` until an admin invites more reviewers, at which
+      // point the cron / admin "expire and reassign" job picks it up.
       const activeMembers = await db.getActiveCommitteeMembers();
-      if (activeMembers.length < 5) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Not enough active committee members. At least 5 are required." });
-      }
-
       const shuffled = [...activeMembers].sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, 5);
+      const selected = shuffled.slice(0, Math.min(5, activeMembers.length));
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
       for (const member of selected) {
@@ -546,10 +547,25 @@ const applicationRouter = router({
         });
       }
 
+      // If we got 5 reviewers, normal flow. Otherwise queue for admin.
+      const nextStatus = selected.length >= 5 ? "under_review" : "pending_admin";
       await db.updateApplication(input.id, {
-        status: "under_review",
+        status: nextStatus,
         submittedAt: new Date(),
       });
+
+      // Tell the admin if we couldn't fully assign. Best-effort —
+      // don't fail submission on notification failure.
+      if (selected.length < 5) {
+        try {
+          await db.addAuditLog({
+            applicationId: input.id,
+            userId: ctx.user.id,
+            action: "queued_for_committee_assignment",
+            details: `Submitted with only ${activeMembers.length} active committee members; awaiting admin to invite more (need ${5 - activeMembers.length} more).`,
+          });
+        } catch { /* best-effort */ }
+      }
 
       // Save version snapshot
       try {

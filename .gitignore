@@ -116,3 +116,6 @@ temp/
 .npmrc
 todo.md
 logo-urls.txt
+
+# Local-disk upload fallback (when no Forge/S3 driver is configured)
+uploads/

@@ -566,7 +566,7 @@ export default function ApplyStage1() {
                     <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
                   )}
                 </Button>
-                {showAiResult && aiResult && !aiResult.passed && (
+                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 90 && (
                   <Button
                     variant="default"
                     className="bg-amber-600 hover:bg-amber-700 text-white"
@@ -580,12 +580,18 @@ export default function ApplyStage1() {
                     )}
                   </Button>
                 )}
-                {aiResult?.passed && (
+                {/* Score threshold drives which actions are offered.
+                    >= 65 → normal "Proceed to Stage 2" (red flags shown
+                            as a warning but don't block).
+                    <  65 → only the proceed-despite path is offered,
+                            because the AI judged the application
+                            genuinely insufficient. */}
+                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score >= 65 && (
                   <Button className="btn-apple shadow-sm" onClick={() => setLocation(`/apply/${appId}/stage2`)}>
                     {isAr ? "المرحلة الثانية" : "Proceed to Stage 2"} <ArrowRight className="h-4 w-4 ms-1" />
                   </Button>
                 )}
-                {showAiResult && aiResult && !aiResult.passed && (
+                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 65 && (
                   <Button variant="destructive" className="btn-apple" onClick={() => setShowProceedDespiteModal(true)}>
                     <AlertCircle className="h-4 w-4 me-1" />
                     {isAr ? "المتابعة رغم النتيجة" : "Proceed Despite Score"}

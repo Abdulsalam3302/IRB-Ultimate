@@ -689,12 +689,15 @@ export default function ApplyStage2() {
                   <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
                 )}
               </Button>
-              {aiResult?.passed && (
+              {/* Stage 2 action gating mirrors Stage 1: score-based,
+                  not redFlag-based. Score >= 65 → submit normally;
+                  < 65 → only the proceed-despite path is offered. */}
+              {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score >= 65 && (
                 <Button className="btn-apple shadow-sm" onClick={() => setLocation(`/apply/${appId}/submit`)}>
                   {isAr ? "تقديم الطلب" : "Submit Application"} <ArrowRight className="h-4 w-4 ms-1" />
                 </Button>
               )}
-              {showAiResult && aiResult && !aiResult.passed && (
+              {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 65 && (
                 <Button variant="destructive" className="btn-apple" onClick={() => setShowProceedDespiteModal(true)}>
                   <XCircle className="h-4 w-4 me-1" />
                   {isAr ? "المتابعة رغم النتيجة" : "Proceed Despite Score"}

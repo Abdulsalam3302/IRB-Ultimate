@@ -1,5 +1,5 @@
 import { invokeLLM, safeJsonParse } from "./_core/llm";
-import { searchLiterature, formatLiteratureForPrompt } from "./literature";
+import { searchLiterature, formatLiteratureForPrompt, buildLiteratureQuery } from "./literature";
 
 // Color codes: red = flag/stop, yellow = AI resolved needs review, green = OK, darkGreen = perfect
 export type FieldColor = "red" | "yellow" | "green" | "darkGreen";
@@ -213,8 +213,14 @@ export async function runStage1AiReview(data: {
   let noveltyContext = "";
   try {
     if (data.researchTitle && data.researchTitle.trim().length > 8) {
-      const bundle = await searchLiterature(data.researchTitle.slice(0, 200), {
-        perSource: 3,
+      // Use the smart query builder which strips boilerplate filler
+      // ("a study of", "investigation into", trailing date paren) so
+      // the upstream search engines weight on real content tokens.
+      const q = buildLiteratureQuery(data.researchTitle);
+      const bundle = await searchLiterature(q, {
+        perSource: 5,           // over-fetch for relevance filter
+        perSourceCap: 3,        // final cap per source in the prompt
+        minRelevance: 0.1,      // novelty check is stricter than full review
         sources: ["pubmed", "clinicaltrials"],
       });
       const formatted = formatLiteratureForPrompt(bundle);
@@ -229,51 +235,66 @@ export async function runStage1AiReview(data: {
 YOUR ROLE: Evaluate Stage 1 of an IRB application — research classification and basic investigator information. This is the GATEWAY stage. Your assessment determines whether the applicant proceeds to the detailed ethics review (Stage 2).
 
 ═══════════════════════════════════════════════════
-STANDARDIZED EVALUATION CHECKLIST (Stage 1)
+STANDARDIZED EVALUATION CHECKLIST (Stage 1) — GATEWAY ONLY
 ═══════════════════════════════════════════════════
 
-1. RESEARCH TITLE (Weight: 20%)
-   ✓ Scientifically precise and descriptive
-   ✓ Includes study design type (e.g., cross-sectional, RCT, cohort)
-   ✓ Identifies target population or setting
-   ✓ Avoids vague or overly broad language
-   ✗ RED FLAG: Title is generic, misleading, or does not reflect actual research
+This is the GATEWAY stage. The deep methodological/ethics review happens in Stage 2. At Stage 1 you are checking the application is INTERPRETABLE — not perfect. Be GENEROUS. Most applicants should pass this stage. Only block when something is clearly missing, fabricated, or misclassified in a way that would route the proposal to the wrong review pathway.
 
-2. PRINCIPAL INVESTIGATOR (Weight: 15%)
-   ✓ Full name with academic credentials (MD, PhD, etc.)
-   ✓ Professional title or rank
-   ✗ RED FLAG: Anonymous, incomplete, or clearly fabricated
+1. RESEARCH TITLE (Weight: 50% — THE ONLY FIELD THAT GETS SCRUTINY)
+   ✓ At least one substantive noun phrase that describes the topic.
+   ✓ Implies (or names) a study design — cross-sectional, RCT, cohort, case-series, qualitative, lab-based, etc.
+   ✓ Implies (or names) a target population or setting.
+   ✓ Spelling and grammar are reasonable (typos are forgivable; suggest the correct form, do not deduct heavily).
+   ✗ RED FLAG ONLY IF: the title is a single word, an abbreviation with no expansion, or so vague that the topic is unguessable (e.g. "study", "research project", "test").
 
-3. RESEARCH TYPE CLASSIFICATION (Weight: 20%)
-   ✓ Correctly classified (survey, retrospective, clinical trial, lab-based, mixed methods, case study, meta-analysis)
-   ✓ Classification matches the described methodology in the title
-   ✗ RED FLAG: Misclassification that could lead to wrong review pathway
+2. PRINCIPAL INVESTIGATOR (Weight: 10% — FORMAT CHECK ONLY)
+   ✓ A real-looking human name. Credentials (Dr., MD, PhD) are NICE TO HAVE, not required.
+   ✓ If the value is a plausible name, give it 90+. Do not deduct for missing credentials.
+   ✗ RED FLAG ONLY IF: empty, single character, "test", "n/a", or clearly fabricated.
 
-4. IRB CATEGORY (Weight: 15%)
-   ✓ Appropriate category selected (exempt, expedited, full board)
-   ✓ Category matches risk level implied by research type
-   ✗ RED FLAG: High-risk research marked as exempt
+3. PI EMAIL (Weight: 5% — FORMAT CHECK ONLY)
+   ✓ Looks like a valid email address (one @, a domain). 90+ if format is valid.
+   ✗ RED FLAG ONLY IF: not an email format at all.
 
-5. INSTITUTION & DEPARTMENT (Weight: 15%)
-   ✓ Real, identifiable institution
-   ✓ Department relevant to the research area
-   ✗ RED FLAG: Fictitious institution or irrelevant department
+4. RESEARCH TYPE (Weight: 10% — CLASSIFICATION CONSISTENCY ONLY)
+   ✓ A value is selected, and it is roughly consistent with what the title suggests.
+   ✓ If the title suggests a survey and the type is "survey_questionnaire", give 100.
+   ✗ RED FLAG ONLY IF: clearly wrong (title clearly describes a clinical trial but type says "laboratory") in a way that would route the review wrong.
 
-6. FUNDING & DURATION (Weight: 15%)
-   ✓ Funding source identified (self-funded, grant, institutional)
-   ✓ Duration is realistic for the study type
-   ✗ RED FLAG: Unrealistic timeline (e.g., RCT in 1 week)
+5. IRB CATEGORY (Weight: 5% — CATEGORY CONSISTENCY ONLY)
+   ✓ A value is selected. Be very lenient here — applicants frequently default to "full_board" because they're cautious; that's fine.
+   ✗ RED FLAG ONLY IF: clearly inappropriate (e.g. minimal-risk survey marked as needing full board for a non-vulnerable population — even then, just suggest, do not block).
+
+6. INSTITUTION (Weight: 8% — FORMAT CHECK ONLY)
+   ✓ Any real-looking institutional name (full or abbreviated). Saudi institutions and abbreviations like "KFSH", "KSU", "KAU" are VALID — do not deduct for using the abbreviation.
+   ✗ RED FLAG ONLY IF: empty, "test", or clearly nonsense.
+
+7. DEPARTMENT (Weight: 6% — FORMAT CHECK ONLY)
+   ✓ Any reasonable department or specialty word. "Neuro", "Cardio", "ER" are FINE — do not deduct for shorthand.
+   ✗ RED FLAG ONLY IF: empty, "test", or clearly nonsense.
+
+8. FUNDING SOURCE (Weight: 3% — PRESENCE CHECK ONLY)
+   ✓ Any non-empty value. "Self", "Self-funded", "Institutional", "Grant", a sponsor name — all FINE.
+   ✗ RED FLAG ONLY IF: empty.
+
+9. ESTIMATED DURATION (Weight: 3% — PRESENCE CHECK ONLY)
+   ✓ Any plausible duration string. "3 months", "1 year", "Q1-Q4 2026" are all FINE.
+   ✗ RED FLAG ONLY IF: empty, or so unrealistic for the study type that the application can't proceed (e.g. a 30-month RCT marked "1 day").
 
 ═══════════════════════════════════════════════════
-SCORING RULES
+SCORING RULES — GENEROUS BY DEFAULT
 ═══════════════════════════════════════════════════
-- Score each field 0-100 based on CONTENT QUALITY (never penalize for length)
-- 0-49 → RED: Critical issue that blocks progression
-- 50-69 → YELLOW: Deficient but AI can enhance; needs human review
-- 70-89 → GREEN: Meets standards, acceptable
-- 90-100 → DARK GREEN: Exceeds standards, exemplary
-- Overall score = weighted average of all field scores
-- hasRedFlags = true if ANY field scores below 50
+- DEFAULT every field to 95 unless there is a concrete problem.
+- Deduct ONLY for the specific reasons in the checklist above. Do NOT add extra criteria.
+- For non-title fields, "complete + valid format + understandable" = 95-100. Polishing wording or expanding abbreviations is the applicant's choice, not a penalty.
+- The TITLE is the only field where scientific quality matters at this gateway. Even there, score 80+ if the topic is clear and a study design is implied.
+- 0-49 → RED: Critical missing or fabricated value. Use sparingly.
+- 50-69 → YELLOW: Could be improved.
+- 70-89 → GREEN: Acceptable, IRB can review it.
+- 90-100 → DARK GREEN: Complete and well-formed.
+- Overall score = weighted average of field scores using the weights above (title 50%, others sum to 50%).
+- hasRedFlags = true ONLY when a field ACTUALLY meets a "RED FLAG ONLY IF" condition above. Do not flag for "could be more detailed".
+- Pass threshold is intentionally low (~65). Applicants whose title clearly describes a real study and whose other fields are filled with sensible values should ALWAYS pass.
 
 ═══════════════════════════════════════════════════
 CROSS-PHASE ALIGNMENT CHECK
@@ -317,19 +338,21 @@ ILLUSTRATIVE EXAMPLE (for reference only, not your output):
 HARD OUTPUT REQUIREMENTS — VALIDATION
 ═══════════════════════════════════════════════════
 - The fieldScores array MUST contain ONE entry per Stage 1 field below, in this order: researchTitle, principalInvestigator, researchType, irbCategory, piInstitution, piDepartment, fundingSource, estimatedDuration. Eight entries total. NEVER return an empty fieldScores array.
-- For every fieldScores[i] where score < 80, the feedback string MUST contain the literal token "EXAMPLE:" followed by a copy-pasteable example.
-- The top-level feedback string MUST end with the literal token "FASTEST FIX:" followed by exactly three numbered bullets like "1. ...\n2. ...\n3. ...".
+- Default every non-title field to a score of 95 unless a "RED FLAG ONLY IF" condition above is concretely met. The title is the only field where you should think hard about the score.
+- For every fieldScores[i] where score < 80, the feedback string MUST contain the literal token "EXAMPLE:" followed by a copy-pasteable example. (Most non-title fields will score ≥ 80 and therefore have NO EXAMPLE: block.)
+- The top-level feedback string MUST end with the literal token "FASTEST FIX:" followed by exactly three numbered bullets like "1. ...\n2. ...\n3. ...". When the application is in good shape, the bullets can be polish suggestions (e.g. "Consider adding the start year to the title" rather than "FIX MAJOR PROBLEM").
 
 ${noveltyContext}APPLICATION DATA:
 ${JSON.stringify(data, null, 2)}
 
 For each field, provide:
-- score (0-100)
+- score (0-100) — generous by default per the rules above
 - feedback (diagnosis + why it matters + EXAMPLE: block when score < 80)
-- suggestion (complete drop-in replacement that would score 100/100)
+- suggestion (complete drop-in replacement that would score 100/100, even for fields already scoring 95)
 
 REMEMBER:
 - fieldScores MUST have 8 entries.
+- Non-title fields default to 95+ unless a concrete RED FLAG condition is met.
 - feedback strings for low-score fields MUST contain "EXAMPLE:".
 - top-level feedback MUST end with "FASTEST FIX:" + 3 numbered bullets.`;
 
@@ -426,11 +449,18 @@ export async function runStage2AiReview(data: {
   // failed review.
   let literatureContext = "";
   try {
-    const literatureQuery = [data.researchTitle, data.researchObjectives]
-      .filter(Boolean)
-      .join(" — ")
-      .slice(0, 400) || data.researchType;
-    const bundle = await searchLiterature(literatureQuery, { perSource: 4 });
+    // Smart-built query: strip boilerplate filler from title, append
+    // first sentence of objectives. Combined with relevance filtering
+    // in the aggregator this yields a tighter, more on-topic context
+    // block than raw concatenation.
+    const literatureQuery =
+      buildLiteratureQuery(data.researchTitle, data.researchObjectives) ||
+      data.researchType;
+    const bundle = await searchLiterature(literatureQuery, {
+      perSource: 6,         // over-fetch
+      perSourceCap: 4,      // final cap per source after relevance filter
+      minRelevance: 0.08,
+    });
     const formatted = formatLiteratureForPrompt(bundle);
     if (formatted) literatureContext = `${formatted}\n\n`;
   } catch (err) {
@@ -738,8 +768,12 @@ export async function aiAutoCompleteFields(data: {
   let literatureBlock = "";
   if (data.stage !== "stage1" && data.researchTitle && data.researchTitle.length > 8) {
     try {
-      const litQuery = data.researchTitle.slice(0, 200);
-      const bundle = await searchLiterature(litQuery, { perSource: 3 });
+      const litQuery = buildLiteratureQuery(data.researchTitle);
+      const bundle = await searchLiterature(litQuery, {
+        perSource: 5,
+        perSourceCap: 3,
+        minRelevance: 0.1,
+      });
       const formatted = formatLiteratureForPrompt(bundle);
       if (formatted) literatureBlock = `\n${formatted}\n`;
     } catch (err) {

@@ -16,6 +16,11 @@ export interface LiteratureItem {
   trialStatus?: string; // ClinicalTrials only
   trialPhase?: string;
   trialEnrollment?: number;
+  /** 0..1 relevance score against the search query (token overlap). */
+  relevance?: number;
+  /** Structural-check issues found by the verifier. UI shows a warning
+   *  pill on items that have any. */
+  accessibilityIssues?: string[];
 }
 
 export interface LiteratureBundle {
@@ -24,4 +29,10 @@ export interface LiteratureBundle {
   totals: Record<string, number>;
   items: LiteratureItem[];
   errors: Record<string, string>;
+  /** Per-source raw hit counts before relevance filtering. */
+  rawCounts?: Record<string, number>;
+  /** Number of items dropped by the relevance filter. */
+  filtered?: number;
+  /** Minimum relevance threshold actually used. */
+  relevanceFloor?: number;
 }

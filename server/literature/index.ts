@@ -6,16 +6,33 @@ import { searchSemanticScholar } from "./semanticScholar";
 import { searchOpenAlex } from "./openAlex";
 import { searchElicit } from "./elicit";
 import { LruTtlCache } from "./cache";
+import {
+  buildLiteratureQuery,
+  scoreRelevance,
+  verifyAccessibility,
+  rankAndFilter,
+} from "./relevance";
 
 export type { LiteratureBundle, LiteratureItem } from "./types";
+export { buildLiteratureQuery } from "./relevance";
 
 export interface LiteratureSearchOptions {
-  perSource?: number; // default 4
-  sources?: Array<LiteratureItem["source"]>; // default: all
+  /** How many raw hits to ask each source for. We over-fetch and
+   *  then re-rank/filter so the final bundle is more relevant. */
+  perSource?: number; // default 6
+  /** Final cap per source after relevance filtering. */
+  perSourceCap?: number; // default 4
+  /** Minimum relevance score (0..1) for an item to survive the
+   *  filter. Bumping this lower lets noisier sources through. */
+  minRelevance?: number; // default 0.08
+  sources?: Array<LiteratureItem["source"]>;
   noCache?: boolean;
 }
 
-const DEFAULT_PER_SOURCE = 4;
+// Over-fetch so we have room to throw away the noisy results.
+const DEFAULT_PER_SOURCE = 6;
+const DEFAULT_PER_SOURCE_CAP = 4;
+const DEFAULT_MIN_RELEVANCE = 0.08;
 
 // 1-hour TTL, hold up to 256 distinct (query, perSource, sources) bundles.
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -89,17 +106,29 @@ export async function searchLiterature(
 
   const results = await Promise.all(tasks);
 
-  const items: LiteratureItem[] = [];
+  const rawItems: LiteratureItem[] = [];
   const totals: Record<string, number> = {};
+  const rawCounts: Record<string, number> = {};
   const errors: Record<string, string> = {};
   for (const r of results) {
     if ("error" in r) {
       errors[r.source] = r.error;
     } else {
-      items.push(...r.items);
+      rawItems.push(...r.items);
       totals[r.source] = r.total;
+      rawCounts[r.source] = r.items.length;
     }
   }
+
+  // Verification + relevance pipeline:
+  //   1) Score every item against the query (token overlap).
+  //   2) Annotate accessibility issues (malformed URL, missing id, etc.).
+  //   3) Drop items below the minRelevance floor.
+  //   4) Re-cap per source so one noisy upstream can't dominate.
+  const minRelevance = opts.minRelevance ?? DEFAULT_MIN_RELEVANCE;
+  const perSourceCap = opts.perSourceCap ?? DEFAULT_PER_SOURCE_CAP;
+  const scored = verifyAccessibility(scoreRelevance(query, rawItems));
+  const items = rankAndFilter(scored, { minRelevance, perSourceCap });
 
   const bundle: LiteratureBundle = {
     query,
@@ -107,6 +136,9 @@ export async function searchLiterature(
     totals,
     items,
     errors,
+    rawCounts,
+    filtered: scored.length - items.length,
+    relevanceFloor: minRelevance,
   };
   // Only cache responses that produced any items — never cache total
   // failures (DNS down, all upstreams 429, etc.) so the next call retries.
@@ -153,7 +185,7 @@ export function formatLiteratureForPrompt(bundle: LiteratureBundle): string {
       openalex: "Open scholarly index (OpenAlex)",
       elicit: "Synthesised findings (Elicit)",
     }[src];
-    lines.push(`▎${heading} — ${bundle.totals[src] ?? list.length} hits, top ${list.length}`);
+    lines.push(`▎${heading} — ${bundle.totals[src] ?? list.length} hits, top ${list.length} after relevance filter`);
     for (const it of list) {
       const trial =
         it.trialStatus || it.trialPhase
@@ -165,7 +197,11 @@ export function formatLiteratureForPrompt(bundle: LiteratureBundle): string {
         typeof it.citationCount === "number" ? ` (${it.citationCount} cites)` : "";
       const yearV = [it.year, it.venue].filter(Boolean).join(" · ");
       const auth = it.authors.length > 0 ? `${it.authors.slice(0, 2).join(", ")}${it.authors.length > 2 ? " et al." : ""}` : "";
-      lines.push(`  • ${it.title}`);
+      const rel = typeof it.relevance === "number" ? ` rel=${it.relevance.toFixed(2)}` : "";
+      const issues = it.accessibilityIssues && it.accessibilityIssues.length > 0
+        ? ` ⚠ ${it.accessibilityIssues.join(", ")}`
+        : "";
+      lines.push(`  • ${it.title}${rel}${issues}`);
       lines.push(`    ${[auth, yearV].filter(Boolean).join(" — ")}${trial}${cites}${it.doi ? `  doi:${it.doi}` : ""}`);
       if (it.abstract) {
         lines.push(`    ${it.abstract}`);
@@ -174,6 +210,9 @@ export function formatLiteratureForPrompt(bundle: LiteratureBundle): string {
     lines.push("");
   }
 
+  if (typeof bundle.filtered === "number" && bundle.filtered > 0) {
+    lines.push(`(${bundle.filtered} low-relevance items filtered out at floor=${bundle.relevanceFloor ?? "?"})`);
+  }
   if (Object.keys(bundle.errors).length > 0) {
     lines.push(`(unavailable sources: ${Object.keys(bundle.errors).join(", ")})`);
   }

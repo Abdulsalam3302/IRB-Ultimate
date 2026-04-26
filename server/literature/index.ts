@@ -5,15 +5,30 @@ import { searchClinicalTrials } from "./clinicalTrials";
 import { searchSemanticScholar } from "./semanticScholar";
 import { searchOpenAlex } from "./openAlex";
 import { searchElicit } from "./elicit";
+import { LruTtlCache } from "./cache";
 
 export type { LiteratureBundle, LiteratureItem } from "./types";
 
 export interface LiteratureSearchOptions {
   perSource?: number; // default 4
   sources?: Array<LiteratureItem["source"]>; // default: all
+  noCache?: boolean;
 }
 
 const DEFAULT_PER_SOURCE = 4;
+
+// 1-hour TTL, hold up to 256 distinct (query, perSource, sources) bundles.
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const cache = new LruTtlCache<string, LiteratureBundle>(256, CACHE_TTL_MS);
+
+function cacheKey(query: string, opts: LiteratureSearchOptions): string {
+  const perSource = opts.perSource ?? DEFAULT_PER_SOURCE;
+  const sources = (opts.sources ?? ["pubmed", "clinicaltrials", "semanticscholar", "openalex", "elicit"])
+    .slice()
+    .sort()
+    .join(",");
+  return `${perSource}|${sources}|${query.trim().toLowerCase()}`;
+}
 
 /**
  * Hits all configured literature sources in parallel.
@@ -27,6 +42,12 @@ export async function searchLiterature(
 ): Promise<LiteratureBundle> {
   const limit = opts.perSource ?? DEFAULT_PER_SOURCE;
   const which = new Set(opts.sources ?? ["pubmed", "clinicaltrials", "semanticscholar", "openalex", "elicit"]);
+
+  const key = cacheKey(query, opts);
+  if (!opts.noCache) {
+    const cached = cache.get(key);
+    if (cached) return { ...cached, fetchedAt: cached.fetchedAt };
+  }
 
   const tasks: Array<Promise<{ source: string; items: LiteratureItem[]; total: number } | { source: string; error: string }>> = [];
 
@@ -58,7 +79,7 @@ export async function searchLiterature(
         .catch(e => ({ source: "openalex", error: String(e?.message ?? e).slice(0, 200) }))
     );
   }
-  if (which.has("elicit") && ENV.elicitApiKey && ENV.elicitApiUrl) {
+  if (which.has("elicit") && ENV.elicitApiKey) {
     tasks.push(
       searchElicit(query, limit, ENV.elicitApiKey, ENV.elicitApiUrl)
         .then(r => ({ source: "elicit", ...r }))
@@ -80,13 +101,21 @@ export async function searchLiterature(
     }
   }
 
-  return {
+  const bundle: LiteratureBundle = {
     query,
     fetchedAt: new Date().toISOString(),
     totals,
     items,
     errors,
   };
+  // Only cache responses that produced any items — never cache total
+  // failures (DNS down, all upstreams 429, etc.) so the next call retries.
+  if (items.length > 0) cache.set(key, bundle);
+  return bundle;
+}
+
+export function clearLiteratureCache(): void {
+  cache.clear();
 }
 
 /**

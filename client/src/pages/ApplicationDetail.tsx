@@ -9,6 +9,7 @@ import { Navbar } from "@/components/Navbar";
 import { Loader2, Download, Clock, CheckCircle, XCircle, History } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, RESEARCH_TYPE_LABELS, IRB_CATEGORY_LABELS } from "@shared/types";
 import type { ApplicationStatus, ResearchType, IrbCategory } from "@shared/types";
+import RelatedLiterature from "@/components/RelatedLiterature";
 
 export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -223,6 +224,8 @@ export default function ApplicationDetail() {
                 <CardContent><p className="text-sm text-red-600">{app.rejectionReason}</p></CardContent>
               </Card>
             )}
+
+            <RelatedLiterature applicationId={app.id} />
 
             <Card>
               <CardHeader><CardTitle className="text-lg">{isAr ? "الجدول الزمني" : "Timeline"}</CardTitle></CardHeader>

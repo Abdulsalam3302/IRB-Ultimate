@@ -167,6 +167,55 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // Split the bundle so first-paint stays small. Routes lazy-load
+        // pages on demand; vendor libs are cached separately.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("react-dom")) return "vendor-react-dom";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-hook-form/") ||
+            id.includes("/wouter/") ||
+            id.includes("/scheduler/")
+          )
+            return "vendor-react";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (
+            id.includes("/recharts/") ||
+            id.includes("/d3-") ||
+            id.includes("/victory-")
+          )
+            return "vendor-charts";
+          if (id.includes("@tanstack") || id.includes("/@trpc/"))
+            return "vendor-data";
+          if (
+            id.includes("/lucide-react/") ||
+            id.includes("/framer-motion/") ||
+            id.includes("/embla-carousel") ||
+            id.includes("/sonner/") ||
+            id.includes("/cmdk/") ||
+            id.includes("/vaul/") ||
+            id.includes("/input-otp/") ||
+            id.includes("/react-day-picker/") ||
+            id.includes("/react-resizable-panels/")
+          )
+            return "vendor-ui";
+          if (
+            id.includes("/zod/") ||
+            id.includes("/superjson/") ||
+            id.includes("/date-fns/") ||
+            id.includes("/clsx/") ||
+            id.includes("/tailwind-merge/") ||
+            id.includes("/class-variance-authority/")
+          )
+            return "vendor-utils";
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     host: true,

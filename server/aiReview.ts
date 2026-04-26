@@ -17,12 +17,34 @@ function normalizeReviewJson(input: unknown): {
   fieldScores: any[];
   fieldSuggestions: Record<string, string>;
 } {
-  const SCORE_KEYS = ["score", "overallScore", "overall_score", "totalScore", "total_score", "weightedScore", "weighted_score"];
-  const FEEDBACK_KEYS = ["feedback", "summary", "executiveSummary", "executive_summary", "overallFeedback", "overall_feedback"];
-  const REC_KEYS = ["recommendations", "recommendation", "actionItems", "action_items", "improvements"];
-  const RED_KEYS = ["hasRedFlags", "has_red_flags", "redFlags", "red_flags", "flagged"];
-  const FIELDS_KEYS = ["fieldScores", "field_scores", "fields", "fieldEvaluations", "field_evaluations"];
-  const FIELDSUG_KEYS = ["fieldSuggestions", "field_suggestions", "suggestions"];
+  const SCORE_KEYS = [
+    "score", "overallScore", "overall_score", "totalScore", "total_score",
+    "weightedScore", "weighted_score", "finalScore", "final_score", "compositeScore",
+  ];
+  const FEEDBACK_KEYS = [
+    "feedback", "summary", "executiveSummary", "executive_summary",
+    "overallFeedback", "overall_feedback", "reviewerNote", "reviewer_note",
+    "reviewerSummary", "reviewer_summary", "assessment", "verdict", "narrative",
+    "comments", "remarks", "rationale",
+  ];
+  const REC_KEYS = [
+    "recommendations", "recommendation", "actionItems", "action_items",
+    "improvements", "improvementSuggestions", "improvement_suggestions",
+    "nextSteps", "next_steps", "todo", "todos",
+  ];
+  const RED_KEYS = [
+    "hasRedFlags", "has_red_flags", "redFlags", "red_flags", "flagged",
+    "blocking", "criticalIssues", "critical_issues",
+  ];
+  const FIELDS_KEYS = [
+    "fieldScores", "field_scores", "fields", "fieldEvaluations",
+    "field_evaluations", "perField", "per_field", "byField", "by_field",
+    "criteria", "checklist",
+  ];
+  const FIELDSUG_KEYS = [
+    "fieldSuggestions", "field_suggestions", "suggestions",
+    "improvedFields", "improved_fields", "rewrites",
+  ];
 
   const seen = new WeakSet<object>();
   const candidates: Record<string, any>[] = [];
@@ -58,8 +80,25 @@ function normalizeReviewJson(input: unknown): {
   const feedback = typeof rawFeedback === "string" ? rawFeedback : "";
 
   const rawRecs = pick(REC_KEYS);
+  const flattenRec = (r: any): string | null => {
+    if (!r) return null;
+    if (typeof r === "string") return r;
+    if (typeof r === "object") {
+      // Common shapes: {description, priority} | {recommendation, …} | {action} | {text}
+      const cand =
+        r.description ?? r.recommendation ?? r.action ?? r.text ??
+        r.message ?? r.note ?? r.suggestion ?? r.detail;
+      if (typeof cand === "string") return cand;
+      // Last resort — stringify scalars only
+      const scalars = Object.values(r).filter(
+        v => typeof v === "string" || typeof v === "number"
+      );
+      if (scalars.length > 0) return scalars.join(" — ");
+    }
+    return null;
+  };
   const recommendations = Array.isArray(rawRecs)
-    ? rawRecs.map(String)
+    ? rawRecs.map(flattenRec).filter((s): s is string => Boolean(s))
     : typeof rawRecs === "string"
       ? [rawRecs]
       : [];
@@ -117,6 +156,24 @@ export async function runStage1AiReview(data: {
   fundingSource: string;
   estimatedDuration: string;
 }): Promise<AiReviewResult> {
+  // Lightweight novelty check — title-only, 2 sources, 3 hits each.
+  // Picks up obvious duplication of registered trials and recent papers
+  // without bloating the gateway prompt. Errors are swallowed so the
+  // gateway never depends on an external API to function.
+  let noveltyContext = "";
+  try {
+    if (data.researchTitle && data.researchTitle.trim().length > 8) {
+      const bundle = await searchLiterature(data.researchTitle.slice(0, 200), {
+        perSource: 3,
+        sources: ["pubmed", "clinicaltrials"],
+      });
+      const formatted = formatLiteratureForPrompt(bundle);
+      if (formatted) noveltyContext = `${formatted}\n\n`;
+    }
+  } catch (err) {
+    console.warn("[AI Review] Stage 1 novelty check failed:", err);
+  }
+
   const prompt = `You are a senior IRB (Institutional Review Board) compliance specialist for the National Bioethics Committee of Saudi Arabia (NBCE), with expertise in NBCE Implementing Regulations, Declaration of Helsinki (2013), ICH-GCP E6(R2), Belmont Report, and CIOMS International Ethical Guidelines.
 
 YOUR ROLE: Evaluate Stage 1 of an IRB application — research classification and basic investigator information. This is the GATEWAY stage. Your assessment determines whether the applicant proceeds to the detailed ethics review (Stage 2).
@@ -176,7 +233,14 @@ CROSS-PHASE ALIGNMENT CHECK
 - Flag if the title suggests human subjects but type says lab-based
 - Flag if clinical trial is marked as exempt review
 
-APPLICATION DATA:
+═══════════════════════════════════════════════════
+NOVELTY / DUPLICATION CHECK
+═══════════════════════════════════════════════════
+- If the LITERATURE & PRIOR-ART CONTEXT block (below) shows an active or recently completed registered trial with the same intervention and population, NOTE this in feedback as a duplication concern
+- Do NOT auto-fail for novelty alone — registries exist precisely so multi-site replication can happen — but DO recommend the applicant cite the precedent and explain how this study adds value
+- If no prior-art context is present, treat novelty as neutral (do not deduct)
+
+${noveltyContext}APPLICATION DATA:
 ${JSON.stringify(data, null, 2)}
 
 For each field, provide:

@@ -15,6 +15,9 @@ import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
 import { ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle, Loader2, Upload, Wand2, Calculator, Save, Star, MessageSquare, Lightbulb } from "lucide-react";
+import RelatedLiterature from "@/components/RelatedLiterature";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 
 export default function ApplyStage2() {
   const { id } = useParams<{ id: string }>();
@@ -296,6 +299,31 @@ export default function ApplyStage2() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Related literature — collapsible context for the applicant. */}
+        {app && (app.researchTitle || "").length > 8 && (
+          <Collapsible className="mb-6">
+            <CollapsibleTrigger className="w-full text-start group">
+              <Card className="bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
+                <CardContent className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Lightbulb className="h-4 w-4 text-primary" />
+                    <span className="font-medium">
+                      {isAr ? "عرض الأدبيات والدراسات ذات الصلة" : "Show related literature & prior art"}
+                    </span>
+                    <span className="text-muted-foreground hidden sm:inline">
+                      {isAr ? "PubMed · ClinicalTrials.gov · S2 · OpenAlex · Elicit" : "PubMed · ClinicalTrials.gov · S2 · OpenAlex · Elicit"}
+                    </span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CardContent>
+              </Card>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <RelatedLiterature applicationId={app.id} />
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         {/* Resubmission Notice */}

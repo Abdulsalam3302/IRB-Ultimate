@@ -145,6 +145,31 @@ function getColorFromScore(score: number): FieldColor {
   return "darkGreen";
 }
 
+/**
+ * Refusal / safeguards policy injected into every content-generating
+ * prompt (auto-complete, resolve-field, fix-all-comments). The reviewing
+ * prompts already enforce these via RED-FLAG rules; the writing prompts
+ * need an explicit "do not produce" list because their output goes back
+ * to the applicant and could otherwise smuggle non-compliant content.
+ */
+const ETHICS_SAFEGUARDS = `
+═══════════════════════════════════════════════════
+HARD SAFEGUARDS — REFUSE TO GENERATE
+═══════════════════════════════════════════════════
+You MUST refuse to generate or enhance content that:
+1. FABRICATION: Invents principal investigators, institutional affiliations, NBCE bioethics certifications, prior IRB approvals, trial registration numbers, or funding sources. If a credential is missing, instruct the applicant to provide it — do not invent one.
+2. CONSENT BYPASS: Describes any procedure that obtains consent through coercion, deception (beyond approved minimal-deception protocols), withholding of material risks, or skipping the right-to-withdraw clause.
+3. VULNERABLE-POPULATION MISUSE: Targets minors, prisoners, pregnant women, mentally incapacitated persons, employees of the PI, students of the PI, or other dependent groups WITHOUT explicit additional safeguards (assent procedures, LAR consent, conflict-of-interest disclosure, justification of why this population is necessary).
+4. ILLEGAL OR HIGH-HARM METHODS: Recommends use of unapproved investigational substances outside a Saudi FDA / NBCE-cleared pathway, deliberate harm beyond minimal risk, withholding standard-of-care from a control arm, or any procedure prohibited under Saudi law.
+5. DATA PROTECTION VIOLATION: Describes collection of identifiable health data without an explicit secure-storage / de-identification / retention-and-destruction plan; describes secondary use of biospecimens without re-consent or waiver justification.
+6. DISCRIMINATION: Excludes participants on protected characteristics (gender, religion, nationality, disability) without scientific justification.
+7. CONFLICT OF INTEREST CONCEALMENT: Hides or downplays financial / non-financial conflicts.
+
+When refusing under any of these rules, return the field with a short, clear note that begins with "[BLOCKED — applicant must address]" and then names the safeguard rule in plain language. Do NOT silently rewrite the applicant's intent into something compliant; the applicant is responsible for the underlying study design.
+
+The applicant is responsible for the truthfulness of all content. Your role is to improve quality, structure, and ethical clarity — never to launder unethical methodology into IRB-acceptable language.
+`;
+
 // ─── STAGE 1 AI REVIEW — Research Classification & Basic Info ─────────────
 export async function runStage1AiReview(data: {
   researchType: string;
@@ -646,7 +671,8 @@ QUALITY STANDARDS
 6. SPECIFICITY: Avoid generic statements — be specific to THIS research
 7. COMPLETENESS: Each field should be comprehensive enough to stand alone without additional explanation
 
-IMPORTANT: The applicant is responsible for the truthfulness and accuracy of all content. Your role is to enhance quality, completeness, and ethical compliance.`;
+IMPORTANT: The applicant is responsible for the truthfulness and accuracy of all content. Your role is to enhance quality, completeness, and ethical compliance.
+${ETHICS_SAFEGUARDS}`;
 
   try {
     const fieldProperties: Record<string, any> = {};
@@ -718,7 +744,8 @@ RESOLUTION RULES
 6. The enhanced value must score 100/100 on re-review
 7. Explain clearly what was changed and why
 
-IMPORTANT: The applicant is responsible for truth and accuracy. Enhance quality without fabricating data.`;
+IMPORTANT: The applicant is responsible for truth and accuracy. Enhance quality without fabricating data.
+${ETHICS_SAFEGUARDS}`;
 
   try {
     const response = await invokeLLM({
@@ -799,7 +826,8 @@ FIX RULES
 7. Use professional academic language
 8. Ensure ethical compliance with Declaration of Helsinki, ICH-GCP, Belmont Report, NBCE regulations
 
-Return ALL fields (both fixed and unchanged) as a complete set.`;
+Return ALL fields (both fixed and unchanged) as a complete set.
+${ETHICS_SAFEGUARDS}`;
 
   try {
     const fieldProperties: Record<string, any> = {};

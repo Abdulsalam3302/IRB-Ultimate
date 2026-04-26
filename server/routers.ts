@@ -1483,7 +1483,21 @@ const literatureRouter = router({
     .query(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+      // Allow: applicant, admin, or any committee member assigned to the app.
+      // Reviewers see literature so they have prior-art context before voting.
+      const isOwner = app.applicantId === ctx.user.id;
+      const isAdmin = ctx.user.role === "admin";
+      let isAssignedReviewer = false;
+      if (!isOwner && !isAdmin) {
+        const member = await db.getCommitteeMemberByUserId(ctx.user.id);
+        if (member) {
+          const reviews = await db.getReviewsByApplication(input.applicationId);
+          isAssignedReviewer = reviews.some(
+            r => r.committeeMemberId === member.id
+          );
+        }
+      }
+      if (!isOwner && !isAdmin && !isAssignedReviewer) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       const query = [app.researchTitle, app.researchObjectives]

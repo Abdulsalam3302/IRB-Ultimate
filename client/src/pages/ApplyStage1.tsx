@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { useLocation, useParams } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
@@ -37,7 +37,15 @@ export default function ApplyStage1() {
   const isAr = lang === "ar";
 
   const { data: app, isLoading } = trpc.application.getById.useQuery(
-    { id: appId }, { enabled: isAuthenticated && appId > 0 }
+    { id: appId },
+    {
+      enabled: isAuthenticated && appId > 0,
+      // Background refetches were resetting the form mid-edit. Freshness
+      // comes from explicit invalidation after save, not background polling.
+      staleTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    }
   );
   const { data: existingAuthors } = trpc.authors.getByApplication.useQuery(
     { applicationId: appId }, { enabled: isAuthenticated && appId > 0 }
@@ -60,28 +68,33 @@ export default function ApplyStage1() {
   const [proceedDespiteReason, setProceedDespiteReason] = useState("");
   const proceedDespite = trpc.application.proceedDespiteStage1.useMutation();
 
+  // One-shot hydration guard: re-running on every refetch destroys
+  // in-flight typing. Only hydrate once per appId.
+  const initialisedFor = useRef<number | null>(null);
+
   useEffect(() => {
-    if (app) {
-      setForm({
-        researchType: app.researchType || "", irbCategory: app.irbCategory || "full_board",
-        researchTitle: app.researchTitle || "", principalInvestigator: app.principalInvestigator || "",
-        piEmail: app.piEmail || "", piInstitution: app.piInstitution || "",
-        piDepartment: app.piDepartment || "", fundingSource: app.fundingSource || "",
-        estimatedDuration: app.estimatedDuration || "", questionnaireFileUrl: app.questionnaireFileUrl || "",
-        retrospectiveDataSource: app.retrospectiveDataSource || "",
-        clinicalTrialDetails: app.clinicalTrialDetails || "",
-        supplementaryFilesJson: app.supplementaryFilesJson || "",
-        labHeadApproval: app.labHeadApproval || false, labHeadName: app.labHeadName || "",
-        labHeadEmail: app.labHeadEmail || "", labHeadPhone: app.labHeadPhone || "",
-      });
-      if (app.stage1AiFeedback) {
-        try {
-          const parsed = JSON.parse(app.stage1AiFeedback);
-          setAiResult({ score: app.stage1AiScore, passed: app.stage1Passed, ...parsed });
-          setShowAiResult(true);
-        } catch (e) {}
-      }
+    if (!app) return;
+    if (initialisedFor.current === app.id) return;
+    setForm({
+      researchType: app.researchType || "", irbCategory: app.irbCategory || "full_board",
+      researchTitle: app.researchTitle || "", principalInvestigator: app.principalInvestigator || "",
+      piEmail: app.piEmail || "", piInstitution: app.piInstitution || "",
+      piDepartment: app.piDepartment || "", fundingSource: app.fundingSource || "",
+      estimatedDuration: app.estimatedDuration || "", questionnaireFileUrl: app.questionnaireFileUrl || "",
+      retrospectiveDataSource: app.retrospectiveDataSource || "",
+      clinicalTrialDetails: app.clinicalTrialDetails || "",
+      supplementaryFilesJson: app.supplementaryFilesJson || "",
+      labHeadApproval: app.labHeadApproval || false, labHeadName: app.labHeadName || "",
+      labHeadEmail: app.labHeadEmail || "", labHeadPhone: app.labHeadPhone || "",
+    });
+    if (app.stage1AiFeedback) {
+      try {
+        const parsed = JSON.parse(app.stage1AiFeedback);
+        setAiResult({ score: app.stage1AiScore, passed: app.stage1Passed, ...parsed });
+        setShowAiResult(true);
+      } catch (e) {}
     }
+    initialisedFor.current = app.id;
   }, [app]);
 
   const saveStage1 = trpc.application.saveStage1.useMutation();

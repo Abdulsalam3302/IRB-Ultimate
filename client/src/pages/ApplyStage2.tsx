@@ -28,7 +28,16 @@ export default function ApplyStage2() {
   const isAr = lang === "ar";
 
   const { data: app, isLoading } = trpc.application.getById.useQuery(
-    { id: appId }, { enabled: isAuthenticated && appId > 0 }
+    { id: appId },
+    {
+      enabled: isAuthenticated && appId > 0,
+      // Background refetch was stomping in-flight typing via the
+      // form-init effect below. Freshness comes from our autosave +
+      // explicit invalidations after mutations, not background polling.
+      staleTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    }
   );
 
   const [form, setForm] = useState({
@@ -60,49 +69,95 @@ export default function ApplyStage2() {
   });
   const [calcResult, setCalcResult] = useState<any>(null);
 
-  // Auto-save timer
+  // Auto-save timer + state
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const saveDraft = trpc.application.saveDraft.useMutation();
+  // Track init: form must hydrate from `app` exactly once per appId.
+  // Re-running on every refetch (the old behaviour) blows away in-flight
+  // keystrokes — that's the "fields suddenly empty" bug.
+  const initialisedFor = useRef<number | null>(null);
+  // Snapshot of last successful save so we can skip no-op autosaves.
+  const lastSavedSnapshot = useRef<string>("");
+  const [saveError, setSaveError] = useState(false);
 
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
+      // Skip if a save is already in flight.
+      if (saveDraft.isPending) return;
+      // Skip no-op writes (form unchanged since last save).
+      const snapshot = JSON.stringify({ ...form, rejectionFileUrl });
+      if (snapshot === lastSavedSnapshot.current) return;
       try {
         setAutoSaving(true);
+        setSaveError(false);
         await saveDraft.mutateAsync({ id: appId, ...form, rejectionFileUrl: rejectionFileUrl || undefined });
+        lastSavedSnapshot.current = snapshot;
         setLastSaved(new Date());
-        setAutoSaving(false);
       } catch (e) {
+        setSaveError(true);
+      } finally {
         setAutoSaving(false);
       }
     }, 3000);
-  }, [form, appId, rejectionFileUrl]);
+  }, [form, appId, rejectionFileUrl, saveDraft]);
 
   useEffect(() => {
-    if (app && appId > 0) triggerAutoSave();
+    // Only autosave once we've hydrated for this appId.
+    if (initialisedFor.current === appId) triggerAutoSave();
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [form]);
+  }, [form, rejectionFileUrl, appId, triggerAutoSave]);
 
+  // One-shot hydration: runs the first time `app` arrives for a given id,
+  // and again only if the user navigates to a different draft. Background
+  // refetches no longer reset the form.
   useEffect(() => {
-    if (app) {
-      setForm({
-        researchObjectives: app.researchObjectives || "", methodology: app.methodology || "",
-        sampleSize: app.sampleSize || "", targetPopulation: app.targetPopulation || "",
-        inclusionCriteria: app.inclusionCriteria || "", exclusionCriteria: app.exclusionCriteria || "",
-        dataCollectionMethods: app.dataCollectionMethods || "", informedConsentProcess: app.informedConsentProcess || "",
-        riskAssessment: app.riskAssessment || "", benefitAssessment: app.benefitAssessment || "",
-        confidentialityMeasures: app.confidentialityMeasures || "", conflictOfInterest: app.conflictOfInterest || "",
-      });
-      setRejectionFileUrl(app.rejectionFileUrl || "");
-      if (app.stage2AiFeedback) {
-        try {
-          const parsed = JSON.parse(app.stage2AiFeedback);
-          setAiResult({ score: app.stage2AiScore, passed: app.stage2Passed, ...parsed });
-          setShowAiResult(true);
-        } catch (e) {}
-      }
+    if (!app) return;
+    if (initialisedFor.current === app.id) return;
+    setForm({
+      researchObjectives: app.researchObjectives || "", methodology: app.methodology || "",
+      sampleSize: app.sampleSize || "", targetPopulation: app.targetPopulation || "",
+      inclusionCriteria: app.inclusionCriteria || "", exclusionCriteria: app.exclusionCriteria || "",
+      dataCollectionMethods: app.dataCollectionMethods || "", informedConsentProcess: app.informedConsentProcess || "",
+      riskAssessment: app.riskAssessment || "", benefitAssessment: app.benefitAssessment || "",
+      confidentialityMeasures: app.confidentialityMeasures || "", conflictOfInterest: app.conflictOfInterest || "",
+    });
+    setRejectionFileUrl(app.rejectionFileUrl || "");
+    if (app.stage2AiFeedback) {
+      try {
+        const parsed = JSON.parse(app.stage2AiFeedback);
+        setAiResult({ score: app.stage2AiScore, passed: app.stage2Passed, ...parsed });
+        setShowAiResult(true);
+      } catch (e) {}
     }
+    // Seed the snapshot so the very next autosave sees no-op until the
+    // user actually edits something.
+    lastSavedSnapshot.current = JSON.stringify({
+      researchObjectives: app.researchObjectives || "", methodology: app.methodology || "",
+      sampleSize: app.sampleSize || "", targetPopulation: app.targetPopulation || "",
+      inclusionCriteria: app.inclusionCriteria || "", exclusionCriteria: app.exclusionCriteria || "",
+      dataCollectionMethods: app.dataCollectionMethods || "", informedConsentProcess: app.informedConsentProcess || "",
+      riskAssessment: app.riskAssessment || "", benefitAssessment: app.benefitAssessment || "",
+      confidentialityMeasures: app.confidentialityMeasures || "", conflictOfInterest: app.conflictOfInterest || "",
+      rejectionFileUrl: app.rejectionFileUrl || "",
+    });
+    initialisedFor.current = app.id;
   }, [app]);
+
+  // Manually retry a failed autosave from the UI pill.
+  const retrySave = async () => {
+    setSaveError(false);
+    try {
+      setAutoSaving(true);
+      await saveDraft.mutateAsync({ id: appId, ...form, rejectionFileUrl: rejectionFileUrl || undefined });
+      lastSavedSnapshot.current = JSON.stringify({ ...form, rejectionFileUrl });
+      setLastSaved(new Date());
+    } catch (e) {
+      setSaveError(true);
+    } finally {
+      setAutoSaving(false);
+    }
+  };
 
   const saveStage2 = trpc.application.saveStage2.useMutation();
   const runAiReview = trpc.application.runStage2Review.useMutation();
@@ -277,7 +332,16 @@ export default function ApplyStage2() {
             </div>
             <div className="flex items-center gap-2">
               {autoSaving && <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> {isAr ? "حفظ تلقائي..." : "Auto-saving..."}</span>}
-              {lastSaved && !autoSaving && <span className="text-xs text-muted-foreground flex items-center gap-1"><Save className="h-3 w-3" /> {isAr ? "تم الحفظ" : "Saved"} {lastSaved.toLocaleTimeString()}</span>}
+              {!autoSaving && saveError && (
+                <button
+                  type="button"
+                  onClick={retrySave}
+                  className="text-xs text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 rounded-full px-2 py-0.5 hover:bg-red-100 dark:hover:bg-red-900"
+                >
+                  {isAr ? "فشل الحفظ — أعد المحاولة" : "Save failed — retry"}
+                </button>
+              )}
+              {lastSaved && !autoSaving && !saveError && <span className="text-xs text-muted-foreground flex items-center gap-1"><Save className="h-3 w-3" /> {isAr ? "تم الحفظ" : "Saved"} {lastSaved.toLocaleTimeString()}</span>}
               <Button variant="ghost" size="sm" onClick={handleManualSave} disabled={saveDraft.isPending}>
                 <Save className="h-4 w-4 me-1" /> {isAr ? "حفظ المسودة" : "Save Draft"}
               </Button>

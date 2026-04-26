@@ -205,21 +205,64 @@ export default function ApplyStage2() {
     } catch (error) { toast.error(isAr ? "فشل الرفع" : "Upload failed"); setUploading(false); }
   };
 
+  // Stepped-progress message during the AI auto-complete call.
+  const [autoCompleteStep, setAutoCompleteStep] = useState<string | null>(null);
+  // Diff modal state — applicant reviews each AI change before applying.
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffPairs, setDiffPairs] = useState<Array<{ field: string; before: string; after: string; keep: boolean }>>([]);
+
   const handleAiAutoComplete = async () => {
     try {
-      toast.info(isAr ? "جاري تحسين الحقول بالذكاء الاصطناعي..." : "AI is enhancing your fields...");
-      const result = await aiAutoComplete.mutateAsync({ id: appId, existingFields: form });
-      setForm(prev => {
-        const updated = { ...prev };
-        for (const [key, value] of Object.entries(result)) {
-          if (key in updated && value) (updated as any)[key] = value;
+      // Stepped progress so the long M2 call doesn't feel like a hang.
+      setAutoCompleteStep(isAr ? "قراءة المرحلة الأولى..." : "Reading Stage 1 facts…");
+      // Brief delay so the user actually reads the step text.
+      await new Promise(r => setTimeout(r, 250));
+      setAutoCompleteStep(isAr ? "البحث في الأدبيات..." : "Searching literature…");
+      const callPromise = aiAutoComplete.mutateAsync({ id: appId, existingFields: form, stage: "stage2" });
+      // After ~1.5s, switch to "drafting" so it tracks reality even on cache hit.
+      setTimeout(() => setAutoCompleteStep(isAr ? "صياغة الحقول..." : "Drafting fields…"), 1500);
+      const result = await callPromise;
+      setAutoCompleteStep(isAr ? "تطبيق التغييرات..." : "Preparing changes…");
+
+      // Build the diff: only fields where AI returned something AND it
+      // differs from the current value get a row in the modal.
+      const pairs: Array<{ field: string; before: string; after: string; keep: boolean }> = [];
+      for (const [key, value] of Object.entries(result)) {
+        if (!(key in form)) continue;
+        const before = ((form as any)[key] || "") as string;
+        const after = String(value || "");
+        if (after && after !== before) {
+          pairs.push({ field: key, before, after, keep: true });
         }
-        return updated;
-      });
-      toast.success(isAr ? "تم تحسين الحقول بنجاح!" : "Fields enhanced successfully!");
+      }
+      setAutoCompleteStep(null);
+      if (pairs.length === 0) {
+        toast.info(isAr ? "لا توجد تغييرات مقترحة" : "AI had no changes to suggest");
+        return;
+      }
+      setDiffPairs(pairs);
+      setDiffOpen(true);
     } catch (error: any) {
+      setAutoCompleteStep(null);
       toast.error(error.message || (isAr ? "فشل التحسين" : "Enhancement failed"));
     }
+  };
+
+  const handleApplyDiff = () => {
+    setForm(prev => {
+      const updated = { ...prev };
+      for (const p of diffPairs) {
+        if (p.keep && p.field in updated) (updated as any)[p.field] = p.after;
+      }
+      return updated;
+    });
+    setDiffOpen(false);
+    setDiffPairs([]);
+    toast.success(isAr ? "تم تطبيق التغييرات. راجعها قبل الإرسال." : "Applied — please review each field before submitting.");
+  };
+
+  const toggleDiffKeep = (idx: number) => {
+    setDiffPairs(prev => prev.map((p, i) => (i === idx ? { ...p, keep: !p.keep } : p)));
   };
 
   const handleCalculateSampleSize = async () => {
@@ -417,12 +460,36 @@ export default function ApplyStage2() {
               </div>
               <Button onClick={handleAiAutoComplete} disabled={aiAutoComplete.isPending} className="shrink-0">
                 {aiAutoComplete.isPending ? (
-                  <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري التحسين..." : "Enhancing..."}</>
+                  <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {autoCompleteStep || (isAr ? "جاري التحسين..." : "Enhancing...")}</>
                 ) : (
                   <><Wand2 className="h-4 w-4 me-2" /> {isAr ? "تحسين تلقائي" : "AI Auto-Fill"}</>
                 )}
               </Button>
             </div>
+            {aiAutoComplete.isPending && autoCompleteStep && (
+              <div className="mt-3 ms-13">
+                <div className="flex gap-1 text-[11px] text-muted-foreground">
+                  {[
+                    isAr ? "قراءة المرحلة 1" : "Stage 1",
+                    isAr ? "الأدبيات" : "Literature",
+                    isAr ? "الصياغة" : "Drafting",
+                    isAr ? "التطبيق" : "Apply",
+                  ].map((label, i) => {
+                    const reached =
+                      (i === 0 && autoCompleteStep) ||
+                      (i === 1 && /literature|الأدبيات/i.test(autoCompleteStep)) ||
+                      (i === 2 && /draft|الصياغة/i.test(autoCompleteStep)) ||
+                      (i === 3 && /(prepar|apply|تطبيق|التغييرات)/i.test(autoCompleteStep));
+                    return (
+                      <div key={i} className="flex-1">
+                        <div className={`h-1 rounded-full ${reached ? "bg-primary" : "bg-muted"}`} />
+                        <span className={`block mt-1 ${reached ? "text-primary font-medium" : ""}`}>{label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -635,6 +702,81 @@ export default function ApplyStage2() {
               )}
             </div>
           </div>
+
+          {/* AI Auto-Complete diff/confirm modal — applicant reviews
+              each AI rewrite before it touches the form. Defaults to
+              "keep AI version" but each row can be flipped back to
+              "keep mine". Templates are highlighted distinctly. */}
+          {diffOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+              <Card className="w-full max-w-3xl apple-card max-h-[90vh] flex flex-col">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wand2 className="h-5 w-5 text-primary" />
+                    {isAr ? "راجع تغييرات الذكاء الاصطناعي" : "Review AI changes"}
+                  </CardTitle>
+                  <CardDescription>
+                    {isAr
+                      ? "اقترح الذكاء الاصطناعي إعادة صياغة لهذه الحقول. اختر ما تريد قبوله. الحقول التي تبدأ بـ [TEMPLATE] هي قوالب لإكمالها بنفسك."
+                      : "AI proposed rewrites for these fields. Toggle each one to keep yours or accept AI's. Fields starting with [TEMPLATE] are scaffolds — you must complete them yourself."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto space-y-4">
+                  {diffPairs.map((p, idx) => {
+                    const isTemplate = p.after.startsWith("[TEMPLATE");
+                    return (
+                      <div key={p.field} className="border rounded-lg p-3">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold">{p.field}</span>
+                            {isTemplate && (
+                              <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-300">
+                                {isAr ? "قالب" : "Template"}
+                              </Badge>
+                            )}
+                          </div>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                            <input type="checkbox" checked={p.keep} onChange={() => toggleDiffKeep(idx)} />
+                            <span>{p.keep ? (isAr ? "احتفظ بإصدار AI" : "Keep AI version") : (isAr ? "احتفظ بإصداري" : "Keep mine")}</span>
+                          </label>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-2 text-xs">
+                          <div className={`rounded p-2 ${!p.keep ? "ring-2 ring-primary bg-primary/5" : "bg-muted/30"}`}>
+                            <p className="font-medium mb-1 text-muted-foreground uppercase tracking-wide text-[10px]">
+                              {isAr ? "الحالي (لك)" : "Yours"}
+                            </p>
+                            <p className="whitespace-pre-line">{p.before || <span className="italic text-muted-foreground">{isAr ? "(فارغ)" : "(empty)"}</span>}</p>
+                          </div>
+                          <div className={`rounded p-2 ${p.keep ? `ring-2 ${isTemplate ? "ring-amber-500 bg-amber-50/50 dark:bg-amber-950/30" : "ring-primary bg-primary/5"}` : "bg-muted/30"}`}>
+                            <p className="font-medium mb-1 text-muted-foreground uppercase tracking-wide text-[10px]">
+                              {isAr ? "اقتراح AI" : "AI suggestion"}
+                            </p>
+                            <p className="whitespace-pre-line font-mono">{p.after}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+                <div className="border-t p-4 flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {isAr
+                      ? `سيتم تطبيق ${diffPairs.filter(p => p.keep).length} من ${diffPairs.length} تغييرات`
+                      : `Applying ${diffPairs.filter(p => p.keep).length} of ${diffPairs.length} changes`}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { setDiffOpen(false); setDiffPairs([]); }}>
+                      {isAr ? "إلغاء" : "Cancel"}
+                    </Button>
+                    <Button onClick={handleApplyDiff} disabled={diffPairs.filter(p => p.keep).length === 0}>
+                      <CheckCircle className="h-4 w-4 me-1" />
+                      {isAr ? "تطبيق المحدد" : "Apply selected"}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
 
           {/* Proceed Despite Score Modal */}
           {showProceedDespiteModal && (

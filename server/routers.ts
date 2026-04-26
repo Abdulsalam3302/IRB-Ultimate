@@ -237,11 +237,32 @@ const applicationRouter = router({
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
 
+      // For Stage 2 auto-complete, pass Stage 1 gateway facts so the
+      // generated text references the same PI / institution / funding
+      // / duration the applicant declared on Stage 1, instead of
+      // generic boilerplate.
+      let stage1Summary: string | undefined;
+      if (app.stage1AiFeedback) {
+        try {
+          const parsed = JSON.parse(app.stage1AiFeedback);
+          stage1Summary = String(parsed.feedback || "").slice(0, 800);
+        } catch {}
+      }
       const result = await aiAutoCompleteFields({
         researchType: app.researchType || "",
         researchTitle: app.researchTitle || "",
         existingFields: input.existingFields,
         stage: input.stage,
+        stage1Context: input.stage === "stage1" ? undefined : {
+          principalInvestigator: app.principalInvestigator || undefined,
+          piInstitution: app.piInstitution || undefined,
+          piDepartment: app.piDepartment || undefined,
+          fundingSource: app.fundingSource || undefined,
+          estimatedDuration: app.estimatedDuration || undefined,
+          irbCategory: app.irbCategory || undefined,
+          stage1AiScore: app.stage1AiScore ?? null,
+          stage1FeedbackSummary: stage1Summary,
+        },
       });
       return result;
     }),

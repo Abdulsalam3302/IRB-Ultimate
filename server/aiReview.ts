@@ -665,11 +665,26 @@ ${JSON.stringify(data, null, 2)}`;
 }
 
 // ─── AI AUTO-COMPLETE & ENHANCE (aims for 100/100) ───────────────────────
+export interface Stage1ContextForAutoComplete {
+  principalInvestigator?: string;
+  piInstitution?: string;
+  piDepartment?: string;
+  fundingSource?: string;
+  estimatedDuration?: string;
+  irbCategory?: string;
+  stage1AiScore?: number | null;
+  stage1FeedbackSummary?: string;
+}
+
 export async function aiAutoCompleteFields(data: {
   researchType: string;
   researchTitle: string;
   existingFields: Record<string, string>;
   stage?: "stage1" | "stage2";
+  /** Stage 1 gateway info — used when stage="stage2" so generated
+   *  text references the same PI / institution / funding the applicant
+   *  declared on Stage 1, instead of generic NBCE boilerplate. */
+  stage1Context?: Stage1ContextForAutoComplete;
 }): Promise<Record<string, string>> {
   const stage1Fields = {
     researchTitle: "Clear, specific, scientifically meaningful research title including study design and population",
@@ -702,6 +717,36 @@ export async function aiAutoCompleteFields(data: {
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
 
+  // Stage 1 context block — only meaningful when generating Stage 2.
+  let stage1Block = "";
+  if (data.stage !== "stage1" && data.stage1Context) {
+    const c = data.stage1Context;
+    const parts: string[] = [];
+    if (c.principalInvestigator) parts.push(`PI: ${c.principalInvestigator}`);
+    if (c.piInstitution) parts.push(`Institution: ${c.piInstitution}`);
+    if (c.piDepartment) parts.push(`Department: ${c.piDepartment}`);
+    if (c.fundingSource) parts.push(`Funding: ${c.fundingSource}`);
+    if (c.estimatedDuration) parts.push(`Duration: ${c.estimatedDuration}`);
+    if (c.irbCategory) parts.push(`IRB category: ${c.irbCategory}`);
+    if (typeof c.stage1AiScore === "number") parts.push(`Stage 1 score: ${c.stage1AiScore}/100`);
+    if (parts.length > 0) {
+      stage1Block = `\n═══════════════════════════════════════════════════\nSTAGE 1 GATEWAY FACTS (already approved by the applicant — use these in your output)\n═══════════════════════════════════════════════════\n${parts.join("\n")}\n${c.stage1FeedbackSummary ? `\nReviewer notes from Stage 1: ${c.stage1FeedbackSummary.slice(0, 600)}\n` : ""}`;
+    }
+  }
+
+  // Literature context block — only meaningful when generating Stage 2.
+  let literatureBlock = "";
+  if (data.stage !== "stage1" && data.researchTitle && data.researchTitle.length > 8) {
+    try {
+      const litQuery = data.researchTitle.slice(0, 200);
+      const bundle = await searchLiterature(litQuery, { perSource: 3 });
+      const formatted = formatLiteratureForPrompt(bundle);
+      if (formatted) literatureBlock = `\n${formatted}\n`;
+    } catch (err) {
+      console.warn("[aiAutoComplete] literature search failed:", err);
+    }
+  }
+
   const prompt = `You are an expert research protocol writer specializing in IRB applications for the National Bioethics Committee of Saudi Arabia (NBCE).
 
 YOUR MISSION: Generate or enhance ALL fields to achieve a PERFECT 100/100 score on IRB review.
@@ -714,7 +759,7 @@ Research Title: ${data.researchTitle}
 
 Current content provided by the applicant:
 ${existingContent || "(All fields are empty — generate complete content from scratch based on the research title and type)"}
-
+${stage1Block}${literatureBlock}
 ═══════════════════════════════════════════════════
 FIELDS TO COMPLETE/ENHANCE TO 100/100
 ═══════════════════════════════════════════════════
@@ -725,13 +770,25 @@ QUALITY STANDARDS
 ═══════════════════════════════════════════════════
 1. PRESERVE INTENT: If the applicant provided content, enhance it while keeping their original research direction
 2. FILL ALL BLANKS: If a field is empty, generate appropriate content that is consistent with the research title and type
-3. CROSS-FIELD CONSISTENCY: All fields must be internally consistent (e.g., methodology matches objectives, sample size matches target population)
+3. CROSS-FIELD CONSISTENCY: All fields must be internally consistent (e.g., methodology matches objectives, sample size matches target population), AND consistent with the STAGE 1 GATEWAY FACTS above when present (do not invent a different PI, institution, funding source, or duration)
 4. PROFESSIONAL LANGUAGE: Use academic, precise language appropriate for an IRB submission
 5. ETHICAL COMPLIANCE: Every field must align with Declaration of Helsinki, ICH-GCP, Belmont Report, and NBCE regulations
-6. SPECIFICITY: Avoid generic statements — be specific to THIS research
+6. SPECIFICITY: Avoid generic statements — be specific to THIS research and this Saudi setting
 7. COMPLETENESS: Each field should be comprehensive enough to stand alone without additional explanation
+8. PRIOR-ART AWARENESS: When the LITERATURE & PRIOR-ART CONTEXT block is provided, mention how this study aligns with or differs from existing work in the methodology field
+
+═══════════════════════════════════════════════════
+TEMPLATE FALLBACK RULE — when you cannot honestly fill a field
+═══════════════════════════════════════════════════
+If you genuinely cannot infer a field from the supplied context (e.g. the title is too vague to determine a sample size, or there is no evidence about the specific population), DO NOT invent values. Instead, return that field in this exact format:
+
+[TEMPLATE — applicant must complete] <one-line pattern with bracketed placeholders>. EXAMPLE: <one concrete example tailored to this research type>. WHY THIS MATTERS: <one short reason>.
+
+This format gives the applicant a fillable scaffold while making the gap explicit. It is far better than a fabricated answer.
 
 IMPORTANT: The applicant is responsible for the truthfulness and accuracy of all content. Your role is to enhance quality, completeness, and ethical compliance.
+
+OUTPUT FORMAT — strict: every field is a PLAIN STRING. Never return nested objects, arrays, markdown headings, or labelled sub-sections. Just clean prose.
 ${ETHICS_SAFEGUARDS}`;
 
   try {
@@ -742,7 +799,7 @@ ${ETHICS_SAFEGUARDS}`;
 
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an expert NBCE research protocol writer. Generate comprehensive, ethically compliant content that scores 100/100 on IRB review. Every field must be specific to the research, internally consistent, and aligned with international bioethics standards. Respond only with valid JSON." },
+        { role: "system", content: "You are an expert NBCE research protocol writer. Generate comprehensive, ethically compliant content that scores 100/100 on IRB review. Every field must be specific to the research, internally consistent with Stage 1 gateway facts, and aligned with international bioethics standards. When context is insufficient, emit a [TEMPLATE — applicant must complete] scaffold rather than fabricating. Respond only with valid JSON whose fields are plain strings." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -761,7 +818,28 @@ ${ETHICS_SAFEGUARDS}`;
     });
 
     const content = response.choices[0]?.message?.content;
-    return safeJsonParse(typeof content === "string" ? content : "{}");
+    const parsed = safeJsonParse(typeof content === "string" ? content : "{}") as Record<string, any>;
+    // Coerce: some providers return nested objects per field. Reach
+    // into common shapes; final fallback picks the longest string property.
+    const coerce = (v: unknown): string => {
+      if (typeof v === "string") return v;
+      if (typeof v === "number" || typeof v === "boolean") return String(v);
+      if (v && typeof v === "object") {
+        const o = v as any;
+        for (const k of ["value", "text", "content", "enhancedValue", "enhanced", "result", "newValue", "field"]) {
+          if (typeof o[k] === "string" && o[k].length > 0) return o[k];
+        }
+        const stringProps = Object.values(o).filter(x => typeof x === "string" && (x as string).length > 0) as string[];
+        if (stringProps.length > 0) return stringProps.sort((a, b) => b.length - a.length)[0];
+      }
+      return "";
+    };
+    const flat: Record<string, string> = {};
+    for (const k of Object.keys(fields)) {
+      const v = coerce(parsed[k]);
+      if (v) flat[k] = v;
+    }
+    return flat;
   } catch (error) {
     console.error("[AI AutoComplete] Error:", error);
     return {};

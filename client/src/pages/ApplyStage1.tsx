@@ -18,7 +18,7 @@ import { Navbar } from "@/components/Navbar";
 import {
   ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle,
   Loader2, Upload, Plus, Trash2, UserPlus, Users, FileUp, AlertCircle, Info,
-  ChevronDown
+  ChevronDown, Sparkles
 } from "lucide-react";
 import ReviewFeedback from "@/components/ReviewFeedback";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -105,7 +105,79 @@ export default function ApplyStage1() {
   const uploadFile = trpc.application.uploadFile.useMutation();
   const addAuthor = trpc.authors.add.useMutation();
   const removeAuthor = trpc.authors.remove.useMutation();
+  const aiEnhanceStage1 = trpc.application.aiEnhanceStage1.useMutation();
   const utils = trpc.useUtils();
+
+  // AI Enhance & Re-review state.
+  const [enhanceProgress, setEnhanceProgress] = useState<string | null>(null);
+  const [enhanceAlert, setEnhanceAlert] = useState(false); // yellow review banner
+  const [aiEditedFields, setAiEditedFields] = useState<Set<string>>(new Set());
+  const preEnhanceSnapshot = useRef<typeof form | null>(null);
+  const [undoExpiresAt, setUndoExpiresAt] = useState<number | null>(null);
+
+  const handleAiEnhance = async () => {
+    // Snapshot pre-enhance state for the 60s undo pill.
+    preEnhanceSnapshot.current = { ...form };
+    try {
+      setEnhanceProgress(isAr ? "تحسين الحقول..." : "Enhancing fields…");
+      const before = { ...form };
+      const result = await aiEnhanceStage1.mutateAsync({ id: appId });
+      // Apply enhanced fields to local state — only the gateway fields the
+      // server function actually targets.
+      const enhanced = result.fields as Record<string, string>;
+      const edited = new Set<string>();
+      const next = { ...form };
+      for (const k of Object.keys(enhanced)) {
+        if (k in next && enhanced[k] && enhanced[k] !== (before as any)[k]) {
+          (next as any)[k] = enhanced[k];
+          edited.add(k);
+        }
+      }
+      setEnhanceProgress(isAr ? "إعادة تشغيل المراجعة..." : "Re-running AI review…");
+      setForm(next);
+      setAiEditedFields(edited);
+      setEnhanceAlert(true);
+      setUndoExpiresAt(Date.now() + 60_000);
+      // Update the AI result card with the new review.
+      if (result.review) {
+        setAiResult({ ...result.review });
+        setShowAiResult(true);
+      }
+      // Refresh getById so the persisted version shows on next mount.
+      utils.application.getById.invalidate({ id: appId });
+      toast.success(isAr ? "تم التحسين والمراجعة" : "Enhanced & re-reviewed");
+    } catch (e: any) {
+      toast.error(e?.message || (isAr ? "فشل التحسين" : "Enhance failed"));
+    } finally {
+      setEnhanceProgress(null);
+    }
+  };
+
+  const handleUndoEnhance = () => {
+    if (!preEnhanceSnapshot.current) return;
+    setForm(preEnhanceSnapshot.current);
+    setAiEditedFields(new Set());
+    setEnhanceAlert(false);
+    setUndoExpiresAt(null);
+    toast.success(isAr ? "تم التراجع" : "Reverted to your original values");
+  };
+
+  // Clear "AI-edited" badge for any field the user manually edits.
+  const clearAiBadge = (field: string) => {
+    if (!aiEditedFields.has(field)) return;
+    setAiEditedFields(prev => {
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  };
+
+  // Auto-expire the undo pill at 60s.
+  useEffect(() => {
+    if (!undoExpiresAt) return;
+    const t = setTimeout(() => setUndoExpiresAt(null), undoExpiresAt - Date.now());
+    return () => clearTimeout(t);
+  }, [undoExpiresAt]);
 
   const handleFileUpload = async (file: File, field: "questionnaireFileUrl" | "supplementaryFilesJson") => {
     setUploading(true);
@@ -486,14 +558,28 @@ export default function ApplyStage1() {
               <Button variant="outline" onClick={() => setLocation("/dashboard")}>
                 <ArrowLeft className="h-4 w-4 me-1" /> {isAr ? "رجوع" : "Back"}
               </Button>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage1.isPending || runAiReview.isPending}>
+              <div className="flex gap-3 flex-wrap">
+                <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage1.isPending || runAiReview.isPending || aiEnhanceStage1.isPending}>
                   {(saveStage1.isPending || runAiReview.isPending) ? (
                     <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري المراجعة..." : "Reviewing..."}</>
                   ) : (
                     <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
                   )}
                 </Button>
+                {showAiResult && aiResult && !aiResult.passed && (
+                  <Button
+                    variant="default"
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={handleAiEnhance}
+                    disabled={aiEnhanceStage1.isPending}
+                  >
+                    {aiEnhanceStage1.isPending ? (
+                      <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {enhanceProgress || (isAr ? "جاري التحسين..." : "Enhancing…")}</>
+                    ) : (
+                      <><Sparkles className="h-4 w-4 me-1" /> {isAr ? "تحسين AI وإعادة المراجعة" : "AI Enhance & Re-review"}</>
+                    )}
+                  </Button>
+                )}
                 {aiResult?.passed && (
                   <Button className="btn-apple shadow-sm" onClick={() => setLocation(`/apply/${appId}/stage2`)}>
                     {isAr ? "المرحلة الثانية" : "Proceed to Stage 2"} <ArrowRight className="h-4 w-4 ms-1" />
@@ -507,6 +593,42 @@ export default function ApplyStage1() {
                 )}
               </div>
             </div>
+
+            {/* AI Enhance review-required banner. Stays until applicant
+                clicks "I've reviewed" or edits any field manually. */}
+            {enhanceAlert && (
+              <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+                <CardContent className="py-3 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 text-sm">
+                    <p className="font-semibold text-amber-900 dark:text-amber-200 mb-0.5">
+                      {isAr ? "أعد المراجعة قبل التقديم" : "Please review before submitting"}
+                    </p>
+                    <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+                      {isAr
+                        ? "أعاد الذكاء الاصطناعي صياغة حقولك لتلبية معايير IRB. راجع كل حقل وعدّل أي شيء لا يطابق دراستك الفعلية. أنت مسؤول عن صحة جميع المحتويات."
+                        : "AI rewrote your fields to better match IRB standards. Review every field and edit anything that doesn't match your actual study. You remain responsible for the truthfulness of all content."}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="border-amber-400" onClick={() => setEnhanceAlert(false)}>
+                    {isAr ? "تمت المراجعة" : "I've reviewed"}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 60-second undo pill */}
+            {undoExpiresAt && undoExpiresAt > Date.now() && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleUndoEnhance}
+                  className="text-xs text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 rounded-full px-3 py-1 hover:bg-amber-200 dark:hover:bg-amber-900"
+                >
+                  {isAr ? "تراجع عن التحسين" : "Undo AI enhance"}
+                </button>
+              </div>
+            )}
 
             {/* Proceed Despite Score Modal */}
             {showProceedDespiteModal && (

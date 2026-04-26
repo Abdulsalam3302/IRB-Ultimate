@@ -5,7 +5,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
-import { runStage1AiReview, runStage2AiReview, aiAutoCompleteFields, aiResolveField, aiFixAllComments, calculateSampleSize } from "./aiReview";
+import { runStage1AiReview, runStage2AiReview, aiAutoCompleteFields, aiResolveField, aiFixAllComments, calculateSampleSize, aiEnhanceStage1Fields } from "./aiReview";
 import { generateCertificatePdf } from "./certificate";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
@@ -244,6 +244,92 @@ const applicationRouter = router({
         stage: input.stage,
       });
       return result;
+    }),
+
+  // Stage 1 AI Enhance & Re-review — one-click flow:
+  //   1) AI rewrites the gateway fields to address the current review.
+  //   2) Persist the enhanced fields.
+  //   3) Re-run Stage 1 AI review against the enhanced fields.
+  //   4) Persist the new score + feedback.
+  // Returns both the enhanced fields and the new review result so the
+  // client can update form + result card in a single render.
+  aiEnhanceStage1: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.id);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const stage1Fields = {
+        researchTitle: app.researchTitle || "",
+        principalInvestigator: app.principalInvestigator || "",
+        piInstitution: app.piInstitution || "",
+        piDepartment: app.piDepartment || "",
+        fundingSource: app.fundingSource || "",
+        estimatedDuration: app.estimatedDuration || "",
+      };
+
+      // 1) Polish/expand the existing values via the dedicated editor
+      // function (does not invent data, does not refuse sloppy-but-real
+      // input). Pulls the previous AI feedback summary so the rewrite
+      // directly addresses what the reviewer flagged.
+      let prevSummary = "";
+      if (app.stage1AiFeedback) {
+        try {
+          const parsed = JSON.parse(app.stage1AiFeedback);
+          prevSummary = String(parsed.feedback || "").slice(0, 1200);
+        } catch {}
+      }
+      const merged = await aiEnhanceStage1Fields({
+        researchType: app.researchType || "",
+        irbCategory: app.irbCategory || "",
+        current: stage1Fields,
+        stage1FeedbackSummary: prevSummary,
+      });
+
+      // 2) Persist.
+      await db.updateApplication(input.id, {
+        researchTitle: merged.researchTitle,
+        principalInvestigator: merged.principalInvestigator,
+        piInstitution: merged.piInstitution,
+        piDepartment: merged.piDepartment,
+        fundingSource: merged.fundingSource,
+        estimatedDuration: merged.estimatedDuration,
+      });
+
+      // 3) Re-run Stage 1 review against the enhanced data.
+      const review = await runStage1AiReview({
+        researchType: app.researchType || "",
+        irbCategory: app.irbCategory || "",
+        researchTitle: merged.researchTitle,
+        principalInvestigator: merged.principalInvestigator,
+        piInstitution: merged.piInstitution,
+        piDepartment: merged.piDepartment,
+        fundingSource: merged.fundingSource,
+        estimatedDuration: merged.estimatedDuration,
+      });
+
+      // 4) Persist the new review.
+      await db.updateApplication(input.id, {
+        stage1AiScore: review.score,
+        stage1AiFeedback: JSON.stringify({
+          feedback: review.feedback,
+          recommendations: review.recommendations,
+          fieldScores: review.fieldScores,
+          hasRedFlags: review.hasRedFlags,
+        }),
+        stage1Passed: review.passed,
+        status: review.passed ? "stage2_pending" : "stage1_failed",
+      });
+
+      await db.addAuditLog({
+        applicationId: input.id,
+        userId: ctx.user.id,
+        action: "stage1_ai_enhance",
+        details: `AI Enhance & Re-review: score ${review.score}/100 — ${review.passed ? "PASSED" : "FAILED"}`,
+      });
+
+      return { fields: merged, review };
     }),
 
   // AI resolve single field

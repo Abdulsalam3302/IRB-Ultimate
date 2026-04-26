@@ -768,6 +768,112 @@ ${ETHICS_SAFEGUARDS}`;
   }
 }
 
+// ─── AI ENHANCE STAGE 1 GATEWAY FIELDS ───────────────────────────────────
+// Dedicated to "improve what the applicant already wrote" — expand
+// abbreviations, fix spelling, complete fragments, add design type to
+// titles. NOT for fabricating values from nothing. Distinct from
+// aiAutoCompleteFields (which is permitted to draft missing fields and
+// uses the strict ETHICS_SAFEGUARDS refusal block).
+export async function aiEnhanceStage1Fields(data: {
+  researchType: string;
+  irbCategory: string;
+  current: {
+    researchTitle: string;
+    principalInvestigator: string;
+    piInstitution: string;
+    piDepartment: string;
+    fundingSource: string;
+    estimatedDuration: string;
+  };
+  stage1FeedbackSummary?: string;
+}): Promise<typeof data.current> {
+  const prompt = `You are an expert NBCE IRB application editor. Your job is to POLISH and EXPAND each gateway field the applicant has already provided, so it meets IRB standards. You are an EDITOR, not a writer-from-scratch.
+
+CONTEXT
+- Research type: ${data.researchType}
+- IRB category: ${data.irbCategory}
+${data.stage1FeedbackSummary ? `- Latest AI review feedback: ${data.stage1FeedbackSummary.slice(0, 800)}\n` : ""}
+
+FIELDS TO POLISH (current values come from the applicant):
+${JSON.stringify(data.current, null, 2)}
+
+EDITING RULES
+1. EXPAND abbreviations to their full form ("KFSH" → "King Faisal Specialist Hospital and Research Centre, Riyadh"). Abbreviations of real Saudi institutions are SAFE to expand — these are public facts.
+2. FIX spelling and grammar. ("brain abcess" → "brain abscess")
+3. COMPLETE fragments where the applicant clearly intended a specific meaning. ("3 months" → "3 months (estimated study period: <start month> to <start month + 3>)").
+4. ADD missing structural elements to titles: study design (cross-sectional / RCT / cohort / case series), target population, setting, and timeframe. Use the research type to pick the right design term.
+5. PRESERVE the applicant's intent. If they wrote "metformin trial", do not change it to "rosuvastatin trial".
+6. DO NOT invent personal credentials. If "principalInvestigator" is just "Dr Sarah", you may add the qualifier "(applicant must confirm full name and credentials)" but do NOT invent a surname or degree. Same for any private/personal data.
+7. DO NOT change valid information. If a field is already complete and well-formed, return it UNCHANGED.
+
+OUTPUT — STRICT JSON, plain strings only, no nested objects:
+{
+  "researchTitle": "<polished title>",
+  "principalInvestigator": "<polished PI line>",
+  "piInstitution": "<polished institution>",
+  "piDepartment": "<polished department>",
+  "fundingSource": "<polished funding source>",
+  "estimatedDuration": "<polished duration>"
+}
+
+Each value MUST be a plain string. NEVER return nested objects, arrays, or markdown — just strings.`;
+
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: "You are an editor. You polish and expand the applicant's existing values. You do not fabricate new data. You return strict JSON with plain string values, never nested objects." },
+        { role: "user", content: prompt },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "stage1_enhance",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              researchTitle: { type: "string" },
+              principalInvestigator: { type: "string" },
+              piInstitution: { type: "string" },
+              piDepartment: { type: "string" },
+              fundingSource: { type: "string" },
+              estimatedDuration: { type: "string" },
+            },
+            required: ["researchTitle", "principalInvestigator", "piInstitution", "piDepartment", "fundingSource", "estimatedDuration"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const content = response.choices[0]?.message?.content;
+    const parsed = safeJsonParse(typeof content === "string" ? content : "{}") as Record<string, any>;
+    // Coerce defensively in case the model still nested anything.
+    const coerce = (v: unknown, fallback: string): string => {
+      if (typeof v === "string" && v.length > 0) return v;
+      if (typeof v === "object" && v !== null) {
+        const o = v as any;
+        for (const k of ["value", "text", "content", "enhancedValue", "enhanced", "result", "newValue"]) {
+          if (typeof o[k] === "string" && o[k].length > 0) return o[k];
+        }
+        const longest = Object.values(o).filter(x => typeof x === "string" && (x as string).length > 0) as string[];
+        if (longest.length > 0) return longest.sort((a, b) => b.length - a.length)[0];
+      }
+      return fallback;
+    };
+    return {
+      researchTitle: coerce(parsed.researchTitle, data.current.researchTitle),
+      principalInvestigator: coerce(parsed.principalInvestigator, data.current.principalInvestigator),
+      piInstitution: coerce(parsed.piInstitution, data.current.piInstitution),
+      piDepartment: coerce(parsed.piDepartment, data.current.piDepartment),
+      fundingSource: coerce(parsed.fundingSource, data.current.fundingSource),
+      estimatedDuration: coerce(parsed.estimatedDuration, data.current.estimatedDuration),
+    };
+  } catch (err) {
+    console.error("[aiEnhanceStage1Fields] failed:", err);
+    return data.current;
+  }
+}
+
 // ─── AI RESOLVE SINGLE FIELD ──────────────────────────────────────────────
 export async function aiResolveField(data: {
   fieldName: string;

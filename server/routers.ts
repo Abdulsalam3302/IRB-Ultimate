@@ -722,7 +722,11 @@ const applicationRouter = router({
     .mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.fileData, "base64");
       const randomSuffix = Math.random().toString(36).substring(2, 10);
-      const fileKey = `uploads/${ctx.user.id}/${Date.now()}-${randomSuffix}-${input.fileName}`;
+      // Drop the redundant "uploads/" prefix — the storage layer
+      // already partitions under /uploads/<key> for the local driver
+      // and namespaces by bucket for S3/Forge. Without this fix, local
+      // URLs ended up as /uploads/uploads/<userId>/...
+      const fileKey = `${ctx.user.id}/${Date.now()}-${randomSuffix}-${input.fileName}`;
       const { url } = await storagePut(fileKey, buffer, input.contentType);
 
       // Save file metadata to DB

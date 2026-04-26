@@ -224,10 +224,19 @@ export default function ApplyStage2() {
       const result = await callPromise;
       setAutoCompleteStep(isAr ? "تطبيق التغييرات..." : "Preparing changes…");
 
+      // Server-side outage sentinel — show a clear toast instead of an
+      // empty diff modal that looks like "no changes suggested".
+      if (result && typeof (result as any).__ai_unavailable === "string") {
+        setAutoCompleteStep(null);
+        toast.error((result as any).__ai_unavailable);
+        return;
+      }
+
       // Build the diff: only fields where AI returned something AND it
       // differs from the current value get a row in the modal.
       const pairs: Array<{ field: string; before: string; after: string; keep: boolean }> = [];
       for (const [key, value] of Object.entries(result)) {
+        if (key.startsWith("__")) continue;
         if (!(key in form)) continue;
         const before = ((form as any)[key] || "") as string;
         const after = String(value || "");

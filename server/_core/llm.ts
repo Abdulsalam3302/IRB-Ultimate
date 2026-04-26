@@ -318,14 +318,33 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${ENV.llmApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  // Hard timeout. Reasoning models (M2 / R1) can take a while, but
+  // an LLM call has no business taking longer than 2 minutes — without
+  // this, a stuck socket once hung Stage 2 auto-complete for 15 minutes.
+  const timeoutMs = parseInt(process.env.LLM_TIMEOUT_MS ?? "120000", 10);
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(resolveApiUrl(), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ENV.llmApiKey}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutHandle);
+    if ((err as any)?.name === "AbortError") {
+      throw new Error(`LLM invoke timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

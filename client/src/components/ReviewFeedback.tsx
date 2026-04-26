@@ -75,6 +75,22 @@ export default function ReviewFeedback({
     }
   };
 
+  // Detect the server-side outage marker emitted by aiReview.ts when
+  // the LLM call fails. Render a clear "service unavailable" panel
+  // instead of a confusing zero score.
+  const isUnavailable = text?.startsWith("[AI_UNAVAILABLE]");
+  if (isUnavailable) {
+    const msg = text.replace(/^\[AI_UNAVAILABLE\]\s*/, "");
+    return (
+      <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/40 p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 mb-1">
+          {isAr ? "خدمة الذكاء الاصطناعي غير متوفرة مؤقتًا" : "AI service temporarily unavailable"}
+        </p>
+        <p className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed">{msg}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       {parsed.diagnosis && (

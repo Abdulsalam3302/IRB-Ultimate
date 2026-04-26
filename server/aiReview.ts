@@ -414,11 +414,18 @@ REMEMBER:
     };
   } catch (error) {
     console.error("[AI Review] Stage 1 error:", error);
+    // Pass-through fallback so the applicant isn't blocked by an AI
+    // outage, but FLAG it as service-unavailable so the UI can show a
+    // clear "AI temporarily unavailable" banner rather than a silent
+    // 75/passed=true that masks a real failure.
+    const reason = (error as any)?.message?.includes("timed out")
+      ? "AI review timed out. Please try again in a moment."
+      : "AI review service is temporarily unavailable. You can save your draft and re-run the review later.";
     return {
-      score: 75,
-      passed: true,
-      feedback: "AI review completed with default assessment. Manual review recommended.",
-      recommendations: ["Please ensure all fields are accurately filled."],
+      score: 0,
+      passed: false,
+      feedback: `[AI_UNAVAILABLE] ${reason}`,
+      recommendations: ["Try again — if it keeps failing, contact support."],
       fieldScores: [],
       hasRedFlags: false,
     };
@@ -679,14 +686,14 @@ ${JSON.stringify(data, null, 2)}`;
     };
   } catch (error) {
     console.error("[AI Review] Stage 2 error:", error);
+    const reason = (error as any)?.message?.includes("timed out")
+      ? "AI review timed out. Please try again in a moment."
+      : "AI review service is temporarily unavailable. You can save your draft and re-run the review later.";
     return {
-      score: 75,
-      passed: true,
-      feedback: "AI review completed with default assessment. Manual committee review recommended.",
-      recommendations: [
-        "Ensure informed consent process is clearly documented.",
-        "Verify risk mitigation strategies are adequate.",
-      ],
+      score: 0,
+      passed: false,
+      feedback: `[AI_UNAVAILABLE] ${reason}`,
+      recommendations: ["Try again — if it keeps failing, contact support."],
       fieldSuggestions: {},
       fieldScores: [],
       hasRedFlags: false,
@@ -876,7 +883,12 @@ ${ETHICS_SAFEGUARDS}`;
     return flat;
   } catch (error) {
     console.error("[AI AutoComplete] Error:", error);
-    return {};
+    // Sentinel marker the UI uses to render an outage banner instead of
+    // an empty diff modal that looks like "no changes suggested".
+    const reason = (error as any)?.message?.includes("timed out")
+      ? "AI auto-complete timed out. The model is busy — please try again in a moment."
+      : "AI auto-complete service is temporarily unavailable.";
+    return { __ai_unavailable: reason };
   }
 }
 

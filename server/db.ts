@@ -114,6 +114,18 @@ export async function getAllApplications() {
   return db.select().from(applications).orderBy(desc(applications.createdAt));
 }
 
+/** Cheap status query — used by the auto-reassign hook so we don't
+ *  pull every application row to find the queued ones. */
+export async function getApplicationsByStatus(status: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(applications)
+    .where(eq(applications.status, status as any))
+    .orderBy(desc(applications.createdAt));
+}
+
 export async function updateApplication(id: number, data: Partial<InsertApplication>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

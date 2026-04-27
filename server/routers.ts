@@ -557,12 +557,31 @@ const applicationRouter = router({
       // Tell the admin if we couldn't fully assign. Best-effort —
       // don't fail submission on notification failure.
       if (selected.length < 5) {
+        const needed = 5 - selected.length;
         try {
           await db.addAuditLog({
             applicationId: input.id,
             userId: ctx.user.id,
             action: "queued_for_committee_assignment",
-            details: `Submitted with only ${activeMembers.length} active committee members; awaiting admin to invite more (need ${5 - activeMembers.length} more).`,
+            details: `Submitted with only ${activeMembers.length} active committee members; awaiting admin to invite more (need ${needed} more).`,
+          });
+        } catch { /* best-effort */ }
+        // In-app notification for the applicant — they shouldn't be in
+        // the dark about why the app is parked.
+        try {
+          await emailService.createNotification({
+            userId: ctx.user.id,
+            applicationId: input.id,
+            type: "general",
+            title: "Application queued — awaiting committee",
+            message: `Your application "${(app.researchTitle || "Untitled").slice(0, 80)}" has been submitted successfully. The platform currently has ${activeMembers.length} active reviewer${activeMembers.length === 1 ? "" : "s"}; ${needed} more are needed before review begins. The admin team has been alerted; you'll be notified the moment your reviewers are assigned.`,
+          });
+        } catch { /* best-effort */ }
+        // Wake the platform owner so they can invite reviewers.
+        try {
+          await notifyOwner({
+            title: "IRB application queued for committee assignment",
+            content: `Application #${input.id} ("${(app.researchTitle || "Untitled").slice(0, 80)}") was submitted with only ${activeMembers.length}/5 active committee members. Invite ${needed} more reviewer${needed === 1 ? "" : "s"} from the admin dashboard to start the review.`,
           });
         } catch { /* best-effort */ }
       }
@@ -1348,25 +1367,88 @@ const adminRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const existing = await db.getCommitteeMemberByUserId(input.userId);
+      let memberId: number;
       if (existing) {
         if (!existing.isActive) {
           await db.updateCommitteeMember(existing.id, { isActive: true });
-          return { id: existing.id };
+          memberId = existing.id;
+        } else {
+          throw new TRPCError({ code: "CONFLICT", message: "User is already a committee member" });
         }
-        throw new TRPCError({ code: "CONFLICT", message: "User is already a committee member" });
+      } else {
+        memberId = await db.addCommitteeMember({
+          userId: input.userId,
+          specialization: input.specialization || null,
+          title: input.title || null,
+          institution: input.institution || null,
+        });
       }
-      const id = await db.addCommitteeMember({
-        userId: input.userId,
-        specialization: input.specialization || null,
-        title: input.title || null,
-        institution: input.institution || null,
-      });
       await db.addAuditLog({
         userId: ctx.user.id,
         action: "committee_member_added",
-        details: `User #${input.userId} added as committee member`,
+        details: `User #${input.userId} added as committee member (id #${memberId})`,
       });
-      return { id };
+
+      // Auto-reassign queued (pending_admin) applications now that we
+      // have a fresh reviewer in the pool. Each queued app gets up to
+      // 5 unique reviewers, capped at how many active members exist.
+      // Best-effort: a failure here doesn't block the membership add.
+      try {
+        const queued = await db.getApplicationsByStatus("pending_admin");
+        if (queued.length > 0) {
+          const activeMembers = await db.getActiveCommitteeMembers();
+          let promoted = 0;
+          for (const app of queued) {
+            const existingAssignments = await db.getReviewsByApplication(app.id);
+            const assignedIds = new Set(existingAssignments.map(r => r.committeeMemberId));
+            const available = activeMembers.filter(m => !assignedIds.has(m.id));
+            const need = 5 - existingAssignments.length;
+            if (need <= 0 || available.length === 0) continue;
+            const shuffled = [...available].sort(() => Math.random() - 0.5);
+            const pick = shuffled.slice(0, Math.min(need, shuffled.length));
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            for (const m of pick) {
+              await db.createReviewAssignment({
+                applicationId: app.id,
+                committeeMemberId: m.id,
+                assignedBy: "system",
+                status: "pending",
+                expiresAt,
+              });
+              await db.updateCommitteeMember(m.id, { totalAssignments: m.totalAssignments + 1 });
+              try {
+                await emailService.notifyCommitteeAssigned(m.id, app.id, app.researchTitle || "Untitled");
+              } catch { /* best-effort */ }
+            }
+            // Promote to under_review only if we now have the full 5.
+            const totalAfter = existingAssignments.length + pick.length;
+            if (totalAfter >= 5) {
+              await db.updateApplication(app.id, { status: "under_review" });
+              promoted++;
+              try {
+                await emailService.createNotification({
+                  userId: app.applicantId,
+                  applicationId: app.id,
+                  type: "committee_assigned",
+                  title: "Reviewers assigned — committee review begins",
+                  message: `Your application "${(app.researchTitle || "Untitled").slice(0, 80)}" now has 5 committee reviewers and has entered active review.`,
+                });
+              } catch { /* best-effort */ }
+            }
+          }
+          if (promoted > 0) {
+            await db.addAuditLog({
+              userId: ctx.user.id,
+              action: "auto_reassigned_queued_applications",
+              details: `New committee member triggered reassignment: ${promoted} application(s) promoted from pending_admin to under_review.`,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("[addCommitteeMember] auto-reassign failed:", err);
+      }
+
+      return { id: memberId };
     }),
 
   removeCommitteeMember: adminProcedure

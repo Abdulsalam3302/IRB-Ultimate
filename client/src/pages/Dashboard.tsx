@@ -321,6 +321,18 @@ export default function Dashboard() {
                               <Badge variant="outline" className="text-xs">{isAr ? `المحاولة #${app.submissionCount}` : `Attempt #${app.submissionCount}`}</Badge>
                             )}
                           </div>
+                          {/* Distinguish "queued for committee" vs the
+                              "final admin decision" meaning of pending_admin
+                              by checking whether the app has been approved
+                              yet. submittedAt + no approvedAt + pending_admin
+                              ⇒ awaiting committee assignment. */}
+                          {app.status === "pending_admin" && app.submittedAt && !app.approvedAt && (
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1.5 leading-relaxed">
+                              {isAr
+                                ? "ملاحظة: تم تقديم طلبك بنجاح. ينتظر تعيين لجنة المراجعة من قبل الإدارة. ستتلقى إشعارًا فور بدء المراجعة."
+                                : "Submitted successfully — awaiting committee assignment by the admin team. You'll be notified the moment your reviewers are assigned."}
+                            </p>
+                          )}
                         </div>
                         <div className="shrink-0">{getActionButton(app)}</div>
                       </div>

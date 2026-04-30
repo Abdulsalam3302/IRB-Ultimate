@@ -29,6 +29,26 @@ export default function Profile() {
     { enabled: isAuthenticated }
   );
 
+  // Hooks MUST run unconditionally on every render — otherwise the
+  // hook order shifts between loading/loaded/unauth, which React flags
+  // as "change in the order of Hooks called". Compute everything via
+  // useMemo before any conditional return, then early-return below.
+  const { apps, approvedApps, pendingApps, rejectedApps, stats } = useMemo(() => {
+    const apps = applications || [];
+    const approvedApps = apps.filter((a: any) => a.status === "approved");
+    const pendingApps = apps.filter((a: any) => !["approved", "rejected", "permanently_rejected", "retracted", "hidden", "draft"].includes(a.status));
+    const rejectedApps = apps.filter((a: any) => ["rejected", "permanently_rejected"].includes(a.status));
+    const counted = apps.filter((a: any) => a.status !== "draft").length;
+    const stats = {
+      total: apps.length,
+      approved: approvedApps.length,
+      pending: pendingApps.length,
+      rejected: rejectedApps.length,
+      approvalRate: counted > 0 ? Math.round((approvedApps.length / counted) * 100) : 0,
+    };
+    return { apps, approvedApps, pendingApps, rejectedApps, stats };
+  }, [applications]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -53,21 +73,6 @@ export default function Profile() {
       </div>
     );
   }
-
-  const apps = applications || [];
-  const approvedApps = apps.filter((a: any) => a.status === "approved");
-  const pendingApps = apps.filter((a: any) => !["approved", "rejected", "permanently_rejected", "retracted", "hidden", "draft"].includes(a.status));
-  const rejectedApps = apps.filter((a: any) => ["rejected", "permanently_rejected"].includes(a.status));
-
-  const stats = useMemo(() => ({
-    total: apps.length,
-    approved: approvedApps.length,
-    pending: pendingApps.length,
-    rejected: rejectedApps.length,
-    approvalRate: apps.filter((a: any) => a.status !== "draft").length > 0
-      ? Math.round((approvedApps.length / apps.filter((a: any) => a.status !== "draft").length) * 100)
-      : 0,
-  }), [apps, approvedApps, pendingApps, rejectedApps]);
 
   return (
     <div className="min-h-screen bg-background">

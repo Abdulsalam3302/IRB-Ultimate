@@ -52,6 +52,26 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+// Optional Umami analytics — only injected when both env vars are set.
+// Previously the script tag was hardcoded in index.html with literal
+// %VITE_ANALYTICS_ENDPOINT% placeholders, which made every page request
+// /%VITE_ANALYTICS_ENDPOINT%/umami → 500.
+const ANALYTICS_ENDPOINT = import.meta.env.VITE_ANALYTICS_ENDPOINT;
+const ANALYTICS_WEBSITE_ID = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
+if (
+  typeof window !== "undefined" &&
+  typeof ANALYTICS_ENDPOINT === "string" &&
+  ANALYTICS_ENDPOINT.length > 0 &&
+  typeof ANALYTICS_WEBSITE_ID === "string" &&
+  ANALYTICS_WEBSITE_ID.length > 0
+) {
+  const s = document.createElement("script");
+  s.defer = true;
+  s.src = `${ANALYTICS_ENDPOINT}/umami`;
+  s.setAttribute("data-website-id", ANALYTICS_WEBSITE_ID);
+  document.head.appendChild(s);
+}
+
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>

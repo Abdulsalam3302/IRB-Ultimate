@@ -47,7 +47,14 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             {toggleTheme && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 transition-apple" onClick={toggleTheme} title={theme === "dark" ? "Light Mode" : "Dark Mode"}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 transition-apple"
+                onClick={toggleTheme}
+                title={theme === "dark" ? "Light Mode" : "Dark Mode"}
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              >
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
             )}

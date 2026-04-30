@@ -76,10 +76,9 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script
-      defer
-      src="%VITE_ANALYTICS_ENDPOINT%/umami"
-      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+    <!-- Analytics is injected at runtime from main.tsx so unset env vars
+         don't leave a literal "%VITE_ANALYTICS_ENDPOINT%" URL that
+         every page would 500 on. -->
   </body>
 
 </html>

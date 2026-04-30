@@ -74,11 +74,20 @@ function securityHeaders(_req: Request, res: Response, next: NextFunction) {
 
 function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) {
   console.error("[Server error]", err);
+  // Forward to Sentry if configured (no-op otherwise).
+  // Lazy require so a circular import can't break the security module.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const obs = require("./observability");
+    obs.captureException(err, {
+      request: { method: req.method, url: req.originalUrl, headers: { "user-agent": req.headers["user-agent"] } },
+    });
+  } catch { /* observability optional */ }
   if (res.headersSent) return;
   const message =
     ENV.isProduction || !(err instanceof Error)

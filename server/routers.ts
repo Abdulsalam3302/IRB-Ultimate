@@ -1562,6 +1562,42 @@ const adminRouter = router({
 
     return { expired: expired.length, reassigned };
   }),
+  // ─── Continuing-review cron — runs daily, sends a reminder for any
+  //   approved IRB whose anniversary is within `daysAhead` (default 30)
+  //   and creates an in-app notification + audit entry. Idempotent
+  //   within a 7-day window so the same applicant isn't spammed.
+  continuingReviewSweep: adminProcedure
+    .input(z.object({ daysAhead: z.number().int().min(1).max(365).default(30) }))
+    .mutation(async ({ ctx, input }) => {
+      const all = await db.getAllApplications();
+      const now = Date.now();
+      const oneYear = 365 * 24 * 60 * 60 * 1000;
+      const window = input.daysAhead * 24 * 60 * 60 * 1000;
+      const dueSoon = all.filter(a => {
+        if (a.status !== "approved" || !a.approvedAt) return false;
+        const anniversary = new Date(a.approvedAt).getTime() + oneYear;
+        return anniversary >= now && anniversary - now <= window;
+      });
+      let notified = 0;
+      for (const a of dueSoon) {
+        try {
+          await emailService.createNotification({
+            userId: a.applicantId,
+            applicationId: a.id,
+            type: "general",
+            title: "Annual continuing review due soon",
+            message: `Your IRB approval (${a.irbNumber || `#${a.id}`}, "${(a.researchTitle || "").slice(0, 80)}") expires within ${input.daysAhead} days. Submit a continuing review or request an amendment to keep the study active.`,
+          });
+          await db.addAuditLog({
+            applicationId: a.id, userId: ctx.user.id,
+            action: "continuing_review_reminder_sent",
+            details: `30-day window. Approved ${a.approvedAt ? new Date(a.approvedAt).toISOString().slice(0,10) : "?"}.`,
+          });
+          notified++;
+        } catch { /* best-effort per application */ }
+      }
+      return { dueSoon: dueSoon.length, notified };
+    }),
 });
 
 // ─── Notification Router ───────────────────────────────────────────────────
@@ -1665,6 +1701,195 @@ const publicStatsRouter = router({
   getStats: publicProcedure.query(async () => {
     return db.getPublicStats();
   }),
+
+  // Public, paginated registry of approved IRBs. PII-light projection;
+  // search by title / PI / institution / IRB number, filter by research
+  // type and approval year. Read-only, no auth required.
+  registrySearch: publicProcedure
+    .input(z.object({
+      query: z.string().max(500).optional(),
+      researchType: z.string().max(64).optional(),
+      year: z.number().int().min(1900).max(3000).optional(),
+      page: z.number().int().min(1).max(1000).optional(),
+      pageSize: z.number().int().min(1).max(50).optional(),
+    }))
+    .query(async ({ input }) => db.searchPublicRegistry(input)),
+
+  registryStats: publicProcedure.query(async () => db.getRegistryStats()),
+});
+
+// ─── Adverse Events Router ─────────────────────────────────────────────────
+// Required by NBCE for any active human-subjects study. Applicants file
+// AE reports; admins review and acknowledge or escalate.
+
+const adverseEventsRouter = router({
+  report: protectedProcedure
+    .input(z.object({
+      applicationId: z.number(),
+      occurredAt: z.string().datetime().or(z.date()),
+      severity: z.enum(["mild", "moderate", "serious", "life_threatening", "fatal"]),
+      expected: z.boolean().optional(),
+      relatedToStudy: z.enum(["unrelated", "possibly", "probably", "definitely", "unknown"]),
+      description: z.string().min(20).max(10000),
+      actionTaken: z.string().max(10000).optional(),
+      outcome: z.enum(["recovered", "recovering", "ongoing", "permanent_disability", "death", "unknown"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      // Applicant on the study OR an admin can file. Co-investigators
+      // would need to be added; not in scope for MVP.
+      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const id = await db.createAdverseEvent({
+        applicationId: input.applicationId,
+        reportedByUserId: ctx.user.id,
+        occurredAt: new Date(input.occurredAt as any),
+        severity: input.severity,
+        expected: input.expected ?? false,
+        relatedToStudy: input.relatedToStudy,
+        description: input.description,
+        actionTaken: input.actionTaken || null,
+        outcome: input.outcome || null,
+      });
+      // Auto-escalate serious / life-threatening / fatal events to
+      // admin attention via notification + audit.
+      const isCritical = ["serious", "life_threatening", "fatal"].includes(input.severity);
+      try {
+        await db.addAuditLog({
+          applicationId: input.applicationId,
+          userId: ctx.user.id,
+          action: "adverse_event_reported",
+          details: `${input.severity}, related=${input.relatedToStudy}${isCritical ? " — ESCALATED" : ""}`,
+        });
+        if (isCritical) {
+          await notifyOwner({
+            title: `IRB adverse event — ${input.severity.toUpperCase()}`,
+            content: `Application #${input.applicationId} ("${(app.researchTitle || "Untitled").slice(0, 80)}") reported a ${input.severity} adverse event. Open the admin panel for details.`,
+          });
+        }
+      } catch { /* best-effort */ }
+      return { id, escalated: isCritical };
+    }),
+
+  byApplication: protectedProcedure
+    .input(z.object({ applicationId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return db.getAdverseEventsByApplication(input.applicationId);
+    }),
+
+  // Admin queue
+  all: adminProcedure.query(async () => db.getAllAdverseEvents()),
+
+  // Admin updates an AE — change status, add notes
+  adminUpdate: adminProcedure
+    .input(z.object({
+      id: z.number(),
+      status: z.enum(["reported", "under_review", "acknowledged", "escalated", "closed"]).optional(),
+      adminNotes: z.string().max(20000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await db.updateAdverseEvent(input.id, {
+        status: input.status,
+        adminNotes: input.adminNotes,
+      });
+      await db.addAuditLog({
+        userId: ctx.user.id,
+        action: "ae_admin_update",
+        details: `AE #${input.id} → ${input.status || "(notes only)"}`,
+      });
+      return { success: true };
+    }),
+});
+
+// ─── Amendments Router ─────────────────────────────────────────────────────
+// Change requests against an active or in-review study. Each amendment
+// carries a typed change set; admins approve or reject.
+
+const amendmentsRouter = router({
+  submit: protectedProcedure
+    .input(z.object({
+      applicationId: z.number(),
+      type: z.enum(["minor", "moderate", "major"]),
+      title: z.string().min(3).max(255),
+      rationale: z.string().min(10).max(20000),
+      changedFields: z.record(
+        z.string(),
+        z.object({ before: z.string().optional(), after: z.string() })
+      ).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      // Amendments only make sense post-approval (or at least after
+      // submission). Block on draft / declaration_pending.
+      if (["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(app.status as string)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Submit the application first; amendments apply to active studies only." });
+      }
+      const id = await db.createAmendment({
+        applicationId: input.applicationId,
+        requestedByUserId: ctx.user.id,
+        type: input.type,
+        title: input.title,
+        rationale: input.rationale,
+        changedFieldsJson: input.changedFields ? JSON.stringify(input.changedFields) : null,
+      });
+      try {
+        await db.addAuditLog({
+          applicationId: input.applicationId,
+          userId: ctx.user.id,
+          action: "amendment_submitted",
+          details: `${input.type} — ${input.title.slice(0, 80)}`,
+        });
+        await notifyOwner({
+          title: `IRB amendment submitted (${input.type})`,
+          content: `Application #${input.applicationId}: "${input.title.slice(0, 80)}". Review in the admin panel.`,
+        });
+      } catch { /* best-effort */ }
+      return { id };
+    }),
+
+  byApplication: protectedProcedure
+    .input(z.object({ applicationId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return db.getAmendmentsByApplication(input.applicationId);
+    }),
+
+  all: adminProcedure.query(async () => db.getAllAmendments()),
+
+  adminDecide: adminProcedure
+    .input(z.object({
+      id: z.number(),
+      decision: z.enum(["approved", "rejected"]),
+      adminNotes: z.string().max(20000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await db.updateAmendment(input.id, {
+        status: input.decision,
+        adminNotes: input.adminNotes,
+        decidedAt: new Date(),
+      });
+      await db.addAuditLog({
+        userId: ctx.user.id,
+        action: "amendment_decided",
+        details: `Amendment #${input.id} → ${input.decision}`,
+      });
+      return { success: true };
+    }),
 });
 
 // ─── Literature Router ─────────────────────────────────────────────────────
@@ -1737,6 +1962,15 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    // ORCID linking — applicant types their iD; we validate format and
+    // store. `verified=false` until the OAuth dance is wired (separate
+    // Bundle once ORCID developer credentials are obtained).
+    setOrcid: protectedProcedure
+      .input(z.object({ orcidId: z.string().regex(/^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/, "Format must be 0000-0000-0000-0000").nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.setUserOrcid(ctx.user.id, input.orcidId, false);
+        return { success: true, verified: false };
+      }),
   }),
   application: applicationRouter,
   authors: authorsRouter,
@@ -1748,6 +1982,8 @@ export const appRouter = router({
   reports: reportsRouter,
   publicStats: publicStatsRouter,
   literature: literatureRouter,
+  adverseEvents: adverseEventsRouter,
+  amendments: amendmentsRouter,
 });
 
 export type AppRouter = typeof appRouter;

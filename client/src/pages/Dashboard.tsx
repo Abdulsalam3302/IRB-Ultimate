@@ -1,7 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
@@ -35,6 +37,31 @@ export default function Dashboard() {
       setLocation(`/apply/${data.id}/declaration`);
     },
   });
+
+  // Search + status filter — live, client-side. Cheap because the
+  // applicant rarely has more than ~50 applications. Filter chips
+  // below let users narrow by lifecycle bucket without scanning.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterBucket, setFilterBucket] = useState<"all" | "active" | "approved" | "drafts" | "rejected">("all");
+
+  const filteredApplications = useMemo(() => {
+    if (!applications) return [];
+    const q = searchQuery.trim().toLowerCase();
+    return applications.filter(a => {
+      // bucket filter
+      if (filterBucket === "active" && !["under_review", "pending_admin", "submitted"].includes(a.status)) return false;
+      if (filterBucket === "approved" && a.status !== "approved") return false;
+      if (filterBucket === "drafts" && !["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(a.status)) return false;
+      if (filterBucket === "rejected" && !["rejected", "permanently_rejected", "retracted", "hidden"].includes(a.status)) return false;
+      // search
+      if (!q) return true;
+      const haystack = [
+        a.researchTitle, a.principalInvestigator, a.piInstitution, a.piDepartment,
+        a.irbNumber, a.researchType, String(a.id),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [applications, searchQuery, filterBucket]);
 
   if (loading) {
     return (
@@ -267,12 +294,65 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Search + filter chips — only when the user has any apps */}
+        {applications && applications.length > 0 && (
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={isAr ? "ابحث بالعنوان، المحقق، IRB#..." : "Search by title, PI, IRB number, institution..."}
+                className="ps-9"
+                aria-label={isAr ? "البحث في الطلبات" : "Search applications"}
+              />
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {[
+                { key: "all", label: isAr ? "الكل" : "All", count: applications.length },
+                { key: "active", label: isAr ? "نشطة" : "In review", count: applications.filter(a => ["under_review","pending_admin","submitted"].includes(a.status)).length },
+                { key: "approved", label: isAr ? "معتمدة" : "Approved", count: applications.filter(a => a.status === "approved").length },
+                { key: "drafts", label: isAr ? "مسودات" : "Drafts", count: applications.filter(a => ["draft","declaration_pending","stage1_pending","stage1_failed","stage2_pending","stage2_failed"].includes(a.status)).length },
+                { key: "rejected", label: isAr ? "مرفوضة" : "Rejected", count: applications.filter(a => ["rejected","permanently_rejected","retracted","hidden"].includes(a.status)).length },
+              ].map(b => (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => setFilterBucket(b.key as any)}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    filterBucket === b.key
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background hover:bg-muted border-border text-muted-foreground"
+                  }`}
+                >
+                  {b.label}
+                  <span className="ms-1 opacity-60">{b.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Applications List */}
         {appsLoading ? (
           <div className="grid gap-4">
             {[1, 2, 3].map(i => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="py-6"><div className="h-20 bg-muted rounded" /></CardContent>
+              <Card key={i} className="overflow-hidden">
+                <CardContent className="py-5">
+                  <div className="flex items-start gap-4 animate-pulse">
+                    <div className="mt-1 shrink-0 h-5 w-5 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-3/4 bg-muted rounded" />
+                      <div className="flex gap-2">
+                        <div className="h-3 w-16 bg-muted rounded" />
+                        <div className="h-3 w-24 bg-muted rounded" />
+                        <div className="h-3 w-20 bg-muted rounded" />
+                      </div>
+                      <div className="h-2 w-full bg-muted/60 rounded mt-3" />
+                    </div>
+                    <div className="h-8 w-24 bg-muted rounded shrink-0" />
+                  </div>
+                </CardContent>
               </Card>
             ))}
           </div>
@@ -287,9 +367,24 @@ export default function Dashboard() {
               </Button>
             </CardContent>
           </Card>
+        ) : filteredApplications.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Search className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <h3 className="font-semibold mb-1">{isAr ? "لا نتائج مطابقة" : "No matches"}</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {searchQuery
+                  ? (isAr ? `لا توجد طلبات مطابقة لـ "${searchQuery}".` : `No applications match "${searchQuery}".`)
+                  : (isAr ? "لا توجد طلبات في هذه الفئة." : "No applications in this filter.")}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => { setSearchQuery(""); setFilterBucket("all"); }}>
+                {isAr ? "مسح الفلتر" : "Clear filters"}
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
           <div className="grid gap-4">
-            {applications.map((app) => (
+            {filteredApplications.map((app) => (
               <Card key={app.id} className="hover:shadow-md transition-shadow group">
                 <CardContent className="py-5">
                   <div className="flex items-start gap-4">

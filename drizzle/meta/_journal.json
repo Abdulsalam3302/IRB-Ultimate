@@ -64,6 +64,20 @@
       "when": 1777800000000,
       "tag": "0008_hot_query_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1778000000000,
+      "tag": "0009_adverse_events_amendments",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1778100000000,
+      "tag": "0010_orcid_columns",
+      "breakpoints": true
     }
   ]
 }

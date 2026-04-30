@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: rootpw
+          MYSQL_DATABASE: irb_platform
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -prootpw"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for MySQL
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpw --silent 2>/dev/null; then
+              echo "MySQL ready"; break
+            fi
+            sleep 2
+          done
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+        run: pnpm db:push
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Tests
+        env:
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+          JWT_SECRET: ci-test-secret-not-for-production-use
+          VITE_APP_ID: ci
+          OWNER_OPEN_ID: dev-owner-001
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Bundle-size budget
+        # First-paint chunk should stay small. Fail the build if the
+        # initial entry chunk exceeds 80KB raw or vendor-react-dom > 600KB.
+        run: |
+          ENTRY_BYTES=$(stat -c%s dist/public/assets/index-*.js | head -1)
+          REACT_BYTES=$(stat -c%s dist/public/assets/vendor-react-dom-*.js | head -1)
+          echo "entry=${ENTRY_BYTES}b  react-dom=${REACT_BYTES}b"
+          if [ "$ENTRY_BYTES" -gt 81920 ]; then
+            echo "::error::Initial entry chunk exceeded 80KB budget"
+            exit 1
+          fi
+          if [ "$REACT_BYTES" -gt 614400 ]; then
+            echo "::error::vendor-react-dom exceeded 600KB budget"
+            exit 1
+          fi
+
+  e2e:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: rootpw
+          MYSQL_DATABASE: irb_platform
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -prootpw"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Wait for MySQL & migrate
+        env:
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpw --silent 2>/dev/null && break
+            sleep 2
+          done
+          pnpm db:push
+
+      - name: Boot dev server
+        env:
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+          JWT_SECRET: ci-test-secret-not-for-production-use
+          VITE_APP_ID: ci
+          OWNER_OPEN_ID: dev-owner-001
+        run: |
+          pnpm dev > /tmp/dev.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://localhost:3000/api/health >/dev/null 2>&1 && break
+            sleep 2
+          done
+
+      - name: E2E sweep
+        env:
+          PORT: "3000"
+        run: node scripts/e2e-sweep.mjs
+
+      - name: Deep sweep
+        env:
+          PORT: "3000"
+        run: node scripts/e2e-deep.mjs
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: /tmp/irb-e2e
+          retention-days: 7

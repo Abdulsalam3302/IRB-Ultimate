@@ -7,6 +7,11 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // ORCID iD — optional; pre-fills PI fields on Stage 1 once linked.
+  // 19-char "0000-0000-0000-0000" format. We don't run the OAuth dance
+  // ourselves yet; the column lets the UI store / display once we do.
+  orcidId: varchar("orcidId", { length: 19 }),
+  orcidVerified: boolean("orcidVerified").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -292,3 +297,54 @@ export const applicationVersions = mysqlTable("application_versions", {
 
 export type ApplicationVersion = typeof applicationVersions.$inferSelect;
 export type InsertApplicationVersion = typeof applicationVersions.$inferInsert;
+
+// ─── Adverse events — required by NBCE for any active human-subjects
+//     study. Applicants file as soon as a serious AE occurs; admin
+//     reviews and either acknowledges or escalates.
+export const adverseEvents = mysqlTable("adverse_events", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("applicationId").notNull(),
+  reportedByUserId: int("reportedByUserId").notNull(),
+  occurredAt: timestamp("occurredAt").notNull(),
+  severity: mysqlEnum("severity", ["mild", "moderate", "serious", "life_threatening", "fatal"]).notNull(),
+  expected: boolean("expected").default(false).notNull(),
+  relatedToStudy: mysqlEnum("relatedToStudy", ["unrelated", "possibly", "probably", "definitely", "unknown"]).notNull(),
+  description: text("description").notNull(),
+  actionTaken: text("actionTaken"),
+  outcome: mysqlEnum("outcome", ["recovered", "recovering", "ongoing", "permanent_disability", "death", "unknown"]),
+  status: mysqlEnum("aeStatus", ["reported", "under_review", "acknowledged", "escalated", "closed"]).default("reported").notNull(),
+  adminNotes: text("adminNotes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AdverseEvent = typeof adverseEvents.$inferSelect;
+export type InsertAdverseEvent = typeof adverseEvents.$inferInsert;
+
+// ─── Protocol amendments — change requests against an approved or
+//     in-review study (site additions, sample-size bumps, eligibility
+//     tweaks). Each amendment carries its own diff against the parent
+//     application; admin approves or rejects.
+export const amendments = mysqlTable("amendments", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("applicationId").notNull(),
+  requestedByUserId: int("requestedByUserId").notNull(),
+  type: mysqlEnum("amendmentType", [
+    "minor",          // typos, clarifications, contact updates
+    "moderate",       // sample size, timeline, additional sites
+    "major",          // new arm, new procedure, new population
+  ]).default("minor").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  rationale: text("rationale").notNull(),
+  changedFieldsJson: text("changedFieldsJson"), // {field: {before, after}}
+  status: mysqlEnum("amStatus", [
+    "submitted", "under_review", "approved", "rejected",
+  ]).default("submitted").notNull(),
+  adminNotes: text("adminNotes"),
+  decidedAt: timestamp("decidedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Amendment = typeof amendments.$inferSelect;
+export type InsertAmendment = typeof amendments.$inferInsert;

@@ -10,6 +10,8 @@ import {
   supportTickets, InsertSupportTicket,
   fileUploads, InsertFileUpload,
   applicationVersions, InsertApplicationVersion,
+  adverseEvents, InsertAdverseEvent,
+  amendments, InsertAmendment,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -513,4 +515,179 @@ export async function getPublicStats() {
     researchTypes: (researchTypes as any)[0] || [],
     monthlyTrends: (monthlyTrends as any)[0] || [],
   };
+}
+
+// ─── Public Registry helpers ─────────────────────────────────────────────
+//
+// Approved IRBs are public information. Hidden / retracted apps are
+// excluded from the registry entirely (the verify route handles those
+// separately). PII-light projection only — no email, no internal IDs.
+
+export interface RegistrySearchInput {
+  query?: string;
+  researchType?: string;
+  year?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function searchPublicRegistry(input: RegistrySearchInput) {
+  const dbi = await getDb();
+  if (!dbi) return { items: [], total: 0, page: 1, pageSize: 20 };
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.min(50, Math.max(1, input.pageSize ?? 20));
+  const offset = (page - 1) * pageSize;
+
+  const conds: any[] = [eq(applications.status, "approved")];
+  if (input.researchType) {
+    conds.push(eq(applications.researchType, input.researchType as any));
+  }
+  if (input.year && Number.isFinite(input.year)) {
+    conds.push(sql`YEAR(${applications.approvedAt}) = ${input.year}`);
+  }
+  if (input.query && input.query.trim().length >= 2) {
+    const q = `%${input.query.trim()}%`;
+    conds.push(
+      or(
+        sql`${applications.researchTitle} LIKE ${q}`,
+        sql`${applications.principalInvestigator} LIKE ${q}`,
+        sql`${applications.piInstitution} LIKE ${q}`,
+        sql`${applications.irbNumber} LIKE ${q}`
+      )!
+    );
+  }
+  const whereClause = and(...conds);
+
+  const totalRow = await dbi.select({ cnt: count() }).from(applications).where(whereClause);
+  const rows = await dbi
+    .select({
+      id: applications.id,
+      irbNumber: applications.irbNumber,
+      researchTitle: applications.researchTitle,
+      principalInvestigator: applications.principalInvestigator,
+      piInstitution: applications.piInstitution,
+      piDepartment: applications.piDepartment,
+      researchType: applications.researchType,
+      irbCategory: applications.irbCategory,
+      approvedAt: applications.approvedAt,
+      certificateUrl: applications.certificateUrl,
+    })
+    .from(applications)
+    .where(whereClause)
+    .orderBy(desc(applications.approvedAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  return {
+    items: rows,
+    total: totalRow[0]?.cnt ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+/** Lightweight aggregate counts used to populate the registry page header. */
+export async function getRegistryStats() {
+  const dbi = await getDb();
+  if (!dbi) return { byType: [], byYear: [], byInstitution: [] };
+  const byType = await dbi.execute(sql`
+    SELECT COALESCE(researchType, 'other') AS type, COUNT(*) AS count
+    FROM applications WHERE status='approved'
+    GROUP BY researchType ORDER BY count DESC
+  `);
+  const byYear = await dbi.execute(sql`
+    SELECT YEAR(approvedAt) AS year, COUNT(*) AS count
+    FROM applications WHERE status='approved' AND approvedAt IS NOT NULL
+    GROUP BY YEAR(approvedAt) ORDER BY year DESC
+  `);
+  const byInstitution = await dbi.execute(sql`
+    SELECT piInstitution AS institution, COUNT(*) AS count
+    FROM applications WHERE status='approved' AND piInstitution IS NOT NULL
+    GROUP BY piInstitution ORDER BY count DESC LIMIT 10
+  `);
+  return {
+    byType: (byType as any)[0] || [],
+    byYear: (byYear as any)[0] || [],
+    byInstitution: (byInstitution as any)[0] || [],
+  };
+}
+
+// ─── Adverse Events ──────────────────────────────────────────────────────
+
+export async function createAdverseEvent(data: InsertAdverseEvent) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const r = await dbi.insert(adverseEvents).values(data);
+  return r[0].insertId;
+}
+
+export async function getAdverseEventsByApplication(applicationId: number) {
+  const dbi = await getDb();
+  if (!dbi) return [];
+  return dbi.select().from(adverseEvents)
+    .where(eq(adverseEvents.applicationId, applicationId))
+    .orderBy(desc(adverseEvents.occurredAt));
+}
+
+export async function getAllAdverseEvents() {
+  const dbi = await getDb();
+  if (!dbi) return [];
+  return dbi.select().from(adverseEvents).orderBy(desc(adverseEvents.createdAt)).limit(500);
+}
+
+export async function updateAdverseEvent(id: number, data: Partial<InsertAdverseEvent>) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  await dbi.update(adverseEvents).set(data).where(eq(adverseEvents.id, id));
+}
+
+// ─── Amendments ──────────────────────────────────────────────────────────
+
+export async function createAmendment(data: InsertAmendment) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const r = await dbi.insert(amendments).values(data);
+  return r[0].insertId;
+}
+
+export async function getAmendmentsByApplication(applicationId: number) {
+  const dbi = await getDb();
+  if (!dbi) return [];
+  return dbi.select().from(amendments)
+    .where(eq(amendments.applicationId, applicationId))
+    .orderBy(desc(amendments.createdAt));
+}
+
+export async function getAllAmendments() {
+  const dbi = await getDb();
+  if (!dbi) return [];
+  return dbi.select().from(amendments).orderBy(desc(amendments.createdAt)).limit(500);
+}
+
+export async function updateAmendment(id: number, data: Partial<InsertAmendment>) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  await dbi.update(amendments).set(data).where(eq(amendments.id, id));
+}
+
+// ─── ORCID linking ───────────────────────────────────────────────────────
+//
+// Stub: OAuth dance is gated on registering with ORCID's developer
+// programme. For now we accept a manually-typed ORCID iD and validate
+// the 0000-0000-0000-0000 format. Once OAuth is wired, set verified=true
+// only after the OAuth round-trip succeeds.
+
+const ORCID_FMT = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
+
+export function isValidOrcidId(s: string): boolean {
+  return ORCID_FMT.test(s);
+}
+
+export async function setUserOrcid(userId: number, orcidId: string | null, verified = false) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  if (orcidId && !isValidOrcidId(orcidId)) {
+    throw new Error("Invalid ORCID iD format (expected 0000-0000-0000-0000)");
+  }
+  await dbi.update(users).set({ orcidId, orcidVerified: verified }).where(eq(users.id, userId));
 }

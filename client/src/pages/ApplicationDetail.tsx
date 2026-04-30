@@ -15,9 +15,15 @@ export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
   const appId = parseInt(id || "0");
   const [, setLocation] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { lang } = useT();
   const isAr = lang === "ar";
+  // Smart back target — admins came from /admin, regular users from /dashboard.
+  // Reviewers landing here came from /reviews. Pick by role.
+  const backTo = user?.role === "admin" ? "/admin" : "/dashboard";
+  const backLabel = user?.role === "admin"
+    ? (isAr ? "لوحة الإدارة" : "Admin Panel")
+    : (isAr ? "لوحة التحكم" : "Dashboard");
 
   const { data: app, isLoading } = trpc.application.getById.useQuery(
     { id: appId }, { enabled: isAuthenticated && appId > 0 }
@@ -51,7 +57,7 @@ export default function ApplicationDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar showBack backTo={backTo} backLabel={backLabel} />
       <div className="container py-8 max-w-4xl mx-auto">
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -67,9 +73,19 @@ export default function ApplicationDetail() {
             <Button variant="outline" size="sm" onClick={() => setLocation(`/application/${app.id}/versions`)}>
               <History className="h-4 w-4 me-1" /> {isAr ? "سجل الإصدارات" : "Version History"}
             </Button>
-            {app.certificateUrl && (
-              <Button onClick={() => window.open(app.certificateUrl!, "_blank")}>
-                <Download className="h-4 w-4 me-2" /> {isAr ? "تحميل الشهادة" : "Download Certificate"}
+            {/* Always-fresh PDF, regenerated on demand by the server.
+                Hits /api/export/certificate/:id which renders via headless
+                Chromium against the redesigned formal certificate template.
+                Available for any approved app — even if certificateUrl
+                wasn't persisted at approval time. */}
+            {app.status === "approved" && (
+              <Button onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank")}>
+                <Download className="h-4 w-4 me-2" /> {isAr ? "تحميل الشهادة (PDF)" : "Download Certificate (PDF)"}
+              </Button>
+            )}
+            {app.certificateUrl && app.status !== "approved" && (
+              <Button variant="outline" onClick={() => window.open(app.certificateUrl!, "_blank")}>
+                <Download className="h-4 w-4 me-2" /> {isAr ? "الشهادة (نسخة قديمة)" : "Certificate (legacy)"}
               </Button>
             )}
           </div>

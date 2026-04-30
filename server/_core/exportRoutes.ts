@@ -5,6 +5,7 @@ import {
   renderApplicationHtml,
   buildInspectorZip,
 } from "../applicationExport";
+import { renderCertificatePdf, renderCertificateHtml } from "../certificateV2";
 
 /**
  * Streamed export endpoints. Two formats:
@@ -128,6 +129,58 @@ export function registerExportRoutes(app: Express) {
     } catch (err) {
       console.error("[Export ZIP] failed:", err);
       if (!res.headersSent) res.status(500).type("text/plain").send("export failed");
+    }
+  });
+
+  // ─── Certificate download — formal PDF, regenerated on-demand
+  // Public when the application is `approved` (anyone with the IRB number
+  // can download the certificate, mirroring the verify-page behaviour).
+  // Authenticated when not yet approved (preview for owner/admin only).
+  app.get("/api/export/certificate/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) {
+        res.status(400).type("text/plain").send("invalid id"); return;
+      }
+      const application = await db.getApplicationById(id);
+      if (!application) {
+        res.status(404).type("text/plain").send("not found"); return;
+      }
+      // Public access only for approved certificates. Otherwise require
+      // either the owner or an admin.
+      if (application.status !== "approved") {
+        const user = await sdk.authenticateRequest(req).catch(() => null);
+        if (!user) { res.status(401).type("text/plain").send("authentication required"); return; }
+        if (application.applicantId !== user.id && user.role !== "admin") {
+          res.status(403).type("text/plain").send("forbidden"); return;
+        }
+      }
+      const applicant = await db.getUserById(application.applicantId);
+      const wantsHtml = req.query.format === "html";
+      if (wantsHtml) {
+        const html = renderCertificateHtml({
+          app: application,
+          applicantName: applicant?.name ?? null,
+          applicantEmail: applicant?.email ?? null,
+        });
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(html);
+        return;
+      }
+      const pdf = await renderCertificatePdf({
+        app: application,
+        applicantName: applicant?.name ?? null,
+        applicantEmail: applicant?.email ?? null,
+      });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="irb-certificate-${(application.irbNumber || `app-${id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf"`
+      );
+      res.send(pdf);
+    } catch (err) {
+      console.error("[Export Cert] failed:", err);
+      if (!res.headersSent) res.status(500).type("text/plain").send("certificate generation failed");
     }
   });
 }

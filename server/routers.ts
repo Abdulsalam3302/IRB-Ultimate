@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { runStage1AiReview, runStage2AiReview, aiAutoCompleteFields, aiResolveField, aiFixAllComments, calculateSampleSize, aiEnhanceStage1Fields } from "./aiReview";
 import { generateCertificatePdf } from "./certificate";
+import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
 import { storagePut } from "./storage";
@@ -1100,9 +1101,19 @@ const adminRouter = router({
       const updatedApp = { ...app, irbNumber, approvedAt: new Date() };
       let certUrl = "";
       try {
-        certUrl = await generateCertificatePdf(updatedApp as any, applicant?.name || "", applicant?.email || "");
+        // V2: real PDF, not bundled SVG.
+        certUrl = await generateAndStoreCertificatePdf({
+          app: updatedApp as any,
+          applicantName: applicant?.name ?? null,
+          applicantEmail: applicant?.email ?? null,
+        });
       } catch (e) {
-        console.error("Certificate generation failed:", e);
+        console.error("Certificate v2 generation failed; falling back to v1:", e);
+        try {
+          certUrl = await generateCertificatePdf(updatedApp as any, applicant?.name || "", applicant?.email || "");
+        } catch (ee) {
+          console.error("Certificate fallback also failed:", ee);
+        }
       }
 
       await db.updateApplication(input.applicationId, {
@@ -1145,9 +1156,18 @@ const adminRouter = router({
         const updatedApp = { ...app, irbNumber, approvedAt: new Date() };
         let certUrl = "";
         try {
-          certUrl = await generateCertificatePdf(updatedApp as any, applicant?.name || "", applicant?.email || "");
+          certUrl = await generateAndStoreCertificatePdf({
+            app: updatedApp as any,
+            applicantName: applicant?.name ?? null,
+            applicantEmail: applicant?.email ?? null,
+          });
         } catch (e) {
-          console.error("Certificate generation failed:", e);
+          console.error("Certificate v2 generation failed; falling back to v1:", e);
+          try {
+            certUrl = await generateCertificatePdf(updatedApp as any, applicant?.name || "", applicant?.email || "");
+          } catch (ee) {
+            console.error("Certificate fallback also failed:", ee);
+          }
         }
 
         await db.updateApplication(input.applicationId, {

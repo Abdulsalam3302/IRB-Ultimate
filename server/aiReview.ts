@@ -743,7 +743,17 @@ export async function aiAutoCompleteFields(data: {
     informedConsentProcess: "Complete consent process: how consent is obtained, language level, right to withdraw, special provisions for vulnerable groups, documentation method",
     riskAssessment: "Comprehensive risk matrix: each risk identified with severity, probability, mitigation strategy, and emergency protocol",
     benefitAssessment: "Direct benefits to participants, indirect benefits to science and society, with realistic expectations",
-    confidentialityMeasures: "Data protection plan: anonymization method, encryption, access controls, storage location, retention period, destruction protocol",
+    confidentialityMeasures: `Data protection plan that meets NBCE 2024 data-handling standards. The auto-filled value MUST cover EVERY one of these elements explicitly (one short paragraph or numbered list — but every bullet must be present, do not omit any):
+       (a) De-identification or pseudonymisation method (study-specific code key, separately stored from data, access restricted to PI).
+       (b) Encryption at rest (AES-256 minimum) AND in transit (TLS 1.2+); name the platform actually used (REDCap, OpenClinica, institutional secure share, etc.).
+       (c) Access controls — role-based, named data custodian, audit log of every access.
+       (d) Physical / digital storage location and the legal jurisdiction of that storage.
+       (e) Data retention period (years), aligned with NBCE / institutional policy.
+       (f) Destruction protocol after retention expiry (cryptographic erasure for digital, certified shredding for paper).
+       (g) Breach response plan: notification to PI within 24h, to NBCE within 72h, to affected participants per regulation.
+       (h) For sensitive sub-classes (genetic, mental-health, HIV, minors): the additional layered protections that apply.
+       (i) Statement that the platform-of-record audit log is the source of truth and is tamper-evident.
+     If the research type is retrospective / chart-review and a consent waiver applies, the confidentiality plan must be STRONGER than for prospective studies (no public-access publication of identifiable rare-event combinations, etc.).`,
     conflictOfInterest: "Complete disclosure of all financial and non-financial interests, with management plan if conflicts exist",
   };
 

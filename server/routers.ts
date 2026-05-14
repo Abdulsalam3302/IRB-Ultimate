@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -13,6 +14,69 @@ import { notifyOwner } from "./_core/notification";
 import { storagePut } from "./storage";
 import * as emailService from "./emailService";
 import { searchLiterature } from "./literature";
+
+// ─── Shared access helpers ──────────────────────────────────────────────────
+// Returns the application if the caller may view it (owner, admin, or
+// committee member assigned to this specific application). Throws 404 if
+// the app is missing and 403 otherwise. Centralised so committee member
+// access cannot accidentally degrade to "any committee member sees any app".
+async function loadApplicationForViewer(ctx: { user: { id: number; role: string } }, applicationId: number) {
+  const app = await db.getApplicationById(applicationId);
+  if (!app) throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+  if (app.applicantId === ctx.user.id) return app;
+  if (ctx.user.role === "admin") return app;
+  const member = await db.getCommitteeMemberByUserId(ctx.user.id);
+  if (member) {
+    const reviews = await db.getReviewsByApplication(applicationId);
+    if (reviews.some(r => r.committeeMemberId === member.id)) return app;
+  }
+  throw new TRPCError({ code: "FORBIDDEN" });
+}
+
+// Statuses where the applicant must not be able to silently re-write
+// answers (would otherwise corrupt the submission already in the
+// reviewer / admin pipeline, or undo a terminal decision).
+const APPLICANT_EDIT_LOCKED_STATUSES = new Set([
+  "submitted",
+  "under_review",
+  "pending_admin",
+  "approved",
+  "rejected",
+  "permanently_rejected",
+  "retracted",
+  "hidden",
+]);
+
+function assertApplicantCanEdit(app: { status: string }): void {
+  if (APPLICANT_EDIT_LOCKED_STATUSES.has(app.status)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This application can no longer be edited at this stage.",
+    });
+  }
+}
+
+// File upload limits
+const UPLOAD_MAX_BYTES = 15 * 1024 * 1024; // 15 MB per file
+const UPLOAD_ALLOWED_MIME = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "text/plain",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+const FILENAME_SAFE_RE = /[^A-Za-z0-9._-]+/g;
+function sanitizeUploadFileName(input: string): string {
+  const trimmed = input.trim().slice(0, 160);
+  const sanitized = trimmed.replace(FILENAME_SAFE_RE, "_");
+  return sanitized.replace(/^_+|_+$/g, "") || "file";
+}
 
 // ─── Application Router ─────────────────────────────────────────────────────
 
@@ -34,12 +98,7 @@ const applicationRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
-      const app = await db.getApplicationById(input.id);
-      if (!app) throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
-      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
-        const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-        if (!member) throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      const app = await loadApplicationForViewer(ctx, input.id);
       const applicant = await db.getUserById(app.applicantId);
       const authors = await db.getAuthorsByApplication(input.id);
       return { ...app, applicantName: applicant?.name, applicantEmail: applicant?.email, authors };
@@ -63,12 +122,16 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       // All declarations must be true
       if (!input.declarationHonesty || !input.declarationNbceCertification || !input.declarationConsentTruth || !input.declarationAcceptPolicy) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "All declarations must be accepted to proceed" });
       }
 
+      // Don't regress the application to "declaration_pending" if it has
+      // already moved past Phase 0 — preserves the in-flight workflow.
+      const shouldRegressStatus = app.status === "draft" || app.status === "declaration_pending";
       await db.updateApplication(input.id, {
         declarationHonesty: input.declarationHonesty,
         declarationNbceCertification: input.declarationNbceCertification,
@@ -76,7 +139,7 @@ const applicationRouter = router({
         declarationAcceptPolicy: input.declarationAcceptPolicy,
         nbceCertificateUrl: input.nbceCertificateUrl || null,
         declarationCompletedAt: new Date(),
-        status: "declaration_pending",
+        ...(shouldRegressStatus ? { status: "declaration_pending" as const } : {}),
       });
 
       await db.addAuditLog({
@@ -115,6 +178,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       if (input.researchType === "survey_questionnaire" && !input.questionnaireFileUrl) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Questionnaire file is required for Survey/Questionnaire research type" });
@@ -141,7 +205,12 @@ const applicationRouter = router({
         labHeadName: input.labHeadName || null,
         labHeadEmail: input.labHeadEmail || null,
         labHeadPhone: input.labHeadPhone || null,
-        status: "stage1_pending",
+        // Only seed the status when the app is still in early stages;
+        // otherwise leave the existing status intact so we don't drop a
+        // pass back to "pending".
+        ...((app.status === "draft" || app.status === "declaration_pending" || app.status === "stage1_pending" || app.status === "stage1_failed")
+          ? { status: "stage1_pending" as const }
+          : {}),
       });
 
       return { success: true };
@@ -154,6 +223,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const result = await runStage1AiReview({
         researchType: app.researchType || "",
@@ -166,28 +236,44 @@ const applicationRouter = router({
         estimatedDuration: app.estimatedDuration || "",
       });
 
-      await db.updateApplication(input.id, {
-        stage1AiScore: result.score,
-        stage1AiFeedback: JSON.stringify({
-          feedback: result.feedback,
-          recommendations: result.recommendations,
-          fieldScores: result.fieldScores,
-          hasRedFlags: result.hasRedFlags,
-        }),
-        stage1Passed: result.passed,
-        status: result.passed ? "stage2_pending" : "stage1_failed",
-      });
+      // When the AI provider is unreachable the helper returns a sentinel
+      // score of 0 with a "[AI_UNAVAILABLE]" feedback line. We must NOT
+      // overwrite the applicant's prior valid score with that — surface
+      // the outage in-memory only and leave the DB alone.
+      const isAiUnavailable = typeof result.feedback === "string"
+        && result.feedback.startsWith("[AI_UNAVAILABLE]");
 
-      await db.addAuditLog({
-        applicationId: input.id,
-        userId: ctx.user.id,
-        action: "stage1_ai_review",
-        details: `Score: ${result.score}/100 - ${result.passed ? "PASSED" : "FAILED"}${result.hasRedFlags ? " (RED FLAGS)" : ""}`,
-      });
+      if (!isAiUnavailable) {
+        await db.updateApplication(input.id, {
+          stage1AiScore: result.score,
+          stage1AiFeedback: JSON.stringify({
+            feedback: result.feedback,
+            recommendations: result.recommendations,
+            fieldScores: result.fieldScores,
+            hasRedFlags: result.hasRedFlags,
+          }),
+          stage1Passed: result.passed,
+          status: result.passed ? "stage2_pending" : "stage1_failed",
+        });
 
-      try {
-        await emailService.notifyAiReviewResult(ctx.user.id, input.id, 1, result.passed, result.score);
-      } catch (e) { /* best-effort */ }
+        await db.addAuditLog({
+          applicationId: input.id,
+          userId: ctx.user.id,
+          action: "stage1_ai_review",
+          details: `Score: ${result.score}/100 - ${result.passed ? "PASSED" : "FAILED"}${result.hasRedFlags ? " (RED FLAGS)" : ""}`,
+        });
+
+        try {
+          await emailService.notifyAiReviewResult(ctx.user.id, input.id, 1, result.passed, result.score);
+        } catch (e) { /* best-effort */ }
+      } else {
+        await db.addAuditLog({
+          applicationId: input.id,
+          userId: ctx.user.id,
+          action: "stage1_ai_review_unavailable",
+          details: "AI provider unreachable — prior review preserved.",
+        });
+      }
 
       return result;
     }),
@@ -214,6 +300,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const updates: Record<string, any> = {};
       const fields = ["researchObjectives", "methodology", "sampleSize", "targetPopulation", "inclusionCriteria", "exclusionCriteria", "dataCollectionMethods", "informedConsentProcess", "riskAssessment", "benefitAssessment", "confidentialityMeasures", "conflictOfInterest", "rejectionFileUrl"];
@@ -237,6 +324,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       // For Stage 2 auto-complete, pass Stage 1 gateway facts so the
       // generated text references the same PI / institution / funding
@@ -281,6 +369,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const stage1Fields = {
         researchTitle: app.researchTitle || "",
@@ -331,25 +420,36 @@ const applicationRouter = router({
         estimatedDuration: merged.estimatedDuration,
       });
 
-      // 4) Persist the new review.
-      await db.updateApplication(input.id, {
-        stage1AiScore: review.score,
-        stage1AiFeedback: JSON.stringify({
-          feedback: review.feedback,
-          recommendations: review.recommendations,
-          fieldScores: review.fieldScores,
-          hasRedFlags: review.hasRedFlags,
-        }),
-        stage1Passed: review.passed,
-        status: review.passed ? "stage2_pending" : "stage1_failed",
-      });
+      // 4) Persist the new review (skip if AI was unavailable).
+      const isAiEnhanceUnavailable = typeof review.feedback === "string"
+        && review.feedback.startsWith("[AI_UNAVAILABLE]");
+      if (!isAiEnhanceUnavailable) {
+        await db.updateApplication(input.id, {
+          stage1AiScore: review.score,
+          stage1AiFeedback: JSON.stringify({
+            feedback: review.feedback,
+            recommendations: review.recommendations,
+            fieldScores: review.fieldScores,
+            hasRedFlags: review.hasRedFlags,
+          }),
+          stage1Passed: review.passed,
+          status: review.passed ? "stage2_pending" : "stage1_failed",
+        });
 
-      await db.addAuditLog({
-        applicationId: input.id,
-        userId: ctx.user.id,
-        action: "stage1_ai_enhance",
-        details: `AI Enhance & Re-review: score ${review.score}/100 — ${review.passed ? "PASSED" : "FAILED"}`,
-      });
+        await db.addAuditLog({
+          applicationId: input.id,
+          userId: ctx.user.id,
+          action: "stage1_ai_enhance",
+          details: `AI Enhance & Re-review: score ${review.score}/100 — ${review.passed ? "PASSED" : "FAILED"}`,
+        });
+      } else {
+        await db.addAuditLog({
+          applicationId: input.id,
+          userId: ctx.user.id,
+          action: "stage1_ai_enhance_unavailable",
+          details: "AI provider unreachable during enhance — prior review preserved.",
+        });
+      }
 
       return { fields: merged, review };
     }),
@@ -367,6 +467,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const result = await aiResolveField({
         fieldName: input.fieldName,
@@ -442,6 +543,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       await db.updateApplication(input.id, {
         researchObjectives: input.researchObjectives,
@@ -469,6 +571,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const result = await runStage2AiReview({
         researchType: app.researchType || "",
@@ -488,30 +591,42 @@ const applicationRouter = router({
         conflictOfInterest: app.conflictOfInterest || "",
       });
 
-      await db.updateApplication(input.id, {
-        stage2AiScore: result.score,
-        stage2AiFeedback: JSON.stringify({
-          feedback: result.feedback,
-          recommendations: result.recommendations,
-          fieldSuggestions: result.fieldSuggestions,
-          fieldScores: result.fieldScores,
-          hasRedFlags: result.hasRedFlags,
-        }),
-        stage2AiFieldScores: JSON.stringify(result.fieldScores || []),
-        stage2Passed: result.passed,
-        status: result.passed ? "submitted" : "stage2_failed",
-      });
+      const isAiUnavailable2 = typeof result.feedback === "string"
+        && result.feedback.startsWith("[AI_UNAVAILABLE]");
 
-      await db.addAuditLog({
-        applicationId: input.id,
-        userId: ctx.user.id,
-        action: "stage2_ai_review",
-        details: `Score: ${result.score}/100 - ${result.passed ? "PASSED" : "FAILED"}${result.hasRedFlags ? " (RED FLAGS)" : ""}`,
-      });
+      if (!isAiUnavailable2) {
+        await db.updateApplication(input.id, {
+          stage2AiScore: result.score,
+          stage2AiFeedback: JSON.stringify({
+            feedback: result.feedback,
+            recommendations: result.recommendations,
+            fieldSuggestions: result.fieldSuggestions,
+            fieldScores: result.fieldScores,
+            hasRedFlags: result.hasRedFlags,
+          }),
+          stage2AiFieldScores: JSON.stringify(result.fieldScores || []),
+          stage2Passed: result.passed,
+          status: result.passed ? "submitted" : "stage2_failed",
+        });
 
-      try {
-        await emailService.notifyAiReviewResult(ctx.user.id, input.id, 2, result.passed, result.score);
-      } catch (e) { /* best-effort */ }
+        await db.addAuditLog({
+          applicationId: input.id,
+          userId: ctx.user.id,
+          action: "stage2_ai_review",
+          details: `Score: ${result.score}/100 - ${result.passed ? "PASSED" : "FAILED"}${result.hasRedFlags ? " (RED FLAGS)" : ""}`,
+        });
+
+        try {
+          await emailService.notifyAiReviewResult(ctx.user.id, input.id, 2, result.passed, result.score);
+        } catch (e) { /* best-effort */ }
+      } else {
+        await db.addAuditLog({
+          applicationId: input.id,
+          userId: ctx.user.id,
+          action: "stage2_ai_review_unavailable",
+          details: "AI provider unreachable — prior review preserved.",
+        });
+      }
 
       return result;
     }),
@@ -550,9 +665,17 @@ const applicationRouter = router({
 
       // If we got 5 reviewers, normal flow. Otherwise queue for admin.
       const nextStatus = selected.length >= 5 ? "under_review" : "pending_admin";
+      // Bump the resubmission counter. `submissionCount` defaults to 1 in
+      // the schema, so the very first submission stays at 1 and only
+      // genuine resubmissions advance the counter. The
+      // `permanently_rejected` / "maximum resubmissions reached" gates
+      // elsewhere in the codebase rely on this being incremented.
+      const nextSubmissionCount = Math.max(1, (app.submissionCount || 1));
+      const isResubmission = app.submittedAt != null;
       await db.updateApplication(input.id, {
         status: nextStatus,
         submittedAt: new Date(),
+        ...(isResubmission ? { submissionCount: nextSubmissionCount + 1 } : {}),
       });
 
       // Tell the admin if we couldn't fully assign. Best-effort —
@@ -641,6 +764,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       await db.updateApplication(input.id, {
         proceedDespiteStage1: true,
@@ -673,6 +797,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       await db.updateApplication(input.id, {
         proceedDespiteStage2: true,
@@ -712,6 +837,7 @@ const applicationRouter = router({
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const result = await aiFixAllComments({
         researchType: app.researchType || "",
@@ -733,31 +859,65 @@ const applicationRouter = router({
   // Upload file to S3
   uploadFile: protectedProcedure
     .input(z.object({
-      fileName: z.string(),
-      fileData: z.string(),
-      contentType: z.string(),
+      fileName: z.string().min(1).max(255),
+      fileData: z.string().min(1).max(28_000_000), // ~21 MB after base64 decode
+      contentType: z.string().min(1).max(128),
       applicationId: z.number().optional(),
       category: z.enum(["questionnaire", "supplementary", "nbce_certificate", "rejection_file", "additional_document", "other"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Enforce ownership BEFORE writing to storage, so an attacker cannot
+      // pollute another user's application file list.
+      if (input.applicationId !== undefined) {
+        const app = await db.getApplicationById(input.applicationId);
+        if (!app) throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+        if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+      }
+
+      // Strict MIME allow-list — uploaded files are served back from same
+      // origin (or signed S3 URLs); HTML / SVG with active content would
+      // be stored-XSS otherwise.
+      const contentType = input.contentType.toLowerCase().split(";")[0].trim();
+      if (!UPLOAD_ALLOWED_MIME.has(contentType)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `File type "${contentType}" is not allowed. Permitted: PDF, images (PNG/JPG/GIF/WEBP), text, CSV, Word, Excel.`,
+        });
+      }
+
       const buffer = Buffer.from(input.fileData, "base64");
-      const randomSuffix = Math.random().toString(36).substring(2, 10);
+      if (buffer.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Empty file" });
+      }
+      if (buffer.length > UPLOAD_MAX_BYTES) {
+        throw new TRPCError({
+          code: "PAYLOAD_TOO_LARGE",
+          message: `File too large. Maximum size is ${Math.floor(UPLOAD_MAX_BYTES / 1024 / 1024)} MB.`,
+        });
+      }
+
+      const safeFileName = sanitizeUploadFileName(input.fileName);
+      // Cryptographically random suffix — the local-disk driver serves
+      // /uploads/* with only this path as the auth gate when sessions
+      // aren't bound. Math.random is not strong enough for that.
+      const randomSuffix = randomBytes(8).toString("hex");
       // Drop the redundant "uploads/" prefix — the storage layer
       // already partitions under /uploads/<key> for the local driver
-      // and namespaces by bucket for S3/Forge. Without this fix, local
-      // URLs ended up as /uploads/uploads/<userId>/...
-      const fileKey = `${ctx.user.id}/${Date.now()}-${randomSuffix}-${input.fileName}`;
-      const { url } = await storagePut(fileKey, buffer, input.contentType);
+      // and namespaces by bucket for S3/Forge.
+      const fileKey = `${ctx.user.id}/${Date.now()}-${randomSuffix}-${safeFileName}`;
+      const { url } = await storagePut(fileKey, buffer, contentType);
 
       // Save file metadata to DB
       try {
         await db.addFileUpload({
           applicationId: input.applicationId || null,
           userId: ctx.user.id,
-          fileName: input.fileName,
+          fileName: safeFileName,
           fileKey,
           fileUrl: url,
-          mimeType: input.contentType,
+          mimeType: contentType,
           fileSize: buffer.length,
           category: (input.category || "other") as any,
         });
@@ -772,12 +932,7 @@ const applicationRouter = router({
   getVersions: protectedProcedure
     .input(z.object({ applicationId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const app = await db.getApplicationById(input.applicationId);
-      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
-        const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-        if (!member) throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      await loadApplicationForViewer(ctx, input.applicationId);
       return db.getApplicationVersions(input.applicationId);
     }),
 });
@@ -787,7 +942,8 @@ const applicationRouter = router({
 const authorsRouter = router({
   getByApplication: protectedProcedure
     .input(z.object({ applicationId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await loadApplicationForViewer(ctx, input.applicationId);
       return db.getAuthorsByApplication(input.applicationId);
     }),
 
@@ -966,19 +1122,28 @@ const reviewRouter = router({
 
   getByApplication: protectedProcedure
     .input(z.object({ applicationId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await loadApplicationForViewer(ctx, input.applicationId);
       const reviews = await db.getReviewsByApplication(input.applicationId);
-      const enriched = await Promise.all(reviews.map(async (r) => {
-        const allMembers = await db.getAllCommitteeMembers();
-        const memberInfo = allMembers.find(m => m.id === r.committeeMemberId);
-        let userName = "Committee Member";
-        if (memberInfo) {
-          const user = await db.getUserById(memberInfo.userId);
-          userName = user?.name || "Committee Member";
-        }
-        return { ...r, memberName: userName };
+      // Single fetch of committee members + users to avoid the N+1 that
+      // bites the admin dashboard on large review lists.
+      const allMembers = await db.getAllCommitteeMembers();
+      const memberById = new Map(allMembers.map(m => [m.id, m]));
+      const userIds = Array.from(new Set(reviews
+        .map(r => memberById.get(r.committeeMemberId)?.userId)
+        .filter((u): u is number => typeof u === "number")));
+      const userById = new Map<number, { name?: string | null }>();
+      await Promise.all(userIds.map(async (uid) => {
+        const u = await db.getUserById(uid);
+        if (u) userById.set(uid, { name: u.name });
       }));
-      return enriched;
+      return reviews.map((r) => {
+        const memberInfo = memberById.get(r.committeeMemberId);
+        const memberName = memberInfo
+          ? (userById.get(memberInfo.userId)?.name || "Committee Member")
+          : "Committee Member";
+        return { ...r, memberName };
+      });
     }),
 
   submitReview: protectedProcedure

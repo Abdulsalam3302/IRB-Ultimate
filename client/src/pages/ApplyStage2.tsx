@@ -16,6 +16,7 @@ import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
 import { ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle, Loader2, Upload, Wand2, Calculator, Save, Star, MessageSquare, Lightbulb } from "lucide-react";
 import RelatedLiterature from "@/components/RelatedLiterature";
+import { AI_PASS_THRESHOLD } from "@shared/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 
@@ -295,6 +296,10 @@ export default function ApplyStage2() {
     const requiredFields = ["researchObjectives", "methodology", "sampleSize", "targetPopulation", "inclusionCriteria", "exclusionCriteria", "dataCollectionMethods", "informedConsentProcess", "riskAssessment", "benefitAssessment", "confidentialityMeasures", "conflictOfInterest"];
     const missing = requiredFields.filter((f) => !(form as any)[f]?.trim());
     if (missing.length > 0) { toast.error(isAr ? "يرجى ملء جميع الحقول المطلوبة" : "Please fill in all required fields"); return; }
+    // Cancel any pending autosave timer so the in-flight write doesn't
+    // race with the saveStage2 write below (last-writer-wins, but the
+    // order is undefined; cancelling here guarantees saveStage2 wins).
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     try {
       await saveStage2.mutateAsync({ id: appId, ...form, rejectionFileUrl: rejectionFileUrl || undefined });
       toast.success(isAr ? "تم حفظ المرحلة الثانية. جاري مراجعة الأخلاقيات..." : "Stage 2 saved. Running AI ethics review...");
@@ -303,7 +308,7 @@ export default function ApplyStage2() {
       if (result.passed) {
         toast.success(isAr ? `تم اجتياز المراجعة! الدرجة: ${result.score}/100` : `AI Ethics Review Passed! Score: ${result.score}/100`);
       } else {
-        toast.error(isAr ? `الدرجة ${result.score}/100. الحد الأدنى 70 مطلوب.` : `AI Ethics Review: Score ${result.score}/100. Minimum 70 required.`);
+        toast.error(isAr ? `الدرجة ${result.score}/100. الحد الأدنى ${AI_PASS_THRESHOLD} مطلوب.` : `AI Ethics Review: Score ${result.score}/100. Minimum ${AI_PASS_THRESHOLD} required.`);
       }
     } catch (error: any) { toast.error(error.message || "Failed"); }
   };

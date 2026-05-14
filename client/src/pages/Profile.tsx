@@ -179,7 +179,7 @@ export default function Profile() {
                               )}
                               <span>{isAr ? "تمت الموافقة" : "Approved"}: {app.approvedAt ? new Date(app.approvedAt).toLocaleDateString(isAr ? "ar-SA" : "en-US") : "—"}</span>
                               {app.researchType && (
-                                <span className="capitalize">{(RESEARCH_TYPE_LABELS as any)[app.researchType]?.[isAr ? "ar" : "en"] || app.researchType.replace(/_/g, " ")}</span>
+                                <span className="capitalize">{(RESEARCH_TYPE_LABELS as any)[app.researchType] || String(app.researchType).replace(/_/g, " ")}</span>
                               )}
                             </div>
                           </div>
@@ -219,18 +219,12 @@ export default function Profile() {
             ) : (
               <div className="space-y-3">
                 {apps.map((app: any) => {
-                  const statusLabel = (STATUS_LABELS as any)[app.status]?.[isAr ? "ar" : "en"] || app.status;
-                  const statusColor = (STATUS_COLORS as any)[app.status] || "gray";
-                  const colorMap: Record<string, string> = {
-                    green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
-                    red: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-                    yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-                    blue: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-                    purple: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-                    orange: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-                    gray: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-                  };
-                  const badgeClass = colorMap[statusColor] || colorMap.gray;
+                  // STATUS_LABELS is a flat Record<status, string>; the
+                  // old `[isAr?"ar":"en"]` indirection always returned
+                  // undefined and fell through to the raw enum. Same for
+                  // STATUS_COLORS which is a full Tailwind class string.
+                  const statusLabel = (STATUS_LABELS as any)[app.status] || String(app.status).replace(/_/g, " ");
+                  const badgeClass = (STATUS_COLORS as any)[app.status] || "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
 
                   return (
                     <Card key={app.id} className="hover:shadow-sm transition-shadow cursor-pointer" onClick={() => setLocation(`/application/${app.id}`)}>
@@ -246,7 +240,7 @@ export default function Profile() {
                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                               <span>{new Date(app.createdAt).toLocaleDateString(isAr ? "ar-SA" : "en-US")}</span>
                               {app.researchType && (
-                                <span className="capitalize">{(RESEARCH_TYPE_LABELS as any)[app.researchType]?.[isAr ? "ar" : "en"] || app.researchType.replace(/_/g, " ")}</span>
+                                <span className="capitalize">{(RESEARCH_TYPE_LABELS as any)[app.researchType] || String(app.researchType).replace(/_/g, " ")}</span>
                               )}
                               {app.irbNumber && <span className="text-emerald-600 font-medium">{app.irbNumber}</span>}
                               {app.stage1AiScore != null && (
@@ -282,25 +276,29 @@ export default function Profile() {
                     <p className="text-sm text-muted-foreground text-center py-6">{isAr ? "لا يوجد نشاط بعد." : "No activity yet."}</p>
                   ) : (
                     <div className="space-y-4">
-                      {apps.slice(0, 10).map((app: any, i: number) => {
-                        const events: { date: string; label: string; icon: typeof FileText; color: string }[] = [];
-                        if (app.approvedAt) events.push({ date: app.approvedAt, label: isAr ? "تمت الموافقة" : "Approved", icon: CheckCircle, color: "text-emerald-600" });
-                        if (app.submittedAt) events.push({ date: app.submittedAt, label: isAr ? "تم التقديم" : "Submitted", icon: FileText, color: "text-blue-600" });
-                        if (app.retractedAt) events.push({ date: app.retractedAt, label: isAr ? "تم السحب" : "Retracted", icon: XCircle, color: "text-red-600" });
-                        events.push({ date: app.createdAt, label: isAr ? "تم الإنشاء" : "Created", icon: FileText, color: "text-muted-foreground" });
-
-                        return events.map((event, j) => (
-                          <div key={`${app.id}-${j}`} className="flex items-start gap-3">
+                      {(() => {
+                        type TimelineEvent = { appId: number; date: string; label: string; icon: typeof FileText; color: string; title: string };
+                        const flat: TimelineEvent[] = [];
+                        apps.slice(0, 10).forEach((app: any) => {
+                          const title = app.researchTitle || `#${app.id}`;
+                          if (app.approvedAt) flat.push({ appId: app.id, date: app.approvedAt, label: isAr ? "تمت الموافقة" : "Approved", icon: CheckCircle, color: "text-emerald-600", title });
+                          if (app.submittedAt) flat.push({ appId: app.id, date: app.submittedAt, label: isAr ? "تم التقديم" : "Submitted", icon: FileText, color: "text-blue-600", title });
+                          if (app.retractedAt) flat.push({ appId: app.id, date: app.retractedAt, label: isAr ? "تم السحب" : "Retracted", icon: XCircle, color: "text-red-600", title });
+                          flat.push({ appId: app.id, date: app.createdAt, label: isAr ? "تم الإنشاء" : "Created", icon: FileText, color: "text-muted-foreground", title });
+                        });
+                        flat.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        return flat.slice(0, 25).map((event, idx) => (
+                          <div key={`${event.appId}-${idx}`} className="flex items-start gap-3">
                             <div className={`mt-0.5 ${event.color}`}>
                               <event.icon className="h-4 w-4" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">{event.label}: <span className="font-normal text-muted-foreground truncate">{app.researchTitle || `#${app.id}`}</span></p>
+                              <p className="text-sm font-medium">{event.label}: <span className="font-normal text-muted-foreground truncate">{event.title}</span></p>
                               <p className="text-xs text-muted-foreground">{new Date(event.date).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
                             </div>
                           </div>
                         ));
-                      }).flat().sort((a: any, b: any) => 0)}
+                      })()}
                     </div>
                   )}
                 </CardContent>

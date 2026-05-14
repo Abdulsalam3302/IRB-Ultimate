@@ -133,7 +133,7 @@ function OverviewTab() {
       status: s.status,
       count: Number(s.count),
       color: colors[s.status] || "#9ca3af",
-      label: (STATUS_LABELS as any)[s.status]?.[isAr ? "ar" : "en"] || s.status,
+      label: (STATUS_LABELS as any)[s.status] || String(s.status).replace(/_/g, " "),
     }));
   }, [statusDist, isAr]);
 
@@ -973,31 +973,56 @@ function ReportsTab() {
   const { lang } = useT();
   const isAr = lang === "ar";
 
+  // RFC 4180 CSV escaping. Without this, a research title that contains a
+  // comma, double-quote, or newline corrupts the row alignment and the
+  // spreadsheet shifts every column to the right.
+  const csvEscape = (value: unknown): string => {
+    if (value === null || value === undefined) return "";
+    const s = String(value);
+    if (s.length === 0) return "";
+    if (/[",\n\r]/.test(s)) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+  const csvRow = (...cells: unknown[]): string => cells.map(csvEscape).join(",") + "\n";
+  // UTF-8 BOM helps Excel recognise the encoding for non-ASCII titles.
+  const CSV_BOM = "﻿";
+
   const generateCSV = (type: "applications" | "committee" | "summary") => {
-    let csv = "";
+    let csv = CSV_BOM;
     const now = new Date().toISOString().split("T")[0];
 
     if (type === "applications" && apps) {
-      csv = "ID,Title,Status,Applicant,Email,Research Type,IRB Number,AI Score 1,AI Score 2,Created,Submitted,Approved\n";
+      csv += csvRow("ID","Title","Status","Applicant","Email","Research Type","IRB Number","AI Score 1","AI Score 2","Created","Submitted","Approved");
       apps.forEach((a: any) => {
-        csv += `${a.id},"${a.researchTitle || ""}",${a.status},"${a.applicantName || ""}","${a.applicantEmail || ""}","${a.researchType || ""}","${a.irbNumber || ""}",${a.stage1AiScore ?? ""},${a.stage2AiScore ?? ""},${a.createdAt || ""},${a.submittedAt || ""},${a.approvedAt || ""}\n`;
+        csv += csvRow(
+          a.id, a.researchTitle, a.status, a.applicantName, a.applicantEmail,
+          a.researchType, a.irbNumber, a.stage1AiScore ?? "", a.stage2AiScore ?? "",
+          a.createdAt, a.submittedAt, a.approvedAt
+        );
       });
     } else if (type === "committee" && members) {
-      csv = "ID,Name,Email,Specialization,Institution,Assignments,Responses,Approvals,Rejections,Avg Response (hrs),Active\n";
+      csv += csvRow("ID","Name","Email","Specialization","Institution","Assignments","Responses","Approvals","Rejections","Avg Response (hrs)","Active");
       members.forEach((m: any) => {
-        csv += `${m.id},"${m.userName || ""}","${m.userEmail || ""}","${m.specialization || ""}","${m.institution || ""}",${m.totalAssignments},${m.totalResponses},${m.totalApprovals},${m.totalRejections},${m.averageResponseTimeMs ? Math.round(m.averageResponseTimeMs / 3600000) : 0},${m.isActive}\n`;
+        csv += csvRow(
+          m.id, m.userName, m.userEmail, m.specialization, m.institution,
+          m.totalAssignments, m.totalResponses, m.totalApprovals, m.totalRejections,
+          m.averageResponseTimeMs ? Math.round(m.averageResponseTimeMs / 3600000) : 0,
+          m.isActive
+        );
       });
     } else if (type === "summary" && stats) {
-      csv = "Metric,Value\n";
-      csv += `Total Applications,${stats.total}\n`;
-      csv += `Approved,${stats.approved}\n`;
-      csv += `Rejected,${stats.rejected}\n`;
-      csv += `Pending,${stats.pending}\n`;
-      csv += `Approval Rate,${stats.total ? Math.round((stats.approved / stats.total) * 100) : 0}%\n`;
-      csv += `Report Date,${now}\n`;
+      csv += csvRow("Metric","Value");
+      csv += csvRow("Total Applications", stats.total);
+      csv += csvRow("Approved", stats.approved);
+      csv += csvRow("Rejected", stats.rejected);
+      csv += csvRow("Pending", stats.pending);
+      csv += csvRow("Approval Rate", `${stats.total ? Math.round((stats.approved / stats.total) * 100) : 0}%`);
+      csv += csvRow("Report Date", now);
     }
 
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

@@ -84,6 +84,12 @@ export async function notifyOwner(
 
   const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
 
+  // 5 second hard timeout. Without this, a stuck connection to the Forge
+  // gateway hangs any tRPC mutation that calls notifyOwner — submit,
+  // directApproval, finalDecision, support.create all become unresponsive.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -94,6 +100,7 @@ export async function notifyOwner(
         "connect-protocol-version": "1",
       },
       body: JSON.stringify({ title, content }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -108,7 +115,13 @@ export async function notifyOwner(
 
     return true;
   } catch (error) {
-    console.warn("[Notification] Error calling notification service:", error);
+    if ((error as any)?.name === "AbortError") {
+      console.warn("[Notification] Owner notification timed out after 5s");
+    } else {
+      console.warn("[Notification] Error calling notification service:", error);
+    }
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }

@@ -96,12 +96,21 @@ export default function Declaration() {
     }
   };
 
-  // If declaration already completed, redirect to stage 1
+  // If declaration already completed and the app has moved on, redirect
+  // to the right stage. The applicant should not be able to silently
+  // re-accept the declaration and regress an in-flight app to Phase 0.
   useEffect(() => {
-    if (app && app.declarationCompletedAt && app.status !== "draft") {
-      // Already completed, allow viewing but don't auto-redirect
+    if (!app) return;
+    const inProgressStatuses = new Set([
+      "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed",
+      "submitted", "under_review", "pending_admin", "approved",
+      "rejected", "resubmission_required", "permanently_rejected",
+      "retracted", "hidden",
+    ]);
+    if (inProgressStatuses.has(String(app.status))) {
+      setLocation(`/apply/${appId}/stage1`);
     }
-  }, [app]);
+  }, [app, appId, setLocation]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;

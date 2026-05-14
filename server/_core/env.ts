@@ -1,10 +1,52 @@
+const isProduction = process.env.NODE_ENV === "production";
+
+// Guard rails — fail fast in production rather than silently boot with an
+// empty/placeholder secret that any attacker can forge tokens against.
+const PLACEHOLDER_SECRETS = new Set([
+  "",
+  "change-me",
+  "change-me-to-a-strong-random-secret",
+  "secret",
+  "dev",
+  "password",
+]);
+const rawJwtSecret = process.env.JWT_SECRET ?? "";
+if (isProduction) {
+  if (PLACEHOLDER_SECRETS.has(rawJwtSecret.trim()) || rawJwtSecret.length < 32) {
+    throw new Error(
+      "JWT_SECRET must be at least 32 chars of strong randomness in production. " +
+      "Generate with: openssl rand -hex 48"
+    );
+  }
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required in production");
+  }
+  if (!process.env.VITE_APP_ID) {
+    throw new Error("VITE_APP_ID is required in production");
+  }
+}
+if (!isProduction && rawJwtSecret.length < 16) {
+  console.warn(
+    "[env] JWT_SECRET is short (<16 chars). Set a strong secret before deploying."
+  );
+}
+
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? "",
+  cookieSecret: rawJwtSecret,
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-  isProduction: process.env.NODE_ENV === "production",
+  isProduction,
+  // Dev-login bypass is OFF by default. Set DEV_LOGIN_ENABLED=1 to enable
+  // alongside an empty OAUTH_SERVER_URL on non-production environments.
+  devLoginEnabled: !isProduction && process.env.DEV_LOGIN_ENABLED !== "0",
+  // Optional explicit allow-list for CORS / origin validation on
+  // cookie-bound endpoints. Comma-separated list of origins.
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean),
 
   // Forge gateway — used for non-LLM features (S3 proxy, data API,
   // push notifications, maps). Keep set to your Forge install.

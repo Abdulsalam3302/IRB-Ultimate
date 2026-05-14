@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Navbar } from "@/components/Navbar";
 import { useT } from "@/contexts/LanguageContext";
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Shield, Search, CheckCircle, XCircle, Download,
   Loader2, Calendar, Building, User, FileText, Award, Users, Ban, AlertTriangle
@@ -18,6 +18,20 @@ export default function VerifyIRB() {
   const { t } = useT();
   const [searchValue, setSearchValue] = useState("");
   const [searchTriggered, setSearchTriggered] = useState(false);
+
+  // Honour deep links like /verify?n=IRB-2026-001 — clicked from the
+  // Registry page and from outbound notification emails. Without this
+  // the user lands on Verify with an empty input and has to retype.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const prefill = params.get("n") || params.get("irb") || "";
+    const cleaned = prefill.trim().toUpperCase();
+    if (cleaned && cleaned.length >= 3) {
+      setSearchValue(cleaned);
+      setSearchTriggered(true);
+    }
+  }, []);
 
   const { data: result, isLoading, refetch } = trpc.verify.verifyIrb.useQuery(
     { irbNumber: searchValue },

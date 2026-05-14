@@ -361,6 +361,13 @@ export async function getFilesByApplication(applicationId: number) {
   return db.select().from(fileUploads).where(eq(fileUploads.applicationId, applicationId)).orderBy(desc(fileUploads.createdAt));
 }
 
+export async function getFileUploadByKey(fileKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(fileUploads).where(eq(fileUploads.fileKey, fileKey)).limit(1);
+  return rows[0] ?? null;
+}
+
 // ─── Expire and reassign reviews ──────────────────────────────────────────
 
 export async function expireAndGetExpiredReviews() {

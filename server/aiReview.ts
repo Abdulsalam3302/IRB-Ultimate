@@ -161,7 +161,11 @@ export interface AiReviewResult {
   hasRedFlags?: boolean;
 }
 
-const PASS_THRESHOLD = 65;
+// Must stay in sync with shared/types.ts → AI_PASS_THRESHOLD. The client
+// shows "Minimum 70 required" on the failure toast, so the server gate
+// must match — otherwise the UI says "FAIL" on a 67 while the DB marks
+// stage1Passed=true and silently advances the application.
+const PASS_THRESHOLD = 70;
 
 function getColorFromScore(score: number): FieldColor {
   if (score < 50) return "red";

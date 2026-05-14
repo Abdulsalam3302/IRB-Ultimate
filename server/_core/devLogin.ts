@@ -17,17 +17,39 @@ import { sdk } from "./sdk";
  *   POST /api/dev/login   {openId,name,email,role}  — set session cookie
  */
 export function registerDevLoginRoutes(app: Express) {
+  // Dev-login is OFF in production AND off when DEV_LOGIN_ENABLED=0 even
+  // in dev. We refuse to expose the endpoint over a network address —
+  // the route returns 403 unless the request originated from loopback.
   const enabled =
     !ENV.isProduction &&
+    ENV.devLoginEnabled &&
     (!ENV.oAuthServerUrl || ENV.oAuthServerUrl.trim() === "");
 
   if (!enabled) return;
 
   console.log(
-    "[DevLogin] Local-dev login enabled at /api/dev/login (no OAUTH_SERVER_URL set)"
+    "[DevLogin] Local-dev login enabled at /api/dev/login (loopback only). " +
+    "Disable by setting DEV_LOGIN_ENABLED=0, OAUTH_SERVER_URL, or NODE_ENV=production."
   );
 
-  app.get("/api/dev/login", (_req: Request, res: Response) => {
+  // Refuse dev-login from non-loopback clients. Anything else is too
+  // risky on a shared LAN / staging tunnel / forwarded port.
+  const requireLoopback = (req: Request, res: Response): boolean => {
+    const ip = (req.ip || req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+    if (ip === "127.0.0.1" || ip === "::1" || ip === "localhost") return true;
+    res.status(403).json({ error: "dev login only available from loopback" });
+    return false;
+  };
+
+  // Server-side role mapping. The browser can't set role anymore —
+  // promotion to admin happens automatically for the configured
+  // OWNER_OPEN_ID. This kills the "POST role=admin" privilege-escalation
+  // path that any unauth attacker could use over a forwarded dev port.
+  const roleForOpenId = (openId: string): "admin" | "user" =>
+    ENV.ownerOpenId && openId === ENV.ownerOpenId ? "admin" : "user";
+
+  app.get("/api/dev/login", (req: Request, res: Response) => {
+    if (!requireLoopback(req, res)) return;
     res.type("html").send(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Dev Login — IRB Ultimate</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -50,27 +72,20 @@ export function registerDevLoginRoutes(app: Express) {
   <input name="name" value="Dr. Abdulsalam Aleid" required>
   <label>Email</label>
   <input type="email" name="email" value="owner@irb-ultimate.local" required>
-  <div class="row">
-    <div>
-      <label>OpenID</label>
-      <input name="openId" value="dev-owner-001" required>
-    </div>
-    <div>
-      <label>Role</label>
-      <select name="role"><option value="admin" selected>admin</option><option value="user">user</option></select>
-    </div>
-  </div>
+  <label>OpenID</label>
+  <input name="openId" value="dev-owner-001" required>
   <button type="submit">Sign in</button>
-  <div class="muted">Tip: set <code>OWNER_OPEN_ID</code> in <code>.env</code> to your openId so admin features auto-grant.</div>
+  <div class="muted">Role is server-controlled: only the configured <code>OWNER_OPEN_ID</code> is granted admin. All other openIds receive role=user.</div>
 </form></body></html>`);
   });
 
   app.post("/api/dev/login", async (req: Request, res: Response) => {
+    if (!requireLoopback(req, res)) return;
     try {
       const openId = String(req.body?.openId || "dev-user-001").slice(0, 64);
       const name = String(req.body?.name || "Dev User").slice(0, 255);
       const email = String(req.body?.email || `${openId}@local.dev`).slice(0, 320);
-      const role = req.body?.role === "admin" ? "admin" : "user";
+      const role = roleForOpenId(openId);
 
       await db.upsertUser({
         openId,

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import ReviewFeedback from "@/components/ReviewFeedback";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { RESEARCH_TYPE_LABELS, RESEARCH_TYPE_REQUIREMENTS } from "@shared/types";
+import { RESEARCH_TYPE_LABELS, RESEARCH_TYPE_REQUIREMENTS, AI_PASS_THRESHOLD } from "@shared/types";
 import type { ResearchType } from "@shared/types";
 
 interface AuthorForm {
@@ -179,21 +179,38 @@ export default function ApplyStage1() {
     return () => clearTimeout(t);
   }, [undoExpiresAt]);
 
+  const safeParseSupplementary = (raw: string | null | undefined): { name: string; url: string }[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   const handleFileUpload = async (file: File, field: "questionnaireFileUrl" | "supplementaryFilesJson") => {
     setUploading(true);
     try {
       const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve) => {
+      const base64 = await new Promise<string>((resolve, reject) => {
         reader.onload = () => { resolve((reader.result as string).split(",")[1]); };
+        reader.onerror = () => reject(reader.error || new Error("read failed"));
         reader.readAsDataURL(file);
       });
-      const result = await uploadFile.mutateAsync({ fileName: file.name, fileData: base64, contentType: file.type });
+      const result = await uploadFile.mutateAsync({ fileName: file.name, fileData: base64, contentType: file.type, applicationId: appId, category: field === "supplementaryFilesJson" ? "supplementary" : "questionnaire" });
       if (field === "supplementaryFilesJson") {
-        const existing = form.supplementaryFilesJson ? JSON.parse(form.supplementaryFilesJson) : [];
-        existing.push({ name: file.name, url: result.url });
-        setForm({ ...form, supplementaryFilesJson: JSON.stringify(existing) });
+        // Functional update — when the user multi-selects N files, all N
+        // handlers race; each must see the latest list, not the stale
+        // closure captured at handler creation, otherwise files 2..N are
+        // dropped on the floor.
+        setForm(prev => {
+          const existing = safeParseSupplementary(prev.supplementaryFilesJson);
+          existing.push({ name: file.name, url: result.url });
+          return { ...prev, supplementaryFilesJson: JSON.stringify(existing) };
+        });
       } else {
-        setForm({ ...form, [field]: result.url });
+        setForm(prev => ({ ...prev, [field]: result.url }));
       }
       toast.success(isAr ? `تم رفع الملف "${file.name}" بنجاح` : `File "${file.name}" uploaded successfully`);
     } catch (error: any) {
@@ -247,14 +264,14 @@ export default function ApplyStage1() {
       if (result.passed) {
         toast.success(isAr ? `تم اجتياز المراجعة! الدرجة: ${result.score}/100` : `AI Review Passed! Score: ${result.score}/100`);
       } else {
-        toast.error(isAr ? `الدرجة ${result.score}/100. الحد الأدنى 70 مطلوب.` : `AI Review: Score ${result.score}/100. Minimum 70 required.`);
+        toast.error(isAr ? `الدرجة ${result.score}/100. الحد الأدنى ${AI_PASS_THRESHOLD} مطلوب.` : `AI Review: Score ${result.score}/100. Minimum ${AI_PASS_THRESHOLD} required.`);
       }
     } catch (error: any) { toast.error(error.message || "Failed"); }
   };
 
   const researchType = form.researchType as ResearchType;
   const requirements = researchType ? RESEARCH_TYPE_REQUIREMENTS[researchType] : null;
-  const supplementaryFiles = form.supplementaryFilesJson ? JSON.parse(form.supplementaryFilesJson) : [];
+  const supplementaryFiles = safeParseSupplementary(form.supplementaryFilesJson);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -402,8 +419,11 @@ export default function ApplyStage1() {
                                 <CheckCircle className="h-3 w-3 text-emerald-600" />
                                 <span className="truncate flex-1">{f.name}</span>
                                 <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => {
-                                  const updated = supplementaryFiles.filter((_: any, idx: number) => idx !== i);
-                                  setForm({ ...form, supplementaryFilesJson: JSON.stringify(updated) });
+                                  setForm(prev => {
+                                    const current = safeParseSupplementary(prev.supplementaryFilesJson);
+                                    const updated = current.filter((_, idx) => idx !== i);
+                                    return { ...prev, supplementaryFilesJson: JSON.stringify(updated) };
+                                  });
                                 }}><Trash2 className="h-3 w-3" /></Button>
                               </div>
                             ))}

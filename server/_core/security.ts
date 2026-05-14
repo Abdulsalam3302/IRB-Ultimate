@@ -10,32 +10,45 @@ import { ENV } from "./env";
 
 const RATE_WINDOW_MS = 60_000; // 1 minute
 const RATE_LIMIT = 120; // requests per window per IP for /api/*
+// Tighter limit for expensive / sensitive routes.
+const STRICT_RATE_LIMIT = 12;
+const STRICT_ROUTES = [
+  "/api/trpc/application.uploadFile",
+  "/api/trpc/application.runStage1Review",
+  "/api/trpc/application.runStage2Review",
+  "/api/trpc/application.aiEnhanceStage1",
+  "/api/trpc/application.aiAutoComplete",
+  "/api/trpc/application.aiResolveField",
+  "/api/trpc/application.fixAllComments",
+  "/api/dev/login",
+  "/api/oauth/callback",
+];
 
 type Bucket = { count: number; reset: number };
 const buckets = new Map<string, Bucket>();
 
-function getClientIp(req: Request): string {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.length > 0) return fwd.split(",")[0].trim();
-  if (Array.isArray(fwd) && fwd.length > 0) return fwd[0];
-  return req.socket.remoteAddress || "unknown";
-}
-
 function rateLimit(req: Request, res: Response, next: NextFunction) {
   if (!req.path.startsWith("/api/")) return next();
-  // Skip rate-limit for static assets, OAuth callback, dev-login GET form
-  if (req.path === "/api/oauth/callback") return next();
-
-  const ip = getClientIp(req);
+  // OAuth callback excluded from STANDARD limit only — we'll apply
+  // a strict limit further down.
+  // Express's `req.ip` honours `trust proxy=1` set in registerSecurity().
+  // Don't manually splice X-Forwarded-For — an attacker could pin it.
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
   const now = Date.now();
-  const bucket = buckets.get(ip);
+  // Bucket per ip + per scope ("strict" vs "std") so a strict limit on
+  // an expensive route doesn't drain the user's general budget and vice
+  // versa.
+  const isStrict = STRICT_ROUTES.some(p => req.path === p || req.path.startsWith(p + "/"));
+  const limit = isStrict ? STRICT_RATE_LIMIT : RATE_LIMIT;
+  const key = `${isStrict ? "s" : "g"}:${ip}`;
+  const bucket = buckets.get(key);
 
   if (!bucket || bucket.reset <= now) {
-    buckets.set(ip, { count: 1, reset: now + RATE_WINDOW_MS });
+    buckets.set(key, { count: 1, reset: now + RATE_WINDOW_MS });
     return next();
   }
 
-  if (bucket.count >= RATE_LIMIT) {
+  if (bucket.count >= limit) {
     res.setHeader("Retry-After", Math.ceil((bucket.reset - now) / 1000));
     res.status(429).json({ error: "Too many requests" });
     return;
@@ -48,21 +61,45 @@ function rateLimit(req: Request, res: Response, next: NextFunction) {
 // Periodically prune stale buckets (memory bound)
 setInterval(() => {
   const now = Date.now();
-  buckets.forEach((b, ip) => {
-    if (b.reset <= now) buckets.delete(ip);
+  buckets.forEach((b, key) => {
+    if (b.reset <= now) buckets.delete(key);
   });
 }, RATE_WINDOW_MS).unref();
 
+// CSP — strict baseline. The Vite dev pipeline injects inline scripts at
+// runtime, so we relax script-src in dev only. Style 'unsafe-inline'
+// stays because TailwindCSS + Radix UI rely on inline style props.
+function buildCsp(): string {
+  const scriptSrc = ENV.isProduction
+    ? "'self'"
+    : "'self' 'unsafe-inline' 'unsafe-eval'";
+  return [
+    "default-src 'self'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    `script-src ${scriptSrc}`,
+    "connect-src 'self' https: ws: wss:",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+}
+
 function securityHeaders(_req: Request, res: Response, next: NextFunction) {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("X-DNS-Prefetch-Control", "off");
   res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-site");
   res.setHeader(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    "camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()"
   );
+  res.setHeader("Content-Security-Policy", buildCsp());
   if (ENV.isProduction) {
     res.setHeader(
       "Strict-Transport-Security",

@@ -148,20 +148,30 @@ export function registerExportRoutes(app: Express) {
       }
       // Public access only for approved certificates. Otherwise require
       // either the owner or an admin.
+      let viewerKind: "public" | "owner-or-admin" = "owner-or-admin";
       if (application.status !== "approved") {
         const user = await sdk.authenticateRequest(req).catch(() => null);
         if (!user) { res.status(401).type("text/plain").send("authentication required"); return; }
         if (application.applicantId !== user.id && user.role !== "admin") {
           res.status(403).type("text/plain").send("forbidden"); return;
         }
+      } else {
+        // Approved + no auth needed → mark this as a public render. We
+        // still want to redact the applicant email so the unauth
+        // endpoint can't be scraped for a "principal investigator → email"
+        // harvest.
+        const user = await sdk.authenticateRequest(req).catch(() => null);
+        if (!user) viewerKind = "public";
+        else if (application.applicantId !== user.id && user.role !== "admin") viewerKind = "public";
       }
       const applicant = await db.getUserById(application.applicantId);
+      const applicantEmailForRender = viewerKind === "public" ? null : (applicant?.email ?? null);
       const wantsHtml = req.query.format === "html";
       if (wantsHtml) {
         const html = renderCertificateHtml({
           app: application,
           applicantName: applicant?.name ?? null,
-          applicantEmail: applicant?.email ?? null,
+          applicantEmail: applicantEmailForRender,
         });
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.send(html);
@@ -170,7 +180,7 @@ export function registerExportRoutes(app: Express) {
       const pdf = await renderCertificatePdf({
         app: application,
         applicantName: applicant?.name ?? null,
-        applicantEmail: applicant?.email ?? null,
+        applicantEmail: applicantEmailForRender,
       });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(

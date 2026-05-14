@@ -193,6 +193,9 @@ class SDKServer {
       name: payload.name,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setIssuer("irb-platform")
+      .setAudience(ENV.appId || "irb-platform")
+      .setIssuedAt(Math.floor(issuedAt / 1000))
       .setExpirationTime(expirationSeconds)
       .sign(secretKey);
   }
@@ -209,8 +212,11 @@ class SDKServer {
       const secretKey = this.getSessionSecret();
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
+        // Accept tokens issued with or without iss/aud so the upgrade is
+        // backwards-compatible. New tokens are pinned by sign-time
+        // claims; legacy ones still verify by signature + expiry.
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, iss, aud } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -218,6 +224,19 @@ class SDKServer {
         !isNonEmptyString(name)
       ) {
         console.warn("[Auth] Session payload missing required fields");
+        return null;
+      }
+
+      // Reject tokens that DO carry iss/aud but with the wrong values —
+      // prevents cross-tenant token reuse if you run multiple deployments
+      // against the same shared secret (you shouldn't, but belt+braces).
+      const expectedAud = ENV.appId || "irb-platform";
+      if (iss !== undefined && iss !== "irb-platform") {
+        console.warn("[Auth] Session iss mismatch", iss);
+        return null;
+      }
+      if (aud !== undefined && aud !== expectedAud) {
+        console.warn("[Auth] Session aud mismatch", aud);
         return null;
       }
 

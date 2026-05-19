@@ -142,6 +142,8 @@ const en: Record<string, string> = {
   "footer.approved": "Approved by Dr. Abdulsalam Aleid",
   "footer.rights": "All rights reserved.",
   "footer.nbce": "Operating under the National Bioethics Committee of Saudi Arabia (NBCE)",
+  "footer.feedback": "Suggestions & complaints",
+  "footer.feedbackCta": "Reach Dr. Aleid on LinkedIn",
 
   // Dashboard
   "dash.title": "My Applications",
@@ -476,6 +478,8 @@ const ar: Record<string, string> = {
   "footer.approved": "بإشراف د. عبدالسلام العيد",
   "footer.rights": "جميع الحقوق محفوظة.",
   "footer.nbce": "تعمل تحت إشراف اللجنة الوطنية للأخلاقيات الحيوية بالمملكة العربية السعودية (NBCE)",
+  "footer.feedback": "اقتراحات وشكاوى",
+  "footer.feedbackCta": "تواصل مع د. العيد على لينكدإن",
 
   // Dashboard
   "dash.title": "طلباتي",

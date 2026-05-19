@@ -119,3 +119,9 @@ logo-urls.txt
 
 # Local-disk upload fallback (when no Forge/S3 driver is configured)
 uploads/
+
+# Database backups produced by scripts/backup.sh — never commit dumps
+backups/
+
+# Security audit artifacts (re-generated; not source of truth)
+SECURITY-AUDIT.md

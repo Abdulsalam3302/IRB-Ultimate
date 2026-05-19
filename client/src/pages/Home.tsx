@@ -10,7 +10,7 @@ import {
   Shield, Zap, Brain, Clock, FileCheck, Users, ArrowRight,
   Target, Eye, Lightbulb, BarChart3, Globe, Award,
   ChevronRight, Star, Search, MessageSquare, Heart, BookOpen, ArrowLeft,
-  Sun, Moon, Sparkles
+  Sun, Moon, Sparkles, Linkedin
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -282,7 +282,21 @@ export default function Home() {
               </p>
               <p className="text-xs text-muted-foreground">
                 <a href="https://www.ahss-sa.org/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">{t("footer.org")}</a> — {t("footer.approved")}{" "}
-                <a href="https://linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">Dr. Abdulsalam Aleid</a>
+                <a href="https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">Dr. Abdulsalam Aleid</a>
+              </p>
+              <p className="text-xs text-muted-foreground inline-flex items-center justify-center gap-1.5">
+                <MessageSquare className="h-3 w-3" />
+                <span>{t("footer.feedback")}:</span>
+                <a
+                  href="https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 hover:text-foreground underline underline-offset-2 transition-apple"
+                  aria-label={t("footer.feedbackCta")}
+                >
+                  <Linkedin className="h-3 w-3" />
+                  {t("footer.feedbackCta")}
+                </a>
               </p>
               <p className="text-xs text-muted-foreground">
                 &copy; {new Date().getFullYear()} <a href="https://ncbe.kacst.edu.sa" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">{t("footer.nbce")}</a>

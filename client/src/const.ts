@@ -1,23 +1,25 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
-// Generate login URL at runtime so redirect URI reflects the current origin.
-// When no OAuth portal is configured, route the user to the local dev login.
-export const getLoginUrl = () => {
+/**
+ * Login URL. SA-02: the SPA no longer constructs the OAuth URL itself —
+ * that previously embedded a base64'd redirectUri in `state`, which gave
+ * no CSRF protection. Now we link to /api/oauth/start, which mints a
+ * server-side nonce, sets it as a __Host- cookie, and 302s to the portal.
+ * The callback then verifies the nonce in constant time before issuing a
+ * session.
+ *
+ * Optional `next` is appended as a relative path; the server rejects
+ * anything that doesn't begin with "/".
+ */
+export const getLoginUrl = (next?: string) => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
-  const appId = import.meta.env.VITE_APP_ID;
+  const safeNext = typeof next === "string" && /^\/(?!\/)/.test(next) ? next : "";
 
   if (!oauthPortalUrl || String(oauthPortalUrl).trim() === "") {
     return `${window.location.origin}/api/dev/login`;
   }
 
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
-
-  const url = new URL(`${oauthPortalUrl}/app-auth`);
-  url.searchParams.set("appId", appId);
-  url.searchParams.set("redirectUri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
-
+  const url = new URL("/api/oauth/start", window.location.origin);
+  if (safeNext) url.searchParams.set("next", safeNext);
   return url.toString();
 };

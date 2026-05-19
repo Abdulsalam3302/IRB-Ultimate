@@ -5,7 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerDevLoginRoutes } from "./devLogin";
-import { registerSecurity, registerErrorHandler } from "./security";
+import { registerSecurity, registerApiGuards, registerErrorHandler } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -55,10 +55,30 @@ async function startServer() {
     return jsonSmall(req, res, next);
   });
   app.use(urlencodedSmall);
-  // Health check (used by load balancers / uptime monitors)
+  // Health check (used by load balancers / uptime monitors). Registered
+  // BEFORE the API guards so monitors can poll without sending an Origin
+  // header that matches ENV.allowedOrigins. Includes a build-version hint
+  // so deploys are confirmable (SA-39); does NOT touch the DB so it never
+  // leaks connectivity status.
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, ts: Date.now() });
+    res.json({
+      ok: true,
+      ts: Date.now(),
+      version: process.env.RELEASE || process.env.RAILWAY_GIT_COMMIT_SHA || "dev",
+    });
   });
+  // CORS + Origin allowlist for state-changing /api/* calls (SA-01, SA-20).
+  // Must come AFTER body parsers (so preflight short-circuit reads no body)
+  // and BEFORE OAuth/dev-login/exports/tRPC mounts.
+  registerApiGuards(app);
+  // Reject any /api/* request that doesn't match a defined route as JSON 404
+  // (SA-21). Without this the SPA fallthrough at vite.ts returns index.html
+  // for stale endpoints, which masks misconfiguration and bad clients.
+  // Mounted AFTER guards so unauthorized origins still get the 403, and
+  // BEFORE the SPA static handler at the bottom of startServer().
+  const apiNotFound = (req: Request, res: Response) => {
+    res.status(404).json({ error: "not found", path: req.path });
+  };
   // Local-disk uploads — only mounted when no Forge / S3 driver is
   // configured. Files persist under <project>/uploads/ and are served
   // here so the SPA can render <a href="/uploads/...">.
@@ -154,6 +174,9 @@ async function startServer() {
       createContext,
     })
   );
+  // Catch /api/* requests that didn't match any defined route as JSON 404
+  // instead of letting them fall through to the SPA index.html (SA-21).
+  app.use("/api", apiNotFound);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -164,10 +187,22 @@ async function startServer() {
   registerErrorHandler(app);
 
   const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  let port: number;
+  if (process.env.NODE_ENV === "production") {
+    // SA-40: in production, refuse to silently shift ports. If the
+    // configured PORT is busy something else is wrong — the load balancer
+    // will route to the wrong process otherwise.
+    if (!(await isPortAvailable(preferredPort))) {
+      throw new Error(
+        `Port ${preferredPort} is in use. Refusing to scan in production.`
+      );
+    }
+    port = preferredPort;
+  } else {
+    port = await findAvailablePort(preferredPort);
+    if (port !== preferredPort) {
+      console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+    }
   }
 
   server.listen(port, () => {

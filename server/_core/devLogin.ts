@@ -27,10 +27,16 @@ export function registerDevLoginRoutes(app: Express) {
 
   if (!enabled) return;
 
-  console.log(
-    "[DevLogin] Local-dev login enabled at /api/dev/login (loopback only). " +
-    "Disable by setting DEV_LOGIN_ENABLED=0, OAUTH_SERVER_URL, or NODE_ENV=production."
-  );
+  if (ENV.devLoginToken) {
+    console.log(
+      `[DevLogin] Enabled at /api/dev/login (loopback only, token required: ${ENV.devLoginToken}).`
+    );
+  } else {
+    console.log(
+      "[DevLogin] Enabled at /api/dev/login (loopback only). " +
+      "Set DEV_LOGIN_TOKEN to require a shared secret on POST."
+    );
+  }
 
   // Refuse dev-login from non-loopback clients. Anything else is too
   // risky on a shared LAN / staging tunnel / forwarded port.
@@ -81,6 +87,15 @@ export function registerDevLoginRoutes(app: Express) {
 
   app.post("/api/dev/login", async (req: Request, res: Response) => {
     if (!requireLoopback(req, res)) return;
+    // SA-17: shared-secret guard. Even on loopback, if DEV_LOGIN_TOKEN is
+    // set in env, the POST body must include a matching `token`.
+    if (ENV.devLoginToken) {
+      const provided = String(req.body?.token || "");
+      if (provided !== ENV.devLoginToken) {
+        res.status(401).json({ error: "dev login token mismatch" });
+        return;
+      }
+    }
     try {
       const openId = String(req.body?.openId || "dev-user-001").slice(0, 64);
       const name = String(req.body?.name || "Dev User").slice(0, 255);

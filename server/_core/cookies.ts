@@ -40,12 +40,20 @@ export function getSessionCookieOptions(
   //       : undefined;
 
   const secure = isSecureRequest(req);
-  // Modern browsers reject SameSite=None without Secure. For local http dev,
-  // fall back to "lax" so the session cookie actually persists.
+  // CSRF defence (SA-01): keep SameSite=Lax even in production.
+  //
+  // Lax sends the cookie on top-level GET navigations (so the OAuth callback
+  // and direct links still work) but withholds it on cross-site POSTs — which
+  // is the surface every tRPC mutation rides on. We pair this with the
+  // originGuard middleware on /api/trpc, so even a same-site GET-then-POST
+  // chain has to come from an allowlisted origin.
+  //
+  // SameSite=None is only correct when the API is deliberately exposed to
+  // third-party browser contexts (e.g. an embedded widget). This app isn't.
   return {
     httpOnly: true,
     path: "/",
-    sameSite: secure ? "none" : "lax",
+    sameSite: "lax",
     secure,
   };
 }

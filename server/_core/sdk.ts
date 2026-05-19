@@ -38,20 +38,18 @@ class OAuthService {
     }
   }
 
-  private decodeState(state: string): string {
-    const redirectUri = atob(state);
-    return redirectUri;
-  }
-
   async getTokenByCode(
     code: string,
-    state: string
+    redirectUri: string,
   ): Promise<ExchangeTokenResponse> {
+    // SA-02: redirectUri is computed server-side from the request's own
+    // host. We no longer accept it from the OAuth `state` param — that was
+    // attacker-controllable and let `state` double as an open-redirect.
     const payload: ExchangeTokenRequest = {
       clientId: ENV.appId,
       grantType: "authorization_code",
       code,
-      redirectUri: this.decodeState(state),
+      redirectUri,
     };
 
     const { data } = await this.client.post<ExchangeTokenResponse>(
@@ -114,15 +112,17 @@ class SDKServer {
   }
 
   /**
-   * Exchange OAuth authorization code for access token
-   * @example
-   * const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+   * Exchange OAuth authorization code for access token.
+   * @param code         Authorization code from the portal redirect.
+   * @param redirectUri  The exact same redirectUri sent to the portal in
+   *                     /api/oauth/start. Must come from the request, NOT
+   *                     from the OAuth `state` param (SA-02).
    */
   async exchangeCodeForToken(
     code: string,
-    state: string
+    redirectUri: string,
   ): Promise<ExchangeTokenResponse> {
-    return this.oauthService.getTokenByCode(code, state);
+    return this.oauthService.getTokenByCode(code, redirectUri);
   }
 
   /**

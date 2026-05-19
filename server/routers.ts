@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, aiProcedure, router } from "./_core/trpc";
+import { inspectLlmBudget } from "./_core/budget";
+import { ENV } from "./_core/env";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
@@ -216,8 +218,8 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // Run AI review for Stage 1
-  runStage1Review: protectedProcedure
+  // Run AI review for Stage 1 — SA-03: reserved against per-user daily budget.
+  runStage1Review: aiProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -313,8 +315,8 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // AI auto-complete fields (aims for 100/100)
-  aiAutoComplete: protectedProcedure
+  // AI auto-complete fields (aims for 100/100) — SA-03 budget-bound.
+  aiAutoComplete: aiProcedure
     .input(z.object({
       id: z.number(),
       existingFields: z.record(z.string(), z.string()),
@@ -362,8 +364,8 @@ const applicationRouter = router({
   //   3) Re-run Stage 1 AI review against the enhanced fields.
   //   4) Persist the new score + feedback.
   // Returns both the enhanced fields and the new review result so the
-  // client can update form + result card in a single render.
-  aiEnhanceStage1: protectedProcedure
+  // client can update form + result card in a single render. SA-03 budget-bound.
+  aiEnhanceStage1: aiProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -454,8 +456,8 @@ const applicationRouter = router({
       return { fields: merged, review };
     }),
 
-  // AI resolve single field
-  aiResolveField: protectedProcedure
+  // AI resolve single field — SA-03 budget-bound.
+  aiResolveField: aiProcedure
     .input(z.object({
       id: z.number(),
       fieldName: z.string(),
@@ -564,8 +566,8 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // Run AI review for Stage 2 (with color-coded field scores)
-  runStage2Review: protectedProcedure
+  // Run AI review for Stage 2 (with color-coded field scores) — SA-03 budget-bound.
+  runStage2Review: aiProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -820,8 +822,8 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // Fix All Comments — batch AI resolve for all flagged fields
-  fixAllComments: protectedProcedure
+  // Fix All Comments — batch AI resolve for all flagged fields. SA-03 budget-bound.
+  fixAllComments: aiProcedure
     .input(z.object({
       id: z.number(),
       fields: z.record(z.string(), z.string()),
@@ -1662,6 +1664,14 @@ const adminRouter = router({
     .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
     .mutation(async ({ ctx, input }) => {
       if (input.userId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot change your own role" });
+      // SA-25: refuse to demote the platform owner. Without this, a
+      // compromised secondary admin (or a CSRF that survives SA-01) could
+      // strip the owner of their access — leaving nobody with the keys
+      // unless they re-trip auto-promotion via OWNER_OPEN_ID.
+      const target = await db.getUserById(input.userId);
+      if (target && ENV.ownerOpenId && target.openId === ENV.ownerOpenId && input.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Platform owner cannot be demoted" });
+      }
       await db.updateUserRole(input.userId, input.role);
       await db.addAuditLog({
         userId: ctx.user.id,

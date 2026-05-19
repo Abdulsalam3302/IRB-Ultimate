@@ -14,13 +14,37 @@ import {
   amendments, InsertAmendment,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import mysql from 'mysql2';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+
+// Capture the owner openId ONCE at module load (SA-26). Subsequent edits
+// to process.env or ENV.ownerOpenId won't change who gets auto-promoted —
+// a filesystem-write attack against the running container's .env can no
+// longer silently re-attribute admin on next login.
+const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // SA-19: force TLS in production. mysql2 enables TLS automatically when
+      // the URL carries `?ssl={...}`, but we shouldn't depend on every
+      // operator remembering to append that. In production we attach a
+      // strict SSL block that rejects unauthenticated certs. In dev we keep
+      // the URL-only path so localhost MySQL still works.
+      if (ENV.isProduction) {
+        const pool = mysql.createPool({
+          uri: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: true },
+          // Reasonable pool defaults for a small platform; tune via
+          // DATABASE_POOL_MAX if you outgrow them.
+          connectionLimit: parseInt(process.env.DATABASE_POOL_MAX ?? "10", 10),
+          waitForConnections: true,
+        });
+        _db = drizzle(pool);
+      } else {
+        _db = drizzle(process.env.DATABASE_URL);
+      }
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -51,7 +75,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     textFields.forEach(assignNullable);
     if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
     if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
-    else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
+    else if (BOOT_OWNER_OPEN_ID && user.openId === BOOT_OWNER_OPEN_ID) {
+      // SA-26: BOOT_OWNER_OPEN_ID is captured once at module init, so a
+      // mid-run env mutation can't re-target who becomes admin.
+      values.role = 'admin';
+      updateSet.role = 'admin';
+    }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });

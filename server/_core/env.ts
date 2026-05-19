@@ -36,11 +36,23 @@ export const ENV = {
   cookieSecret: rawJwtSecret,
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+  // OAuth portal the user is redirected to for the consent dance. Server-side
+  // mirror of VITE_OAUTH_PORTAL_URL, used by /api/oauth/start so the SPA no
+  // longer has to know the portal URL. Falls back to VITE_OAUTH_PORTAL_URL
+  // when not separately set — same value in both is fine.
+  oAuthPortalUrl: (process.env.OAUTH_PORTAL_URL ?? process.env.VITE_OAUTH_PORTAL_URL ?? "").trim(),
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   isProduction,
-  // Dev-login bypass is OFF by default. Set DEV_LOGIN_ENABLED=1 to enable
-  // alongside an empty OAUTH_SERVER_URL on non-production environments.
-  devLoginEnabled: !isProduction && process.env.DEV_LOGIN_ENABLED !== "0",
+  // SA-17: dev-login is OFF by default — devs must set DEV_LOGIN_ENABLED=1
+  // explicitly. Previous code treated "unset" as enabled which made an SSH
+  // port-forward a privilege-escalation surface. In production the flag is
+  // always off regardless of env.
+  devLoginEnabled: !isProduction && process.env.DEV_LOGIN_ENABLED === "1",
+  // Optional shared secret required even from loopback. Set to anything
+  // non-empty for an extra barrier against accidental tunnel exposure.
+  // The POST /api/dev/login body must include `token: <this value>` when
+  // set; the GET landing page reads it from a hidden field.
+  devLoginToken: (process.env.DEV_LOGIN_TOKEN ?? "").trim(),
   // Optional explicit allow-list for CORS / origin validation on
   // cookie-bound endpoints. Comma-separated list of origins.
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "")

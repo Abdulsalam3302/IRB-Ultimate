@@ -581,7 +581,9 @@ export async function searchPublicRegistry(input: RegistrySearchInput) {
   if (input.year && Number.isFinite(input.year)) {
     conds.push(sql`YEAR(${applications.approvedAt}) = ${input.year}`);
   }
-  if (input.query && input.query.trim().length >= 2) {
+  if (input.query && input.query.trim().length >= 3) {
+    // SA-12: require ≥3 chars so single-letter wildcards can't be used as an
+    // enumeration oracle against the entire registry.
     const q = `%${input.query.trim()}%`;
     conds.push(
       or(
@@ -595,6 +597,9 @@ export async function searchPublicRegistry(input: RegistrySearchInput) {
   const whereClause = and(...conds);
 
   const totalRow = await dbi.select({ cnt: count() }).from(applications).where(whereClause);
+  // SA-12: piDepartment was leaking through the public registry. Returning
+  // the same projection as verifyIrb (institution-level only) so the two
+  // public surfaces don't disagree about what's exposable.
   const rows = await dbi
     .select({
       id: applications.id,
@@ -602,7 +607,6 @@ export async function searchPublicRegistry(input: RegistrySearchInput) {
       researchTitle: applications.researchTitle,
       principalInvestigator: applications.principalInvestigator,
       piInstitution: applications.piInstitution,
-      piDepartment: applications.piDepartment,
       researchType: applications.researchType,
       irbCategory: applications.irbCategory,
       approvedAt: applications.approvedAt,

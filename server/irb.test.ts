@@ -177,12 +177,13 @@ describe("verify.verifyIrb", () => {
     expect(result.found).toBe(false);
   });
 
-  it("accepts short IRB numbers and returns not found", async () => {
+  it("rejects too-short IRB numbers (SA-11: defends against enumeration probes)", async () => {
     const ctx = createUnauthContext();
     const caller = appRouter.createCaller(ctx);
-    // Min length removed - short strings are accepted but return not found
-    const result = await caller.verify.verifyIrb({ irbNumber: "AB" });
-    expect(result.found).toBe(false);
+    // Real IRB numbers are >= 6 chars (IRB-SA-YYYY-NNNNN form). The Zod
+    // schema now refuses shorter inputs so attackers can't probe with
+    // single-letter wildcards or null-byte tricks.
+    await expect(caller.verify.verifyIrb({ irbNumber: "AB" })).rejects.toThrow();
   });
 
   it("is accessible without authentication", async () => {
@@ -587,27 +588,31 @@ describe("application.calculateSampleSize", () => {
     ).rejects.toThrow();
   });
 
-  it("handles edge case confidence levels gracefully", async () => {
+  it("rejects out-of-range confidence levels (SA-33)", async () => {
     const ctx = createUserContext();
     const caller = appRouter.createCaller(ctx);
-    // The calculator uses a fallback Z-score for unusual confidence levels
-    const result = await caller.application.calculateSampleSize({
-      studyType: "cross_sectional",
-      confidenceLevel: 110,
-      marginOfError: 5,
-    });
-    expect(result.recommendedSize).toBeGreaterThan(0);
+    // 80–99 is the legitimate range. >99 now rejected at the Zod boundary
+    // so we don't fall through to a fallback Z-score that produces
+    // nonsensical sample sizes.
+    await expect(
+      caller.application.calculateSampleSize({
+        studyType: "cross_sectional",
+        confidenceLevel: 110,
+        marginOfError: 5,
+      })
+    ).rejects.toThrow();
   });
 
-  it("returns Infinity for zero margin of error", async () => {
+  it("rejects zero marginOfError (SA-33: would produce Infinity)", async () => {
     const ctx = createUserContext();
     const caller = appRouter.createCaller(ctx);
-    const result = await caller.application.calculateSampleSize({
-      studyType: "cross_sectional",
-      confidenceLevel: 95,
-      marginOfError: 0,
-    });
-    expect(result.recommendedSize).toBe(Infinity);
+    await expect(
+      caller.application.calculateSampleSize({
+        studyType: "cross_sectional",
+        confidenceLevel: 95,
+        marginOfError: 0,
+      })
+    ).rejects.toThrow();
   });
 });
 

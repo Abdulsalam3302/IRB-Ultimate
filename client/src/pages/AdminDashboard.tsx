@@ -650,7 +650,14 @@ function ApplicationsTab() {
                         </div>
                         <Button
                           className="w-full bg-emerald-600 hover:bg-emerald-700"
-                          onClick={() => directApproval.mutate({ applicationId: app.id, notes: decisionNotes })}
+                          onClick={() => directApproval.mutate({
+                            applicationId: app.id,
+                            notes: decisionNotes,
+                            // SA-10: typed-confirmation. The server requires
+                            // this exact string so a CSRF auto-submit can't
+                            // mint an IRB without knowing the target id.
+                            confirm: `APPROVE-${app.id}`,
+                          })}
                           disabled={directApproval.isPending}
                         >
                           {directApproval.isPending ? <Loader2 className="h-4 w-4 me-2 animate-spin" /> : <Award className="h-4 w-4 me-2" />}

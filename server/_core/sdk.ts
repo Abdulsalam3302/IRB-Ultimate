@@ -30,11 +30,14 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
-      );
+    // SA-42: never echo OAuth provider URLs to prod logs — Railway / Render
+    // log streams are often shared with support/ops who shouldn't see the
+    // upstream identity-provider endpoint. Dev still logs.
+    if (!ENV.isProduction) {
+      console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl || "(not configured)");
+    }
+    if (!ENV.oAuthServerUrl && ENV.isProduction) {
+      console.error("[OAuth] OAUTH_SERVER_URL is not configured.");
     }
   }
 

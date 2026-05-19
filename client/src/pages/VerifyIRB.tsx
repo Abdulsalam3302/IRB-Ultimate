@@ -203,58 +203,28 @@ export default function VerifyIRB() {
                       </div>
                     </div>
 
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("form.researchType")}</span>
-                        <p className="text-sm font-medium">{RESEARCH_TYPE_LABELS[result.researchType as ResearchType] || result.researchType}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("form.department")}</span>
-                        <p className="text-sm font-medium">{result.piDepartment}</p>
-                      </div>
+                    {/* SA-11: department, AI scores, and author roster are no
+                        longer returned over the public verify endpoint —
+                        institution-level facts only on the unauthenticated
+                        path. Authenticated viewers (applicant, admin,
+                        assigned reviewers) see the full record via the
+                        dashboard. */}
+                    <div>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("form.researchType")}</span>
+                      <p className="text-sm font-medium">{RESEARCH_TYPE_LABELS[result.researchType as ResearchType] || result.researchType}</p>
                     </div>
 
                     <Separator />
 
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("verify.approvedDate")}</span>
-                        </div>
-                        <p className="text-sm font-medium text-primary">
-                          {result.approvedAt ? new Date(result.approvedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A"}
-                        </p>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("verify.approvedDate")}</span>
                       </div>
-                      <div>
-                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("form.score")}</span>
-                        <div className="flex items-center gap-3 mt-1">
-                          <Badge variant="outline" className="text-xs">Stage 1: {result.stage1AiScore}/100</Badge>
-                          <Badge variant="outline" className="text-xs">Stage 2: {result.stage2AiScore}/100</Badge>
-                        </div>
-                      </div>
+                      <p className="text-sm font-medium text-primary">
+                        {result.approvedAt ? new Date(result.approvedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A"}
+                      </p>
                     </div>
-
-                    {result.authors && result.authors.length > 0 && (
-                      <>
-                        <Separator />
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("authors.title")}</span>
-                          </div>
-                          <div className="space-y-2">
-                            {result.authors.map((a: any) => (
-                              <div key={a.id} className="flex items-center gap-2 text-sm">
-                                <span className="font-medium">{a.name}</span>
-                                {a.institution && <span className="text-muted-foreground">— {a.institution}</span>}
-                                {a.country && <span className="text-muted-foreground">({a.country})</span>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </div>
 
                   {result.certificateUrl && (

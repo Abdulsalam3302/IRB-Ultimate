@@ -4,8 +4,29 @@ import superjson from "superjson";
 import { reserveLlmCall } from "./budget";
 import type { TrpcContext } from "./context";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  // SA-18 / anti-leak: in production we never echo back internal error
+  // messages — only TRPCErrors we throw with explicit codes are surfaced.
+  // Unexpected errors (Drizzle exceptions, undefined property reads, …)
+  // would otherwise leak stack-trace fragments and table/column names to
+  // any authenticated caller. Sentry (when configured) still gets the
+  // full error via the express-level errorHandler.
+  errorFormatter({ shape, error }) {
+    const isExplicitTrpcError = error.code !== "INTERNAL_SERVER_ERROR";
+    if (isExplicitTrpcError || !isProduction) {
+      return shape;
+    }
+    return {
+      ...shape,
+      message: "Internal server error",
+      data: shape.data
+        ? { ...shape.data, stack: undefined, path: shape.data.path }
+        : shape.data,
+    };
+  },
 });
 
 export const router = t.router;

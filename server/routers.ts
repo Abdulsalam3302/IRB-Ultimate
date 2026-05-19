@@ -35,6 +35,17 @@ async function loadApplicationForViewer(ctx: { user: { id: number; role: string 
   throw new TRPCError({ code: "FORBIDDEN" });
 }
 
+// SA-04: URL fields submitted by applicants must be limited to (a) the
+// server's own /uploads/ keys, or (b) https URLs. Plain http and
+// javascript:/data:/file: are all rejected. Length cap defeats stuffing
+// attacks against the PDF / HTML export renderers downstream.
+const uploadedUrl = z
+  .string()
+  .max(2048)
+  .regex(/^(\/uploads\/[A-Za-z0-9._/\-]+|https:\/\/[A-Za-z0-9.\-]+(?:\:\d+)?\/[A-Za-z0-9._%/?=&\-+#:]*)$/i, {
+    message: "URL must be a /uploads/ key or an https:// link",
+  });
+
 // Statuses where the applicant must not be able to silently re-write
 // answers (would otherwise corrupt the submission already in the
 // reviewer / admin pipeline, or undo a terminal decision).
@@ -118,7 +129,7 @@ const applicationRouter = router({
       declarationNbceCertification: z.boolean(),
       declarationConsentTruth: z.boolean(),
       declarationAcceptPolicy: z.boolean(),
-      nbceCertificateUrl: z.string().optional(),
+      nbceCertificateUrl: uploadedUrl.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -167,7 +178,7 @@ const applicationRouter = router({
       piDepartment: z.string(),
       fundingSource: z.string().optional(),
       estimatedDuration: z.string().optional(),
-      questionnaireFileUrl: z.string().optional(),
+      questionnaireFileUrl: uploadedUrl.optional(),
       retrospectiveDataSource: z.string().optional(),
       clinicalTrialDetails: z.string().optional(),
       supplementaryFilesJson: z.string().optional(),
@@ -296,7 +307,7 @@ const applicationRouter = router({
       benefitAssessment: z.string().optional(),
       confidentialityMeasures: z.string().optional(),
       conflictOfInterest: z.string().optional(),
-      rejectionFileUrl: z.string().optional(),
+      rejectionFileUrl: uploadedUrl.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -318,8 +329,18 @@ const applicationRouter = router({
   // AI auto-complete fields (aims for 100/100) — SA-03 budget-bound.
   aiAutoComplete: aiProcedure
     .input(z.object({
-      id: z.number(),
-      existingFields: z.record(z.string(), z.string()),
+      id: z.number().int().positive(),
+      // SA-35: bound the existingFields map so a hostile payload can't
+      // explode prompt token usage. 64 fields × 8 KB each ≈ 500 KB cap on
+      // the inbound side, which after JSON.stringify still fits inside our
+      // LLM token budget without breaching the AI budget reservation.
+      existingFields: z
+        .record(z.string().max(64), z.string().max(8000))
+        .refine(o => Object.keys(o).length <= 64, "too many fields")
+        .refine(
+          o => Object.values(o).reduce((a, v) => a + v.length, 0) <= 200_000,
+          "fields exceed total length cap",
+        ),
       stage: z.enum(["stage1", "stage2"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -456,14 +477,18 @@ const applicationRouter = router({
       return { fields: merged, review };
     }),
 
-  // AI resolve single field — SA-03 budget-bound.
+  // AI resolve single field — SA-03 budget-bound. SA-34: cap every text
+  // input so a 1 MB payload can't burn the LLM token budget on one call.
   aiResolveField: aiProcedure
     .input(z.object({
-      id: z.number(),
-      fieldName: z.string(),
-      currentValue: z.string(),
-      feedback: z.string(),
-      context: z.record(z.string(), z.string()).optional(),
+      id: z.number().int().positive(),
+      fieldName: z.string().max(128),
+      currentValue: z.string().max(20_000),
+      feedback: z.string().max(4000),
+      context: z
+        .record(z.string().max(64), z.string().max(8000))
+        .refine(o => Object.keys(o).length <= 32, "too many context fields")
+        .optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -490,30 +515,35 @@ const applicationRouter = router({
       return result;
     }),
 
-  // Sample size calculator
+  // Sample size calculator — SA-33: bound every numeric input so a hostile
+  // payload can't trigger Infinity/NaN math or pre-allocate huge buffers.
   calculateSampleSize: protectedProcedure
     .input(z.object({
-      studyType: z.string(),
-      confidenceLevel: z.number(),
-      marginOfError: z.number(),
-      populationSize: z.number().optional(),
-      expectedProportion: z.number().optional(),
-      effectSize: z.string().optional(),
-      power: z.number().optional(),
+      studyType: z.string().max(64),
+      confidenceLevel: z.number().int().min(80).max(99),
+      marginOfError: z.number().min(0.01).max(50),
+      populationSize: z.number().int().min(1).max(1_000_000_000).optional(),
+      expectedProportion: z.number().min(0.001).max(0.999).optional(),
+      effectSize: z.string().max(64).optional(),
+      power: z.number().min(0.5).max(0.999).optional(),
     }))
     .mutation(async ({ input }) => {
       return calculateSampleSize(input);
     }),
 
-  // AI review feedback
+  // AI review feedback — SA-32: require that the caller can actually view
+  // the application, otherwise any logged-in user could pollute another
+  // application's audit log. Also cap the comment so it can't be a 1 MB
+  // log-bomb (SA-34).
   submitAiFeedback: protectedProcedure
     .input(z.object({
-      applicationId: z.number(),
-      stage: z.number(),
-      rating: z.number().min(1).max(5),
-      comment: z.string().optional(),
+      applicationId: z.number().int().positive(),
+      stage: z.number().int().min(1).max(2),
+      rating: z.number().int().min(1).max(5),
+      comment: z.string().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      await loadApplicationForViewer(ctx, input.applicationId);
       await db.addAuditLog({
         applicationId: input.applicationId,
         userId: ctx.user.id,
@@ -539,7 +569,7 @@ const applicationRouter = router({
       benefitAssessment: z.string(),
       confidentialityMeasures: z.string(),
       conflictOfInterest: z.string(),
-      rejectionFileUrl: z.string().optional(),
+      rejectionFileUrl: uploadedUrl.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -822,18 +852,24 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // Fix All Comments — batch AI resolve for all flagged fields. SA-03 budget-bound.
+  // Fix All Comments — batch AI resolve for all flagged fields. SA-03
+  // budget-bound. SA-34: every string is capped so a hostile payload can't
+  // amplify token usage on a single call.
   fixAllComments: aiProcedure
     .input(z.object({
-      id: z.number(),
-      fields: z.record(z.string(), z.string()),
-      fieldScores: z.array(z.object({
-        field: z.string(),
-        score: z.number(),
-        color: z.string(),
-        feedback: z.string(),
-        suggestion: z.string(),
-      })),
+      id: z.number().int().positive(),
+      fields: z
+        .record(z.string().max(64), z.string().max(20_000))
+        .refine(o => Object.keys(o).length <= 64, "too many fields"),
+      fieldScores: z
+        .array(z.object({
+          field: z.string().max(128),
+          score: z.number().int().min(0).max(100),
+          color: z.string().max(32),
+          feedback: z.string().max(4000),
+          suggestion: z.string().max(8000),
+        }))
+        .max(64),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -991,21 +1027,18 @@ const authorsRouter = router({
 
 const verifyRouter = router({
   verifyIrb: publicProcedure
-    .input(z.object({ irbNumber: z.string() }))
+    .input(z.object({ irbNumber: z.string().min(6).max(64) }))
     .query(async ({ input }) => {
+      // SA-11: public verification returns only the minimum needed to confirm
+      // authenticity. Department, funding source, AI scores, applicant name,
+      // author list, and full duration are PII / business-sensitive and are
+      // NOT for unauthenticated callers — they're available to the applicant,
+      // admin, and assigned reviewers via authenticated endpoints.
       const app = await db.getApplicationByIrbNumber(input.irbNumber.trim().toUpperCase());
-      if (!app) {
-        return { found: false as const };
-      }
+      if (!app) return { found: false as const };
+      if (app.status === "hidden") return { found: false as const };
 
-      // Hidden applications cannot be verified
-      if (app.status === "hidden") {
-        return { found: false as const };
-      }
-
-      // Retracted applications show retraction info
       if (app.status === "retracted") {
-        const applicant = await db.getUserById(app.applicantId);
         return {
           found: true as const,
           retracted: true as const,
@@ -1015,19 +1048,15 @@ const verifyRouter = router({
           piInstitution: app.piInstitution,
           approvedAt: app.approvedAt,
           retractedAt: app.retractedAt,
-          retractionReason: app.retractionReason,
+          // Reason is shown — it's the whole point of the public retraction
+          // notice — but we cap its length to defeat exfil-via-reason vectors.
+          retractionReason: (app.retractionReason || "").slice(0, 2000),
           retractionCertificateUrl: app.retractionCertificateUrl,
-          applicantName: applicant?.name,
         };
       }
 
-      // Only approved applications show full details
-      if (app.status !== "approved") {
-        return { found: false as const };
-      }
+      if (app.status !== "approved") return { found: false as const };
 
-      const applicant = await db.getUserById(app.applicantId);
-      const authors = await db.getAuthorsByApplication(app.id);
       return {
         found: true as const,
         retracted: false as const,
@@ -1037,15 +1066,8 @@ const verifyRouter = router({
         irbCategory: app.irbCategory,
         principalInvestigator: app.principalInvestigator,
         piInstitution: app.piInstitution,
-        piDepartment: app.piDepartment,
-        fundingSource: app.fundingSource,
-        estimatedDuration: app.estimatedDuration,
         approvedAt: app.approvedAt,
-        stage1AiScore: app.stage1AiScore,
-        stage2AiScore: app.stage2AiScore,
         certificateUrl: app.certificateUrl,
-        applicantName: applicant?.name,
-        authors,
       };
     }),
 });
@@ -1252,10 +1274,21 @@ const adminRouter = router({
   // Direct approval - admin can approve any application at any stage
   directApproval: adminProcedure
     .input(z.object({
-      applicationId: z.number(),
-      notes: z.string().optional(),
+      applicationId: z.number().int().positive(),
+      notes: z.string().max(2000).optional(),
+      // SA-10: typed-confirmation defeats CSRF / mis-click. The client must
+      // echo back the exact string `APPROVE-<applicationId>`. A
+      // CSRF-induced auto-submit can't guess the right value, and a
+      // typo'd click can't accidentally mint an IRB number.
+      confirm: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      if (input.confirm !== `APPROVE-${input.applicationId}`) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Confirmation token missing or incorrect",
+        });
+      }
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (["approved", "permanently_rejected", "retracted", "hidden"].includes(app.status)) {

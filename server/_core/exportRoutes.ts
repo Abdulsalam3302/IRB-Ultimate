@@ -6,6 +6,9 @@ import {
   buildInspectorZip,
 } from "../applicationExport";
 import { renderCertificatePdf, renderCertificateHtml } from "../certificateV2";
+import { getResourceBySlug } from "@shared/resources";
+import { renderResourceDocx, renderResourceHtml } from "./resourceExport";
+import { chromium } from "playwright";
 
 /**
  * Streamed export endpoints. Two formats:
@@ -191,6 +194,71 @@ export function registerExportRoutes(app: Express) {
     } catch (err) {
       console.error("[Export Cert] failed:", err);
       if (!res.headersSent) res.status(500).type("text/plain").send("certificate generation failed");
+    }
+  });
+
+  // ─── Resource downloads: /api/export/resource/:slug.:format ─────────────
+  //
+  // Public, content-addressable downloads of the static resources from
+  // shared/resources.ts. Two formats supported per item: pdf, docx.
+  // No auth required — these are public learning materials. The general
+  // /api/* rate-limit still applies.
+  app.get("/api/export/resource/:fileName", async (req: Request, res: Response) => {
+    try {
+      const fileName = req.params.fileName || "";
+      const m = fileName.match(/^([a-z0-9-]{1,64})\.(pdf|docx)$/i);
+      if (!m) {
+        res.status(400).type("text/plain").send("expected <slug>.<pdf|docx>");
+        return;
+      }
+      const [, slug, fmt] = m;
+      const item = getResourceBySlug(slug);
+      if (!item) {
+        res.status(404).type("text/plain").send("resource not found");
+        return;
+      }
+      const safeBase = item.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
+
+      if (fmt.toLowerCase() === "docx") {
+        const buf = await renderResourceDocx(item);
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        );
+        res.setHeader("Content-Disposition", `attachment; filename="${safeBase}.docx"`);
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.send(buf);
+        return;
+      }
+
+      // PDF path: render bilingual HTML in a network-isolated Chromium page.
+      const html = renderResourceHtml(item);
+      const browser = await chromium.launch({ headless: true });
+      try {
+        const ctx = await browser.newContext();
+        const page = await ctx.newPage();
+        await page.route("**/*", route => {
+          const url = route.request().url();
+          if (url.startsWith("data:")) return route.continue();
+          return route.abort();
+        });
+        await page.setContent(html, { waitUntil: "load", timeout: 15000 });
+        const pdf = await page.pdf({
+          format: "A4",
+          printBackground: true,
+          margin: { top: "15mm", bottom: "15mm", left: "12mm", right: "12mm" },
+        });
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${safeBase}.pdf"`);
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.send(Buffer.from(pdf));
+      } finally {
+        await browser.close().catch(() => undefined);
+      }
+    } catch (err) {
+      console.error("[Export Resource] failed:", err);
+      if (!res.headersSent)
+        res.status(500).type("text/plain").send("resource generation failed");
     }
   });
 }

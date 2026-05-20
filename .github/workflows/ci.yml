@@ -120,6 +120,9 @@ jobs:
           JWT_SECRET: ci-test-secret-not-for-production-use
           VITE_APP_ID: ci
           OWNER_OPEN_ID: dev-owner-001
+          # SA-17: dev-login is now opt-in. CI needs the explicit flag so
+          # the e2e sweep can mint sessions via /api/dev/login.
+          DEV_LOGIN_ENABLED: "1"
         run: |
           pnpm dev > /tmp/dev.log 2>&1 &
           for i in {1..30}; do

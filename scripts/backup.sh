@@ -64,12 +64,14 @@ parse_url() {
   fi
 }
 
-mapfile -t URL_PARTS < <(parse_url)
-DB_HOST="${URL_PARTS[0]}"
-DB_PORT="${URL_PARTS[1]}"
-DB_USER="${URL_PARTS[2]}"
-DB_PASS="${URL_PARTS[3]}"
-DB_NAME="${URL_PARTS[4]}"
+# Read parse_url output line-by-line (POSIX / bash 3.2 compatible; macOS
+# ships bash 3.2 which has no `mapfile`).
+PARSED=$(parse_url)
+DB_HOST=$(printf '%s\n' "$PARSED" | sed -n '1p')
+DB_PORT=$(printf '%s\n' "$PARSED" | sed -n '2p')
+DB_USER=$(printf '%s\n' "$PARSED" | sed -n '3p')
+DB_PASS=$(printf '%s\n' "$PARSED" | sed -n '4p')
+DB_NAME=$(printf '%s\n' "$PARSED" | sed -n '5p')
 
 [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] || die "DATABASE_URL parsed empty (host=$DB_HOST db=$DB_NAME)" 1
 command -v mysqldump >/dev/null 2>&1 || die "mysqldump not found in PATH" 1

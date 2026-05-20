@@ -34,9 +34,11 @@ parse_db() {
     console.log([u.hostname, u.port||"3306", decodeURIComponent(u.username||""), decodeURIComponent(u.password||""), decodeURIComponent((u.pathname||"/").slice(1))].join("\n"));
   '
 }
-mapfile -t URL_PARTS < <(parse_db)
-DB_HOST="${URL_PARTS[0]}"; DB_PORT="${URL_PARTS[1]}"
-DB_USER="${URL_PARTS[2]}"; DB_PASS="${URL_PARTS[3]}"
+PARSED=$(parse_db)
+DB_HOST=$(printf '%s\n' "$PARSED" | sed -n '1p')
+DB_PORT=$(printf '%s\n' "$PARSED" | sed -n '2p')
+DB_USER=$(printf '%s\n' "$PARSED" | sed -n '3p')
+DB_PASS=$(printf '%s\n' "$PARSED" | sed -n '4p')
 DB_NAME="${URL_PARTS[4]}"
 
 [ -n "$DB_NAME" ] || die "DATABASE_URL has no database"

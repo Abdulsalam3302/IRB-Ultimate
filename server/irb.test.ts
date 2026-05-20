@@ -98,9 +98,13 @@ describe("application.saveStage1 input validation", () => {
   it("accepts any length research title (no min length)", async () => {
     const ctx = createUserContext();
     const caller = appRouter.createCaller(ctx);
-    // Character limits removed - short titles pass validation
+    // Create a draft first so this test is independent of pre-existing
+    // DB fixtures (Phase 5 reset wiped applications). The test still
+    // exercises the original assertion — that short titles aren't
+    // rejected by the input schema.
+    const created = await caller.application.create();
     const result = await caller.application.saveStage1({
-      id: 1,
+      id: created.id,
       researchType: "clinical_trial",
       irbCategory: "full_board",
       researchTitle: "ab",
@@ -294,9 +298,10 @@ describe("authors.add", () => {
   it("accepts short name (no min length)", async () => {
     const ctx = createUserContext();
     const caller = appRouter.createCaller(ctx);
-    // Min length removed - short names pass validation
+    // Self-contained fixture (Phase 5 reset wiped seed data).
+    const created = await caller.application.create();
     const result = await caller.authors.add({
-      applicationId: 1,
+      applicationId: created.id,
       name: "A",
       email: "author@uni.edu.sa",
     });

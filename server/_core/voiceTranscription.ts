@@ -26,6 +26,7 @@
  * ```
  */
 import { ENV } from "./env";
+import { assertSafeEgress } from "./ssrfGuard";
 
 export type TranscribeOptions = {
   audioUrl: string; // URL to the audio file (e.g., S3 URL)
@@ -94,6 +95,18 @@ export async function transcribeAudio(
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
+      // SA-38: validate the audio URL before any network egress. Rejects
+      // private IPs, link-local (cloud-metadata at 169.254.169.254),
+      // loopback, and any host not on ALLOWED_EGRESS_HOSTS when set.
+      try {
+        await assertSafeEgress(options.audioUrl);
+      } catch (e) {
+        return {
+          error: "Audio URL rejected by egress policy",
+          code: "INVALID_FORMAT",
+          details: String((e as Error).message),
+        };
+      }
       const response = await fetch(options.audioUrl);
       if (!response.ok) {
         return {

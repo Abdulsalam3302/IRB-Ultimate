@@ -10,41 +10,50 @@ import {
   FileCheck, AlertTriangle, Lightbulb, ChevronRight, ExternalLink, ArrowLeft
 } from "lucide-react";
 
-const templates = [
+// Visual metadata for each downloadable template. The canonical content
+// (sections + bilingual body) lives in shared/resources.ts and is served
+// via /api/export/resource/<slug>.<pdf|docx>. Adding a new entry here
+// also needs a matching slug in shared/resources.ts.
+const templates: Array<{
+  slug: string;
+  titleEn: string; titleAr: string;
+  descEn: string; descAr: string;
+  icon: typeof FileText; color: string;
+}> = [
   {
+    slug: "irb-application-form",
     titleEn: "IRB Application Form Template", titleAr: "نموذج طلب IRB",
     descEn: "Complete application form template with all sections required for IRB submission, including PI info, research classification, and ethics declaration.",
     descAr: "نموذج طلب كامل يتضمن جميع الأقسام المطلوبة لتقديم IRB، بما في ذلك معلومات الباحث الرئيسي وتصنيف البحث وإعلان الأخلاقيات.",
-    format: "PDF", icon: FileText, color: "text-blue-600 bg-blue-100",
-    url: "https://files.manuscdn.com/user_upload_by_module/session_file/91022535/oFqkedmNzBSspIUq.pdf",
+    icon: FileText, color: "text-blue-600 bg-blue-100",
   },
   {
+    slug: "informed-consent",
     titleEn: "Informed Consent Form Template", titleAr: "نموذج الموافقة المستنيرة",
     descEn: "Template for creating participant informed consent forms compliant with Saudi regulations and NBCE guidelines.",
     descAr: "نموذج لإنشاء نماذج الموافقة المستنيرة للمشاركين متوافقة مع اللوائح السعودية وإرشادات NBCE.",
-    format: "PDF", icon: FileCheck, color: "text-emerald-600 bg-emerald-100",
-    url: "https://files.manuscdn.com/user_upload_by_module/session_file/91022535/GWFWSimZGnrHLObG.pdf",
+    icon: FileCheck, color: "text-emerald-600 bg-emerald-100",
   },
   {
+    slug: "research-protocol",
     titleEn: "Research Protocol Template", titleAr: "نموذج بروتوكول البحث",
     descEn: "Structured template for writing your research protocol, covering objectives, methodology, ethics, and data management.",
     descAr: "نموذج منظم لكتابة بروتوكول البحث الخاص بك، يغطي الأهداف والمنهجية والأخلاقيات وإدارة البيانات.",
-    format: "PDF", icon: FileText, color: "text-indigo-600 bg-indigo-100",
-    url: "https://files.manuscdn.com/user_upload_by_module/session_file/91022535/IMUwgQhpFNjHNICc.pdf",
+    icon: FileText, color: "text-indigo-600 bg-indigo-100",
   },
   {
+    slug: "nbce-ethics-summary",
     titleEn: "NBCE Ethics Guidelines Summary", titleAr: "ملخص إرشادات NBCE الأخلاقية",
     descEn: "Key principles and requirements for ethical research in Saudi Arabia, including informed consent, privacy, and Vision 2030 alignment.",
     descAr: "المبادئ والمتطلبات الرئيسية للبحث الأخلاقي في المملكة العربية السعودية، بما في ذلك الموافقة المستنيرة والخصوصية والتوافق مع رؤية 2030.",
-    format: "PDF", icon: AlertTriangle, color: "text-amber-600 bg-amber-100",
-    url: "https://files.manuscdn.com/user_upload_by_module/session_file/91022535/dKfCQGMSiyLBUfHT.pdf",
+    icon: AlertTriangle, color: "text-amber-600 bg-amber-100",
   },
   {
+    slug: "data-collection-instrument",
     titleEn: "Data Collection Instrument Template", titleAr: "نموذج أداة جمع البيانات",
     descEn: "Template for designing questionnaires, surveys, and data collection tools with best practices and example formats.",
     descAr: "نموذج لتصميم الاستبيانات والمسوحات وأدوات جمع البيانات مع أفضل الممارسات وأمثلة التنسيقات.",
-    format: "PDF", icon: ClipboardList, color: "text-purple-600 bg-purple-100",
-    url: "https://files.manuscdn.com/user_upload_by_module/session_file/91022535/KLNwHOQmezyaWCsP.pdf",
+    icon: ClipboardList, color: "text-purple-600 bg-purple-100",
   },
 ];
 
@@ -143,15 +152,25 @@ export default function Resources() {
                     <div className={`h-9 w-9 rounded-lg ${tpl.color} flex items-center justify-center`}>
                       <tpl.icon className="h-4 w-4" />
                     </div>
-                    <Badge variant="secondary" className="text-xs">{tpl.format}</Badge>
+                    <Badge variant="secondary" className="text-xs">PDF / DOCX</Badge>
                   </div>
                   <h3 className="font-semibold text-sm mb-1">{isAr ? tpl.titleAr : tpl.titleEn}</h3>
                   <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{isAr ? tpl.descAr : tpl.descEn}</p>
-                  <Button variant="outline" size="sm" className="w-full" asChild>
-                    <a href={tpl.url} download target="_blank" rel="noopener noreferrer">
-                      <Download className="h-3 w-3 me-1" /> {t("resources.download")}
-                    </a>
-                  </Button>
+                  {/* Both downloads are content-addressable by slug and rendered
+                      server-side from shared/resources.ts. No external CDN
+                      dependency — the platform owns its canonical content. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/api/export/resource/${tpl.slug}.pdf`} target="_blank" rel="noopener noreferrer">
+                        <Download className="h-3 w-3 me-1" /> PDF
+                      </a>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/api/export/resource/${tpl.slug}.docx`} target="_blank" rel="noopener noreferrer">
+                        <Download className="h-3 w-3 me-1" /> DOCX
+                      </a>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

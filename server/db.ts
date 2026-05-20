@@ -163,6 +163,27 @@ export async function updateApplication(id: number, data: Partial<InsertApplicat
   await db.update(applications).set(data).where(eq(applications.id, id));
 }
 
+/**
+ * SA-08: atomic resubmit. Updates application status + submittedAt and
+ * (when isResubmission) increments submissionCount in a single SQL
+ * statement, so two concurrent submit calls can't both read 1 and both
+ * write 2. Drizzle's `sql` template forwards the column-level
+ * `submission_count = submission_count + 1` expression to MySQL.
+ */
+export async function applyResubmission(
+  id: number,
+  data: Partial<InsertApplication>,
+  isResubmission: boolean,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const set: Record<string, unknown> = { ...data };
+  if (isResubmission) {
+    set.submissionCount = sql`${applications.submissionCount} + 1`;
+  }
+  await db.update(applications).set(set as any).where(eq(applications.id, id));
+}
+
 export async function generateIrbNumber(): Promise<string> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

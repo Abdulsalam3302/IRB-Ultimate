@@ -24,8 +24,15 @@ SET @owner_open_id := 'dev-owner-001';  -- must match OWNER_OPEN_ID env var
 -- ────────────────────────────────────────────────────────────────────────
 
 -- Refuse to proceed if the owner row doesn't exist — otherwise we'd nuke
--- every user including ourselves.
-SET @owner_exists := (SELECT COUNT(*) FROM users WHERE openId = @owner_open_id);
+-- every user including ourselves. CONVERT(... USING utf8mb4) makes the
+-- @owner_open_id session var match the users.openId column collation
+-- regardless of the DB's default — MySQL 8 ships utf8mb4_0900_ai_ci by
+-- default and our schema uses utf8mb4_unicode_ci, which would otherwise
+-- raise "Illegal mix of collations" on the equality.
+SET @owner_exists := (
+  SELECT COUNT(*) FROM users
+  WHERE openId = CONVERT(@owner_open_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+);
 SET @msg := CONCAT('Refusing to reset: no user row with openId=', @owner_open_id);
 SELECT IF(@owner_exists > 0, 'OK: owner row found, proceeding', @msg) AS preflight;
 
@@ -36,7 +43,11 @@ SELECT
        ELSE 1
   END AS guard;
 
-SET @owner_id := (SELECT id FROM users WHERE openId = @owner_open_id LIMIT 1);
+SET @owner_id := (
+  SELECT id FROM users
+  WHERE openId = CONVERT(@owner_open_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+  LIMIT 1
+);
 
 START TRANSACTION;
 SET FOREIGN_KEY_CHECKS = 0;

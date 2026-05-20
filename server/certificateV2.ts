@@ -241,8 +241,21 @@ export async function renderCertificatePdf(data: CertData): Promise<Buffer> {
   const browser = await getBrowser();
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
+  // SA-37: block ALL network egress from the PDF-rendering page except
+  // inline data: URIs. Today the certificate template is self-contained
+  // (inline SVG logo, no <img src=…>) but a future template tweak could
+  // accidentally leak data via image / font fetch to an attacker-
+  // controlled host (e.g. ${piEmail.split('@')[1]}). Closing the route
+  // here makes that impossible by construction.
+  await page.route("**/*", async route => {
+    const url = route.request().url();
+    if (url.startsWith("data:")) return route.continue();
+    return route.abort();
+  });
   try {
-    await page.setContent(html, { waitUntil: "networkidle", timeout: 15000 });
+    // setContent with networkidle would wait forever now that we abort
+    // every external request. "load" fires once the inline HTML parses.
+    await page.setContent(html, { waitUntil: "load", timeout: 15000 });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,

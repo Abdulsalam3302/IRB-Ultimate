@@ -35,16 +35,36 @@ async function loadApplicationForViewer(ctx: { user: { id: number; role: string 
   throw new TRPCError({ code: "FORBIDDEN" });
 }
 
-// SA-04: URL fields submitted by applicants must be limited to (a) the
-// server's own /uploads/ keys, or (b) https URLs. Plain http and
-// javascript:/data:/file: are all rejected. Length cap defeats stuffing
-// attacks against the PDF / HTML export renderers downstream.
+// SA-04: URL fields submitted by applicants must be limited to safe shapes.
+// We accept:
+//   - server-relative /uploads/... or /api/... keys
+//   - absolute http:// or https:// links (http kept for dev/localhost; in
+//     prod the CSP + httpOnly cookies block any active-content abuse)
+// Reject javascript:, data:, file:, vbscript:, blob:, plus control chars
+// (newlines / NULs) that header-inject. URL parser does the heavy lifting
+// so we don't have to maintain a fragile regex.
 const uploadedUrl = z
   .string()
   .max(2048)
-  .regex(/^(\/uploads\/[A-Za-z0-9._/\-]+|https:\/\/[A-Za-z0-9.\-]+(?:\:\d+)?\/[A-Za-z0-9._%/?=&\-+#:]*)$/i, {
-    message: "URL must be a /uploads/ key or an https:// link",
-  });
+  .refine(s => {
+    if (!s) return true;
+    // Reject control chars (NUL / tab / newlines / DEL) — used for
+    // header-injection and log poisoning. Codepoint scan instead of a
+    // regex so the source file stays ASCII-clean.
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c < 0x20 || c === 0x7f) return false;
+    }
+    // Server-relative paths.
+    if (s.startsWith("/uploads/") || s.startsWith("/api/")) return true;
+    // Anything else must parse as a URL with an http(s) protocol + host.
+    try {
+      const u = new URL(s);
+      return (u.protocol === "http:" || u.protocol === "https:") && !!u.host;
+    } catch {
+      return false;
+    }
+  }, { message: "URL must be a /uploads/ path or http(s):// link" });
 
 // Statuses where the applicant must not be able to silently re-write
 // answers (would otherwise corrupt the submission already in the
@@ -697,18 +717,17 @@ const applicationRouter = router({
 
       // If we got 5 reviewers, normal flow. Otherwise queue for admin.
       const nextStatus = selected.length >= 5 ? "under_review" : "pending_admin";
-      // Bump the resubmission counter. `submissionCount` defaults to 1 in
-      // the schema, so the very first submission stays at 1 and only
-      // genuine resubmissions advance the counter. The
-      // `permanently_rejected` / "maximum resubmissions reached" gates
-      // elsewhere in the codebase rely on this being incremented.
-      const nextSubmissionCount = Math.max(1, (app.submissionCount || 1));
+      // SA-08: atomic counter bump. `applyResubmission` uses
+      // `submissionCount = submissionCount + 1` server-side so two
+      // concurrent submits can't both read N and both write N+1. First
+      // submission keeps the schema-default counter at 1; only genuine
+      // resubmissions advance it.
       const isResubmission = app.submittedAt != null;
-      await db.updateApplication(input.id, {
-        status: nextStatus,
-        submittedAt: new Date(),
-        ...(isResubmission ? { submissionCount: nextSubmissionCount + 1 } : {}),
-      });
+      await db.applyResubmission(
+        input.id,
+        { status: nextStatus, submittedAt: new Date() },
+        isResubmission,
+      );
 
       // Tell the admin if we couldn't fully assign. Best-effort —
       // don't fail submission on notification failure.

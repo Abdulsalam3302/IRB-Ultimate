@@ -555,6 +555,13 @@ const applicationRouter = router({
   // the application, otherwise any logged-in user could pollute another
   // application's audit log. Also cap the comment so it can't be a 1 MB
   // log-bomb (SA-34).
+
+  // Per-user LLM call budget for the dashboard footer. Lets the SPA show
+  // "42/60 AI calls remaining today" so users know what's left before
+  // the next UTC midnight rollover. Read-only, no budget consumed.
+  aiBudget: protectedProcedure.query(({ ctx }) => {
+    return inspectLlmBudget(ctx.user.id);
+  }),
   submitAiFeedback: protectedProcedure
     .input(z.object({
       applicationId: z.number().int().positive(),

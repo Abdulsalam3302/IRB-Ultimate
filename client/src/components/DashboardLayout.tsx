@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Sparkles, Users } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -101,6 +102,44 @@ type DashboardLayoutContentProps = {
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
 };
+
+/**
+ * Compact AI-usage indicator pinned above the sidebar user menu.
+ * Calls the backend `aiBudget` query (which is read-only and does NOT
+ * consume a call) and shows used/limit for the user's daily quota.
+ * Hidden when the sidebar is collapsed to icons.
+ *
+ * The badge surfaces three facts at a glance:
+ *  - that AI is wired and live (this used to be "neutral defaults" mode)
+ *  - the per-user daily cap (default 60 — set by LLM_USER_DAILY_LIMIT)
+ *  - how many calls remain before the next UTC midnight rollover
+ */
+function AiBudgetBadge() {
+  const { data } = trpc.application.aiBudget.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  if (!data) return null;
+  const used = data.userUsed ?? 0;
+  const limit = data.userLimit ?? 60;
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  // Yellow at >70%, red at >90%
+  const barColor = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
+  return (
+    <div className="mb-3 px-2 py-2 rounded-lg border bg-card/40 text-xs group-data-[collapsible=icon]:hidden">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <Sparkles className="h-3 w-3 text-primary" />
+          AI calls today
+        </span>
+        <span className="font-medium tabular-nums">{used}/{limit}</span>
+      </div>
+      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+        <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
 function DashboardLayoutContent({
   children,
@@ -202,6 +241,7 @@ function DashboardLayoutContent({
           </SidebarContent>
 
           <SidebarFooter className="p-3">
+            <AiBudgetBadge />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">

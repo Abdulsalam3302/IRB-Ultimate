@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>IRB Ultimate — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Kufi+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+          display: ['"Inter Tight"', 'Inter', 'ui-sans-serif'],
+          mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+          arabic: ['"Noto Kufi Arabic"', 'system-ui'],
+        },
+        colors: {
+          forest: {
+            DEFAULT: '#064e3b',
+            50:'#f0f7f3', 100:'#dbece2', 200:'#b6d8c4', 300:'#88bb9f', 400:'#5b9a7a',
+            500:'#3a7d5d', 600:'#266149', 700:'#1a4d3a', 800:'#0e3a2b', 900:'#064e3b', 950:'#03281e'
+          },
+          jade: {
+            DEFAULT: '#10b981', dark:'#059669', 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 300:'#6ee7b7',
+            400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857', 800:'#065f46', 900:'#064e3b'
+          },
+          cream: { DEFAULT:'#ffffff', 50:'#fafaf9', 100:'#ffffff', 200:'#f4f4f2', 300:'#e8e6e1', 400:'#d4d2cc' },
+          ink: { DEFAULT:'#1a1f1c', soft:'#3a4540', muted:'#6b7670', faint:'#9aa39e' },
+        },
+        boxShadow: {
+          'hair': '0 0 0 1px rgba(6,78,59,0.08)',
+          'soft': '0 1px 2px rgba(6,46,35,0.04), 0 8px 24px -12px rgba(6,46,35,0.12)',
+          'lift': '0 1px 2px rgba(6,46,35,0.06), 0 24px 48px -24px rgba(6,46,35,0.25)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { background: #ffffff; }
+  body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .font-display { font-family: 'Inter Tight', Inter, sans-serif; letter-spacing: -0.02em; }
+  .font-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum','ss01'; }
+
+  /* The "stamped tick" motif — a tilted square outline with a jade check.
+     Used both as the logo and as a decorative chip throughout. */
+  .stamp { display:inline-flex; align-items:center; justify-content:center; }
+  .stamp-square { transform: rotate(-8deg); }
+
+  /* Hairline rule helper */
+  .hair { background-image: linear-gradient(to right, rgba(6,78,59,0.12) 0, rgba(6,78,59,0.12) 1px, transparent 1px, transparent 6px); background-size: 6px 1px; background-repeat: repeat-x; }
+
+  /* Subtle grain — used sparingly on hero & footer surfaces */
+  .grain { position:relative; }
+  .grain::after { content:''; position:absolute; inset:0; pointer-events:none; opacity:.4; mix-blend-mode:multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+
+  /* Placeholder image surfaces — striped, monospace caption */
+  .placeholder { background:
+      repeating-linear-gradient(135deg, rgba(6,78,59,.07) 0 8px, transparent 8px 16px),
+      linear-gradient(180deg, #f3f1ea, #e8e4d8);
+    color: #266149;
+  }
+
+  /* Glass nav surface */
+  .glass { background: rgba(255,255,255,0.78); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); }
+
+  /* Focus ring tokens */
+  .ring-focus:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; }
+
+  /* Tilted stamp seal — used on certificate / approval moments */
+  .seal {
+    border: 2px solid #064e3b; padding: 8px 12px; border-radius: 2px;
+    transform: rotate(-6deg); color:#064e3b; font-family:'IBM Plex Mono', monospace;
+    letter-spacing: 0.18em; font-size: 11px; text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="pages/_shared.jsx"></script>
+<script type="text/babel" src="pages/system.jsx"></script>
+<script type="text/babel" src="pages/home.jsx"></script>
+<script type="text/babel" src="pages/dashboard.jsx"></script>
+<script type="text/babel" src="pages/stage1.jsx"></script>
+<script type="text/babel" src="pages/wizard.jsx"></script>
+<script type="text/babel" src="pages/resources.jsx"></script>
+<script type="text/babel" src="pages/arabic.jsx"></script>
+<script type="text/babel" src="main.jsx"></script>
+</body>
+</html>

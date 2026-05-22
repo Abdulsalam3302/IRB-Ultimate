@@ -41,6 +41,29 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: "Inter", "Noto Kufi Arabic", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-forest-50: #f0f7f3;
+  --color-forest-100: #dbece2;
+  --color-forest-200: #b6d8c4;
+  --color-forest-700: #1a4d3a;
+  --color-forest-800: #0e3a2b;
+  --color-forest-900: #064e3b;
+  --color-forest-950: #03281e;
+  --color-jade-50: #ecfdf5;
+  --color-jade-400: #34d399;
+  --color-jade-500: #10b981;
+  --color-jade-600: #059669;
+  --color-jade-700: #047857;
+  --color-cream-50: #fafaf9;
+  --color-cream-100: #ffffff;
+  --color-cream-200: #f4f4f2;
+  --color-ink: #1a1f1c;
+  --color-ink-soft: #3a4540;
+  --color-ink-muted: #6b7670;
+  --color-ink-faint: #9aa39e;
+  --shadow-soft: 0 1px 2px rgba(6, 46, 35, 0.04), 0 8px 24px -12px rgba(6, 46, 35, 0.12);
+  --shadow-lift: 0 1px 2px rgba(6, 46, 35, 0.06), 0 24px 48px -24px rgba(6, 46, 35, 0.25);
   --color-emerald-50: oklch(0.979 0.021 166.113);
   --color-emerald-100: oklch(0.950 0.052 163.051);
   --color-emerald-200: oklch(0.905 0.093 164.15);
@@ -398,4 +421,74 @@ input:focus, textarea:focus, select:focus {
 }
 .animate-score-fill {
   animation: score-fill 1.2s ease-out forwards;
+}
+
+/* ─── IRB Ultimate design system (v0.2) ─── */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "ss01";
+}
+
+.hair {
+  background-image: linear-gradient(
+    to right,
+    rgba(6, 78, 59, 0.12) 0,
+    rgba(6, 78, 59, 0.12) 1px,
+    transparent 1px,
+    transparent 6px
+  );
+  background-size: 6px 1px;
+  background-repeat: repeat-x;
+}
+
+.grain {
+  position: relative;
+}
+
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.seal {
+  display: inline-block;
+  border: 2px solid #064e3b;
+  padding: 8px 12px;
+  border-radius: 2px;
+  transform: rotate(-6deg);
+  color: #064e3b;
+  font-family: var(--font-mono);
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+.shadow-lift {
+  box-shadow: var(--shadow-lift);
+}
+
+.irb-card {
+  @apply bg-white rounded-2xl shadow-soft ring-1 ring-forest-900/6;
+}
+
+.dark .irb-card {
+  @apply bg-card ring-border/60;
 }

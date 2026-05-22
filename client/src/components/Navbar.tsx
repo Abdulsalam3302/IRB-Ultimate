@@ -6,9 +6,8 @@ import { useT } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
+import { Logo } from "@/components/design/Logo";
 import { ArrowLeft, ArrowRight, ChevronRight, Search, Sun, Moon } from "lucide-react";
-
-import { LOGO_DATA_URI } from "@shared/branding";
 
 interface NavbarProps {
   showBack?: boolean;
@@ -28,11 +27,10 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
   return (
     <>
       <DemoBanner />
-      <nav className="sticky top-0 z-50 glass border-b border-border/50">
-      <div className="container flex h-16 items-center justify-between">
-        <div className="flex items-center gap-3 cursor-pointer transition-apple" onClick={() => setLocation("/")}>
-          <img src={LOGO_DATA_URI} alt={t("footer.brand")} className="h-9 w-9 rounded-lg object-contain" />
-          <span className="font-bold text-lg tracking-tight">{t("footer.brand")}</span>
+      <nav className="sticky top-0 z-50 glass border-b border-forest-900/10">
+      <div className="container flex h-16 items-center justify-between gap-4">
+        <div className="cursor-pointer transition-apple shrink-0" onClick={() => setLocation("/")}>
+          <Logo size={32} />
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
           {toggleTheme && (
@@ -58,11 +56,11 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
                 <Search className="h-3.5 w-3.5 me-1" /> {t("nav.verify")}
               </Button>
               {isAuthenticated ? (
-                <Button size="sm" className="btn-apple shadow-sm" onClick={() => setLocation("/dashboard")}>
+                <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-sm" onClick={() => setLocation("/dashboard")}>
                   {t("nav.dashboard")} <ForwardArrow className="h-4 w-4 ms-1" />
                 </Button>
               ) : (
-                <Button size="sm" className="btn-apple shadow-sm" onClick={() => { window.location.href = getLoginUrl(); }}>
+                <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-sm" onClick={() => { window.location.href = getLoginUrl(); }}>
                   {t("nav.login")} <ForwardArrow className="h-4 w-4 ms-1" />
                 </Button>
               )}

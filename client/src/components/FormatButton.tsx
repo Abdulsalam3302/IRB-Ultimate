@@ -20,10 +20,12 @@ import { useT } from "@/contexts/LanguageContext";
 type Props = {
   context: FormatContext;
   compact?: boolean;
+  /** Full-width jade CTA for resource card wizard panel */
+  wizardCta?: boolean;
 };
 
 /** Navigates to the Format wizard — only shows templates relevant to context. */
-export function FormatButton({ context, compact }: Props) {
+export function FormatButton({ context, compact, wizardCta }: Props) {
   const [, setLocation] = useLocation();
   const { t, lang } = useT();
   const isAr = lang === "ar";
@@ -37,13 +39,17 @@ export function FormatButton({ context, compact }: Props) {
   if (slugs.length === 1) {
     return (
       <Button
-        variant={compact ? "outline" : "default"}
-        size="sm"
-        className="gap-1.5"
+        variant={wizardCta ? "default" : compact ? "outline" : "default"}
+        size={wizardCta ? "default" : "sm"}
+        className={
+          wizardCta
+            ? "w-full h-9 gap-1.5 bg-jade-500 hover:bg-jade-600 text-white font-semibold text-[12px]"
+            : "gap-1.5"
+        }
         onClick={() => go(slugs[0]!)}
       >
         <Sparkles className="h-3.5 w-3.5" />
-        {t("format.button")}
+        {wizardCta ? (isAr ? "تنسيق · فتح المعالج" : "Format · open wizard") : t("format.button")}
       </Button>
     );
   }

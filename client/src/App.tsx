@@ -26,6 +26,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Statistics = lazy(() => import("./pages/Statistics"));
 const VersionHistory = lazy(() => import("./pages/VersionHistory"));
 const Registry = lazy(() => import("./pages/Registry"));
+const FormatWizard = lazy(() => import("./pages/FormatWizard"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function PageFallback() {
@@ -56,6 +57,7 @@ function Router() {
         <Route path={"/profile"} component={Profile} />
         <Route path={"/statistics"} component={Statistics} />
         <Route path={"/registry"} component={Registry} />
+        <Route path={"/format/:slug"} component={FormatWizard} />
         <Route path={"/application/:id/versions"} component={VersionHistory} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />

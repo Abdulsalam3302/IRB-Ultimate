@@ -245,12 +245,10 @@ export default function Home() {
         <div className="container text-center">
           <div className="max-w-2xl mx-auto">
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-5">
-              {isRtl ? "هل أنت مستعد لتقديم بحثك؟" : "Ready to Submit Your Research?"}
+              {t("hero.cta.title")}
             </h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto mb-10 leading-relaxed">
-              {isRtl
-                ? "انضم إلى الباحثين في جميع أنحاء المملكة العربية السعودية الذين يسرعون موافقات IRB من خلال منصتنا."
-                : "Join researchers across Saudi Arabia who are accelerating their IRB approvals with our AI-powered platform."}
+              {t("hero.cta.desc")}
             </p>
             <Button size="lg" className="btn-apple text-base px-10 h-13 shadow-lg gradient-accent text-white border-0" onClick={handleStartApplication}>
               {t("hero.apply")} <ArrowIcon className="ms-2 h-5 w-5" />
@@ -275,19 +273,34 @@ export default function Home() {
                 <MessageSquare className="h-3 w-3" /> {t("nav.support")}
               </button>
               <button onClick={() => setLocation("/statistics")} className="hover:text-foreground transition-apple flex items-center gap-1">
-                <BarChart3 className="h-3 w-3" /> {isRtl ? "إحصائيات" : "Statistics"}
+                <BarChart3 className="h-3 w-3" /> {t("nav.statistics")}
               </button>
             </div>
             <div className="text-center space-y-2">
               <p className="text-sm text-muted-foreground flex items-center justify-center gap-1.5">
                 {t("footer.madeWith")} <Heart className="h-3.5 w-3.5 text-red-500 fill-red-500" />
               </p>
-              <p className="text-xs text-muted-foreground">
-                <a href="https://www.ahss-sa.org/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">{t("footer.org")}</a> — {t("footer.approved")}{" "}
-                <a href="https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">Dr. Abdulsalam Aleid</a>
+              <p className="text-xs text-muted-foreground max-w-lg mx-auto">
+                {t("footer.copyright")}
               </p>
-              <p className="text-xs text-muted-foreground inline-flex items-center justify-center gap-1.5">
+              <p className="text-xs text-muted-foreground">
+                <a href="https://www.ahss-sa.org/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">{t("footer.org")}</a> — {t("footer.approved")}
+              </p>
+              <p className="text-xs text-muted-foreground inline-flex items-center justify-center gap-1.5 flex-wrap">
                 <MessageSquare className="h-3 w-3" />
+                <span>{t("footer.partnership")}:</span>
+                <a
+                  href="https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 hover:text-foreground underline underline-offset-2 transition-apple"
+                  aria-label={t("footer.partnershipCta")}
+                >
+                  <Linkedin className="h-3 w-3" />
+                  {t("footer.partnershipCta")}
+                </a>
+              </p>
+              <p className="text-xs text-muted-foreground inline-flex items-center justify-center gap-1.5 flex-wrap">
                 <span>{t("footer.feedback")}:</span>
                 <a
                   href="https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142/"
@@ -301,7 +314,8 @@ export default function Home() {
                 </a>
               </p>
               <p className="text-xs text-muted-foreground">
-                &copy; {new Date().getFullYear()} <a href="https://ncbe.kacst.edu.sa" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">{t("footer.nbce")}</a>
+                &copy; {new Date().getFullYear()} {t("footer.rights")}{" "}
+                <a href="https://ncbe.kacst.edu.sa" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline underline-offset-2 transition-apple">{t("footer.nbce")}</a>
               </p>
             </div>
           </div>

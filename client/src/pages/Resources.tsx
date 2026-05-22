@@ -3,7 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Navbar } from "@/components/Navbar";
-import { FormatTemplateMenu } from "@/components/FormatTemplateMenu";
+import { FormatButton } from "@/components/FormatButton";
+import { isFormattableSlug } from "@shared/templateFields";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useT } from "@/contexts/LanguageContext";
 import { useLocation } from "wouter";
@@ -194,15 +195,17 @@ export default function Resources() {
                         </a>
                       </Button>
                     </div>
-                    {latestDraft && tpl.slug !== "nbce-ethics-summary" && (
+                    {isFormattableSlug(tpl.slug) && (
                       <>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium pt-1">
-                          {isAr ? "تنسيق من طلبك" : "Format from your application"}
+                          {t("format.wizardBadge")}
                         </p>
-                        <FormatTemplateMenu
-                          appId={latestDraft.id}
-                          lang={lang}
-                          label={isAr ? "تنسيق" : "Format"}
+                        <FormatButton
+                          context={{
+                            kind: "slug",
+                            slug: tpl.slug,
+                            appId: latestDraft?.id,
+                          }}
                           compact
                         />
                       </>

@@ -17,6 +17,14 @@ import {
   type ExportMode,
 } from "./resourceExport";
 
+type GenerateFormatBody = {
+  slug?: string;
+  lang?: string;
+  format?: string;
+  answers?: Record<string, string>;
+  appId?: number;
+};
+
 /**
  * Streamed export endpoints. Two formats:
  *   /api/export/application/:id       → printable HTML (browser → Save as PDF)
@@ -326,6 +334,75 @@ export function registerExportRoutes(app: Express) {
     } catch (err) {
       console.error("[Export Format] failed:", err);
       if (!res.headersSent) res.status(500).type("text/plain").send("format export failed");
+    }
+  });
+
+  // ─── Format wizard generate: POST /api/export/format/generate ──
+  // User answers questions in the wizard, then generates a stamped document.
+  app.post("/api/export/format/generate", async (req: Request, res: Response) => {
+    try {
+      const body = req.body as GenerateFormatBody;
+      const slug = typeof body.slug === "string" ? body.slug : "";
+      if (!isFormattableSlug(slug)) {
+        res.status(400).type("text/plain").send("invalid or unsupported template slug");
+        return;
+      }
+      const item = getResourceBySlug(slug);
+      if (!item) {
+        res.status(404).type("text/plain").send("resource not found");
+        return;
+      }
+
+      const appId = typeof body.appId === "number" && Number.isFinite(body.appId) ? body.appId : undefined;
+      if (appId) {
+        const user = await sdk.authenticateRequest(req).catch(() => null);
+        if (!user) {
+          res.status(401).type("text/plain").send("authentication required");
+          return;
+        }
+        const application = await db.getApplicationById(appId);
+        if (!application) {
+          res.status(404).type("text/plain").send("application not found");
+          return;
+        }
+        if (application.applicantId !== user.id && user.role !== "admin") {
+          res.status(403).type("text/plain").send("forbidden");
+          return;
+        }
+      }
+
+      const lang = parseExportLang(body.lang);
+      const fmt = body.format === "docx" ? "docx" : "pdf";
+      const answers =
+        body.answers && typeof body.answers === "object" && !Array.isArray(body.answers)
+          ? Object.fromEntries(
+              Object.entries(body.answers).map(([k, v]) => [k, typeof v === "string" ? v : String(v ?? "")]),
+            )
+          : {};
+
+      const opts = { item, lang, mode: "generated" as ExportMode, prefill: answers };
+      const safeName = resourceFilename(item.slug, fmt, lang, "generated");
+
+      if (fmt === "docx") {
+        const buf = await renderResourceDocx(opts);
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        );
+        res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.send(buf);
+        return;
+      }
+
+      const pdf = await renderResourcePdf(opts);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.send(pdf);
+    } catch (err) {
+      console.error("[Export Format Generate] failed:", err);
+      if (!res.headersSent) res.status(500).type("text/plain").send("format generation failed");
     }
   });
 }

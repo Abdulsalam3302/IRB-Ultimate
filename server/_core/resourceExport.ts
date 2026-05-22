@@ -13,10 +13,10 @@ import {
 } from "docx";
 import type { ResourceItem } from "@shared/resources";
 import { getTemplateSections, type TemplateField, type TemplateSection } from "@shared/templateFields";
-import { BRAND, STAMPED_TICK_SVG } from "@shared/branding";
+import { BRAND, STAMPED_TICK_SVG, AUTHOR } from "@shared/branding";
 
 export type ExportLang = "en" | "ar";
-export type ExportMode = "blank" | "filled";
+export type ExportMode = "blank" | "filled" | "generated";
 
 function escapeHtml(s: string): string {
   return s
@@ -46,17 +46,26 @@ function renderFieldHtml(
   const example = isAr ? field.exampleAr : field.exampleEn;
   const filled = prefill?.[field.id]?.trim();
   const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
+  const isGenerated = mode === "generated";
 
-  const valueBlock =
-    mode === "filled" && filled
-      ? `<div class="filled-value" ${dir}>${escapeHtml(filled).replace(/\n/g, "<br/>")}</div>`
-      : blankLinesHtml(field.blankLines ?? 2, lang);
+  let valueBlock: string;
+  if ((mode === "filled" || isGenerated) && filled) {
+    valueBlock = `<div class="filled-value" ${dir}>${escapeHtml(filled).replace(/\n/g, "<br/>")}</div>`;
+  } else if (isGenerated) {
+    valueBlock = `<div class="filled-value empty" ${dir}><em>${isAr ? "— لم يُذكر —" : "— not provided —"}</em></div>`;
+  } else {
+    valueBlock = blankLinesHtml(field.blankLines ?? 2, lang);
+  }
+
+  const hintBlock = isGenerated
+    ? ""
+    : `<div class="field-hint"><strong>${isAr ? "↳ أدخل:" : "↳ Enter:"}</strong> ${escapeHtml(hint)}</div>
+      <div class="field-example"><strong>${isAr ? "★ مثال مثالي:" : "★ Ideal example:"}</strong> ${escapeHtml(example).replace(/\n/g, "<br/>")}</div>`;
 
   return `
     <div class="field-block" ${dir}>
       <div class="field-label">${escapeHtml(label)}</div>
-      <div class="field-hint"><strong>${isAr ? "↳ أدخل:" : "↳ Enter:"}</strong> ${escapeHtml(hint)}</div>
-      <div class="field-example"><strong>${isAr ? "★ مثال مثالي:" : "★ Ideal example:"}</strong> ${escapeHtml(example).replace(/\n/g, "<br/>")}</div>
+      ${hintBlock}
       <div class="field-input">${valueBlock}</div>
     </div>`;
 }
@@ -72,6 +81,30 @@ function renderSectionHtml(
   const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
   const fields = section.fields.map(f => renderFieldHtml(f, lang, mode, prefill)).join("");
   return `<section class="doc-section" ${dir}><h2>${escapeHtml(heading)}</h2>${fields}</section>`;
+}
+
+function authorStampHtml(lang: ExportLang): string {
+  const isAr = lang === "ar";
+  const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
+  return `<div class="author-stamp" ${dir}>
+    ${STAMPED_TICK_SVG}
+    <div>
+      <div class="name">${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}</div>
+      <div class="role">${isAr ? AUTHOR.titleAr : AUTHOR.titleEn}</div>
+      <div class="role">${isAr ? AUTHOR.orgAr : AUTHOR.orgEn}</div>
+      <div class="role" style="margin-top:8px;font-style:italic">
+        ${isAr ? "توقيع معتمد · ختم المنصة" : "Authorized signature · Platform seal"}
+      </div>
+    </div>
+  </div>`;
+}
+
+function footerHtml(lang: ExportLang, dateStr: string): string {
+  const isAr = lang === "ar";
+  return `<footer>
+    ${isAr ? "IRB Ultimate — متوافق مع NBCE" : "IRB Ultimate — NBCE aligned"} · ${dateStr}<br/>
+    © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · ${isAr ? "جميع الحقوق محفوظة ومسجلة" : "All rights reserved and registered"}
+  </footer>`;
 }
 
 function officialStyles(lang: ExportLang): string {
@@ -103,7 +136,16 @@ function officialStyles(lang: ExportLang): string {
     padding: 6px 8px; margin: 6px 0; border-radius: 4px; }
   .blank-line { border-bottom: 1px solid #999; min-height: 1.6em; margin: 6px 0; }
   .filled-value { background: #fff; border: 1px solid ${BRAND.forest}; padding: 8px 10px; white-space: pre-wrap; }
-  footer { margin-top: 28px; padding-top: 10px; border-top: 2px solid ${BRAND.forest}; font-size: 9pt;
+  .filled-value.empty { color: #888; font-style: italic; }
+  .author-stamp {
+    margin-top: 32px; padding: 16px; border: 2px solid ${BRAND.forest};
+    display: flex; align-items: center; gap: 16px; page-break-inside: avoid;
+    ${isAr ? "flex-direction: row-reverse; direction: rtl;" : ""}
+  }
+  .author-stamp svg { width: 48px; height: 48px; flex-shrink: 0; }
+  .author-stamp .name { font-weight: 700; color: ${BRAND.forest}; font-size: ${isAr ? "13pt" : "12pt"}; }
+  .author-stamp .role { font-size: 10pt; color: #444; margin-top: 2px; }
+  footer { margin-top: 20px; padding-top: 10px; border-top: 2px solid ${BRAND.forest}; font-size: 9pt;
     color: #666; text-align: center; }`;
 }
 
@@ -122,13 +164,17 @@ export function renderResourceHtml(opts: RenderResourceOptions): string {
   const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
   const dateStr = new Date().toISOString().slice(0, 10);
   const modeLabel =
-    mode === "filled"
+    mode === "generated"
       ? isAr
-        ? "نسخة مُعبَّأة من بيانات الطلب"
-        : "Pre-filled from application data"
-      : isAr
-        ? "نموذج فارغ للتعبئة اليدوية"
-        : "Blank template for manual completion";
+        ? "نسخة مُولَّدة من إجاباتك"
+        : "Generated from your answers"
+      : mode === "filled"
+        ? isAr
+          ? "نسخة مُعبَّأة من بيانات الطلب"
+          : "Pre-filled from application data"
+        : isAr
+          ? "نموذج فارغ للتعبئة اليدوية"
+          : "Blank template for manual completion";
 
   const sections = getTemplateSections(item.slug);
   let mainContent: string;
@@ -153,7 +199,8 @@ export function renderResourceHtml(opts: RenderResourceOptions): string {
   <div class="titles"><h1>${escapeHtml(title)}</h1><div class="subtitle">${escapeHtml(desc)}</div></div>
   <div class="meta">${isAr ? "اللغة: العربية" : "Language: English"}<br/>${escapeHtml(modeLabel)}<br/>${dateStr}</div>
 </div><main>${mainContent}</main>
-<footer>${isAr ? "IRB Ultimate — متوافق مع NBCE" : "IRB Ultimate — NBCE aligned"} · ${dateStr}</footer>
+${authorStampHtml(lang)}
+${footerHtml(lang, dateStr)}
 </body></html>`;
 }
 
@@ -194,6 +241,16 @@ function fieldParagraphs(
 
   if (mode === "filled" && filled) {
     for (const line of filled.split("\n")) {
+      out.push(
+        new Paragraph({
+          bidirectional: isAr,
+          children: [new TextRun({ text: line, font, size: isAr ? 28 : 24 })],
+        }),
+      );
+    }
+  } else if (mode === "generated") {
+    const text = filled || (isAr ? "— لم يُذكر —" : "— not provided —");
+    for (const line of text.split("\n")) {
       out.push(
         new Paragraph({
           bidirectional: isAr,
@@ -253,7 +310,28 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
           border: { bottom: { color: "10b981", size: 6, style: BorderStyle.SINGLE } },
         }),
       );
-      for (const f of s.fields) children.push(...fieldParagraphs(f, lang, mode, prefill));
+      for (const f of s.fields) {
+        if (mode === "generated") {
+          children.push(
+            new Paragraph({
+              bidirectional: isAr,
+              children: [new TextRun({ text: isAr ? f.labelAr : f.labelEn, bold: true, font, color: "064e3b" })],
+            }),
+          );
+          const val = prefill?.[f.id]?.trim() || (isAr ? "— لم يُذكر —" : "— not provided —");
+          for (const line of val.split("\n")) {
+            children.push(
+              new Paragraph({
+                bidirectional: isAr,
+                children: [new TextRun({ text: line, font, size: isAr ? 28 : 24 })],
+              }),
+            );
+          }
+          children.push(new Paragraph({ children: [new TextRun({ text: "" })] }));
+        } else {
+          children.push(...fieldParagraphs(f, lang, mode, prefill));
+        }
+      }
     }
   } else {
     for (const s of item.sections) {
@@ -276,6 +354,44 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
       }
     }
   }
+
+  children.push(
+    new Paragraph({ children: [new TextRun({ text: "" })] }),
+    new Paragraph({
+      bidirectional: isAr,
+      children: [
+        new TextRun({
+          text: isAr ? AUTHOR.nameAr : AUTHOR.nameEn,
+          bold: true,
+          font,
+          color: "064e3b",
+        }),
+      ],
+    }),
+    new Paragraph({
+      bidirectional: isAr,
+      children: [
+        new TextRun({
+          text: isAr ? `${AUTHOR.titleAr} · توقيع معتمد` : `${AUTHOR.titleEn} · Authorized signature`,
+          italics: true,
+          font,
+          size: 20,
+        }),
+      ],
+    }),
+    new Paragraph({
+      bidirectional: isAr,
+      children: [
+        new TextRun({
+          text: `IRB Ultimate — NBCE · ${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
+          italics: true,
+          color: "888888",
+          size: 18,
+          font,
+        }),
+      ],
+    }),
+  );
 
   const doc = new Document({
     creator: "IRB Ultimate",
@@ -313,6 +429,6 @@ export function parseExportLang(raw: unknown): ExportLang {
 }
 
 export function resourceFilename(slug: string, fmt: string, lang: ExportLang, mode: ExportMode): string {
-  const suffix = mode === "filled" ? "-filled" : "";
+  const suffix = mode === "filled" ? "-filled" : mode === "generated" ? "-generated" : "";
   return `${slug}-${lang}${suffix}.${fmt}`;
 }

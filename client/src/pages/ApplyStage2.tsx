@@ -1,4 +1,4 @@
-import { FormatTemplateMenu } from "@/components/FormatTemplateMenu";
+import { FormatButton } from "@/components/FormatButton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -400,7 +400,7 @@ export default function ApplyStage2() {
                 </button>
               )}
               {lastSaved && !autoSaving && !saveError && <span className="text-xs text-muted-foreground flex items-center gap-1"><Save className="h-3 w-3" /> {isAr ? "تم الحفظ" : "Saved"} {lastSaved.toLocaleTimeString()}</span>}
-              <FormatTemplateMenu appId={appId} lang={lang} compact />
+              <FormatButton context={{ kind: "stage2", appId }} compact />
               <Button variant="ghost" size="sm" onClick={handleManualSave} disabled={saveDraft.isPending}>
                 <Save className="h-4 w-4 me-1" /> {isAr ? "حفظ المسودة" : "Save Draft"}
               </Button>

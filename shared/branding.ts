@@ -10,6 +10,16 @@ export const BRAND = {
   cream: "#faf9f6",
 } as const;
 
+export const AUTHOR = {
+  nameEn: "Dr. Abdulsalam Aleid",
+  nameAr: "د. عبدالسلام العيد",
+  titleEn: "Platform Director & Approving Authority",
+  titleAr: "مدير المنصة والجهة المعتمدة",
+  orgEn: "Advanced Healthcare Systems Society (AHSS)",
+  orgAr: "جمعية أنظمة الرعاية الصحية المتقدمة (AHSS)",
+  linkedin: "https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142",
+} as const;
+
 /** Stamped Tick — inline SVG for certificates, exports, and UI. */
 export const STAMPED_TICK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="IRB Ultimate">
   <rect x="8" y="8" width="48" height="48" rx="6" fill="none" stroke="${BRAND.forest}" stroke-width="6" transform="rotate(-4 32 32)"/>

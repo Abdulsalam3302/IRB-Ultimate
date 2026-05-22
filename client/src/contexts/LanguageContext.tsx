@@ -88,6 +88,8 @@ const en: Record<string, string> = {
   "hero.apply": "Apply for IRB Approval",
   "hero.verify": "Verify an IRB Certificate",
   "hero.learnMore": "Learn More",
+  "hero.cta.title": "Ready to Submit Your Research?",
+  "hero.cta.desc": "Join researchers across Saudi Arabia who are accelerating their IRB approvals with our AI-powered platform.",
 
   // Stats
   "stats.target": "24-48h Target",
@@ -144,10 +146,35 @@ const en: Record<string, string> = {
   "footer.madeWith": "Made with Love in Saudi Arabia",
   "footer.org": "Advanced Healthcare Systems Society",
   "footer.approved": "Approved by Dr. Abdulsalam Aleid",
-  "footer.rights": "All rights reserved.",
+  "footer.rights": "All rights reserved and registered.",
   "footer.nbce": "Operating under the National Bioethics Committee of Saudi Arabia (NBCE)",
   "footer.feedback": "Suggestions & complaints",
   "footer.feedbackCta": "Reach Dr. Aleid on LinkedIn",
+  "footer.copyright": "All copyrights are preserved and registered to Dr. Abdulsalam Aleid.",
+  "footer.partnership": "For partnership and cooperation, contact Dr. Aleid on LinkedIn",
+  "footer.partnershipCta": "Connect on LinkedIn",
+
+  // Format wizard
+  "format.button": "Format",
+  "format.chooseTemplate": "Choose template",
+  "format.wizardBadge": "Guided format wizard",
+  "format.prefilledHint": "Fields pre-filled from your saved application — review and edit before generating.",
+  "format.generateTitle": "Generate your document",
+  "format.generatePdf": "Generate PDF",
+  "format.generateDocx": "Generate DOCX",
+  "format.missingFields": "{n} field(s) still empty — you can generate anyway or complete them first.",
+  "format.readyToGenerate": "All fields completed. Ready to generate your stamped document.",
+  "format.stampNote": "Every generated document includes Dr. Abdulsalam Aleid's authorized signature and platform seal.",
+  "format.enterHint": "Enter:",
+  "format.showExample": "Show ideal example",
+  "format.answerPlaceholder": "Type your answer here…",
+
+  // Theme
+  "theme.light": "Light mode",
+  "theme.dark": "Dark mode",
+
+  // Navigation extras
+  "nav.statistics": "Statistics",
 
   // Dashboard
   "dash.title": "My Applications",
@@ -428,6 +455,8 @@ const ar: Record<string, string> = {
   "hero.apply": "تقديم طلب موافقة IRB",
   "hero.verify": "التحقق من شهادة IRB",
   "hero.learnMore": "اعرف المزيد",
+  "hero.cta.title": "هل أنت مستعد لتقديم بحثك؟",
+  "hero.cta.desc": "انضم إلى الباحثين في جميع أنحاء المملكة العربية السعودية الذين يسرعون موافقات IRB من خلال منصتنا.",
 
   // Stats
   "stats.target": "24-48 ساعة",
@@ -484,10 +513,35 @@ const ar: Record<string, string> = {
   "footer.madeWith": "صنع بحب في المملكة العربية السعودية",
   "footer.org": "جمعية أنظمة الرعاية الصحية المتقدمة",
   "footer.approved": "بإشراف د. عبدالسلام العيد",
-  "footer.rights": "جميع الحقوق محفوظة.",
+  "footer.rights": "جميع الحقوق محفوظة ومسجلة.",
   "footer.nbce": "تعمل تحت إشراف اللجنة الوطنية للأخلاقيات الحيوية بالمملكة العربية السعودية (NBCE)",
   "footer.feedback": "اقتراحات وشكاوى",
   "footer.feedbackCta": "تواصل مع د. العيد على لينكدإن",
+  "footer.copyright": "جميع حقوق النشر محفوظة ومسجلة لـ د. عبدالسلام العيد.",
+  "footer.partnership": "للشراكة والتعاون، تواصل مع د. العيد على لينكدإن",
+  "footer.partnershipCta": "تواصل عبر لينكدإن",
+
+  // Format wizard
+  "format.button": "تنسيق",
+  "format.chooseTemplate": "اختر النموذج",
+  "format.wizardBadge": "معالج التنسيق الموجّه",
+  "format.prefilledHint": "تم تعبئة الحقول مسبقاً من طلبك المحفوظ — راجعها وعدّلها قبل الإنشاء.",
+  "format.generateTitle": "إنشاء مستندك",
+  "format.generatePdf": "إنشاء PDF",
+  "format.generateDocx": "إنشاء DOCX",
+  "format.missingFields": "لا يزال {n} حقل/حقول فارغة — يمكنك الإنشاء الآن أو إكمالها أولاً.",
+  "format.readyToGenerate": "اكتملت جميع الحقول. جاهز لإنشاء مستندك المختوم.",
+  "format.stampNote": "كل مستند مُنشأ يتضمن توقيع د. عبدالسلام العيد المعتمد وختم المنصة.",
+  "format.enterHint": "أدخل:",
+  "format.showExample": "عرض مثال مثالي",
+  "format.answerPlaceholder": "اكتب إجابتك هنا…",
+
+  // Theme
+  "theme.light": "الوضع الفاتح",
+  "theme.dark": "الوضع الداكن",
+
+  // Navigation extras
+  "nav.statistics": "إحصائيات",
 
   // Dashboard
   "dash.title": "طلباتي",

@@ -15,7 +15,7 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
-import { FormatTemplateMenu } from "@/components/FormatTemplateMenu";
+import { FormatButton } from "@/components/FormatButton";
 import {
   ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle,
   Loader2, Upload, Plus, Trash2, UserPlus, Users, FileUp, AlertCircle, Info,
@@ -289,7 +289,7 @@ export default function ApplyStage1() {
               <Badge className="bg-primary text-primary-foreground">{isAr ? "المرحلة 1 من 2" : "Stage 1 of 2"}</Badge>
               <span className="text-sm text-muted-foreground">{isAr ? "تصنيف البحث" : "Research Classification"}</span>
             </div>
-            <FormatTemplateMenu appId={appId} lang={lang} compact />
+            <FormatButton context={{ kind: "stage1", appId }} compact />
           </div>
           <Progress value={50} className="h-2" />
         </div>

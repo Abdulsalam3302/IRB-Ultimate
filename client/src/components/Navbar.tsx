@@ -31,7 +31,7 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
       <nav className="sticky top-0 z-50 glass border-b border-border/50">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-3 cursor-pointer transition-apple" onClick={() => setLocation("/")}>
-          <img src={LOGO_DATA_URI} alt="IRB Ultimate" className="h-9 w-9 rounded-lg object-contain" />
+          <img src={LOGO_DATA_URI} alt={t("footer.brand")} className="h-9 w-9 rounded-lg object-contain" />
           <span className="font-bold text-lg tracking-tight">{t("footer.brand")}</span>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
@@ -41,8 +41,8 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
               size="icon"
               className="h-8 w-8 transition-apple"
               onClick={toggleTheme}
-              title={theme === "dark" ? "Light Mode" : "Dark Mode"}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={theme === "dark" ? t("theme.light") : t("theme.dark")}
+              aria-label={theme === "dark" ? t("theme.light") : t("theme.dark")}
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>

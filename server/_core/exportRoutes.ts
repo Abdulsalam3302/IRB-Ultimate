@@ -7,8 +7,15 @@ import {
 } from "../applicationExport";
 import { renderCertificatePdf, renderCertificateHtml } from "../certificateV2";
 import { getResourceBySlug } from "@shared/resources";
-import { renderResourceDocx, renderResourceHtml } from "./resourceExport";
-import { chromium } from "playwright";
+import { buildPrefillMap } from "@shared/resourcePrefill";
+import { isFormattableSlug } from "@shared/templateFields";
+import {
+  renderResourceDocx,
+  renderResourcePdf,
+  parseExportLang,
+  resourceFilename,
+  type ExportMode,
+} from "./resourceExport";
 
 /**
  * Streamed export endpoints. Two formats:
@@ -197,12 +204,10 @@ export function registerExportRoutes(app: Express) {
     }
   });
 
-  // ─── Resource downloads: /api/export/resource/:slug.:format ─────────────
+  // ─── Resource downloads: /api/export/resource/:slug.:format?lang=en|ar ──
   //
-  // Public, content-addressable downloads of the static resources from
-  // shared/resources.ts. Two formats supported per item: pdf, docx.
-  // No auth required — these are public learning materials. The general
-  // /api/* rate-limit still applies.
+  // Public blank templates in English OR Arabic (not bilingual in one file).
+  // Optional query: lang=en (default) | lang=ar
   app.get("/api/export/resource/:fileName", async (req: Request, res: Response) => {
     try {
       const fileName = req.params.fileName || "";
@@ -217,48 +222,110 @@ export function registerExportRoutes(app: Express) {
         res.status(404).type("text/plain").send("resource not found");
         return;
       }
-      const safeBase = item.slug.replace(/[^a-zA-Z0-9_-]/g, "-");
+      const lang = parseExportLang(req.query.lang);
+      const mode: ExportMode = "blank";
+      const opts = { item, lang, mode };
+      const safeName = resourceFilename(item.slug, fmt.toLowerCase(), lang, mode);
 
       if (fmt.toLowerCase() === "docx") {
-        const buf = await renderResourceDocx(item);
+        const buf = await renderResourceDocx(opts);
         res.setHeader(
           "Content-Type",
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         );
-        res.setHeader("Content-Disposition", `attachment; filename="${safeBase}.docx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.send(buf);
         return;
       }
 
-      // PDF path: render bilingual HTML in a network-isolated Chromium page.
-      const html = renderResourceHtml(item);
-      const browser = await chromium.launch({ headless: true });
-      try {
-        const ctx = await browser.newContext();
-        const page = await ctx.newPage();
-        await page.route("**/*", route => {
-          const url = route.request().url();
-          if (url.startsWith("data:")) return route.continue();
-          return route.abort();
-        });
-        await page.setContent(html, { waitUntil: "load", timeout: 15000 });
-        const pdf = await page.pdf({
-          format: "A4",
-          printBackground: true,
-          margin: { top: "15mm", bottom: "15mm", left: "12mm", right: "12mm" },
-        });
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="${safeBase}.pdf"`);
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.send(Buffer.from(pdf));
-      } finally {
-        await browser.close().catch(() => undefined);
-      }
+      const pdf = await renderResourcePdf(opts);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.send(pdf);
     } catch (err) {
       console.error("[Export Resource] failed:", err);
       if (!res.headersSent)
         res.status(500).type("text/plain").send("resource generation failed");
+    }
+  });
+
+  // ─── Format from application: /api/export/application/:id/format/:fileName ──
+  // Generates a pre-filled template from the applicant's saved data.
+  app.get("/api/export/application/:id/format/:fileName", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) {
+        res.status(400).type("text/plain").send("invalid id");
+        return;
+      }
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) {
+        res.status(401).type("text/plain").send("authentication required");
+        return;
+      }
+      const application = await db.getApplicationById(id);
+      if (!application) {
+        res.status(404).type("text/plain").send("not found");
+        return;
+      }
+      if (application.applicantId !== user.id && user.role !== "admin") {
+        res.status(403).type("text/plain").send("forbidden");
+        return;
+      }
+
+      const fileName = req.params.fileName || "";
+      const m = fileName.match(/^([a-z0-9-]{1,64})\.(pdf|docx)$/i);
+      if (!m) {
+        res.status(400).type("text/plain").send("expected <slug>.<pdf|docx>");
+        return;
+      }
+      const [, slug, fmt] = m;
+      if (!isFormattableSlug(slug)) {
+        res.status(400).type("text/plain").send("this resource cannot be formatted from application data");
+        return;
+      }
+      const item = getResourceBySlug(slug);
+      if (!item) {
+        res.status(404).type("text/plain").send("resource not found");
+        return;
+      }
+
+      const authors = await db.getAuthorsByApplication(id);
+      const prefill = buildPrefillMap(
+        slug,
+        application,
+        authors.map(a => ({
+          name: a.name,
+          email: a.email,
+          institution: a.institution,
+          department: a.department,
+          country: a.country,
+        })),
+      );
+      const lang = parseExportLang(req.query.lang);
+      const opts = { item, lang, mode: "filled" as ExportMode, prefill };
+      const safeName = resourceFilename(item.slug, fmt.toLowerCase(), lang, "filled");
+
+      if (fmt.toLowerCase() === "docx") {
+        const buf = await renderResourceDocx(opts);
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        );
+        res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+        res.send(buf);
+        return;
+      }
+
+      const pdf = await renderResourcePdf(opts);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.send(pdf);
+    } catch (err) {
+      console.error("[Export Format] failed:", err);
+      if (!res.headersSent) res.status(500).type("text/plain").send("format export failed");
     }
   });
 }

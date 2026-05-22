@@ -388,7 +388,7 @@ REMEMBER:
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are a senior NBCE IRB compliance specialist. Evaluate research applications against international bioethics standards. Score based on content quality and ethical alignment, never on text length. Respond only with valid JSON." },
+        { role: "system", content: "You are a senior NBCE IRB compliance specialist aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate content quality and ethical alignment — never penalize text length. For every field scored below 90, provide a specific, actionable fix with EXAMPLE: and FASTEST FIX: tokens. List every missing element explicitly under recommendations. Score 100 when all checklist items are fully satisfied with no gaps. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -639,7 +639,7 @@ ${literatureContext}${fenceUserData("APPLICATION DATA", data)}`;
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are a senior NBCE IRB ethics reviewer with deep expertise in international bioethics frameworks. Evaluate research protocols against Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS guidelines. Score based on content quality and ethical compliance, never on text length. Respond only with valid JSON." },
+        { role: "system", content: "You are a senior NBCE IRB ethics reviewer aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate ethical compliance and scientific rigor — never penalize length. For every field below 90, name the exact gap and provide EXAMPLE: and FASTEST FIX:. List all missing elements in recommendations. Award 100 only when every checklist item is fully addressed. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -878,7 +878,7 @@ ${ETHICS_SAFEGUARDS}`;
 
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an expert NBCE research protocol writer. Generate comprehensive, ethically compliant content that scores 100/100 on IRB review. Every field must be specific to the research, internally consistent with Stage 1 gateway facts, and aligned with international bioethics standards. When context is insufficient, emit a [TEMPLATE — applicant must complete] scaffold rather than fabricating. Respond only with valid JSON whose fields are plain strings." },
+        { role: "system", content: "You are an expert NBCE research protocol writer. Generate comprehensive, ethically compliant content targeting 100/100 on IRB review. Every field must be specific, internally consistent with Stage 1 facts, and NBCE-aligned. When information is missing, write [MISSING — please provide: <specific item>] — never fabricate. Mark any assumption with [ASSUMPTION — verify]. Respond only with valid JSON whose fields are plain strings." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -982,7 +982,7 @@ Each value MUST be a plain string. NEVER return nested objects, arrays, or markd
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an editor. You polish and expand the applicant's existing values. You do not fabricate new data. You return strict JSON with plain string values, never nested objects." },
+        { role: "system", content: "You are an NBCE IRB editor. Polish and expand the applicant's existing text to reach 100/100 — preserve all factual claims, never invent credentials or data. Flag gaps as [MISSING — please add: <item>]. Return strict JSON with plain string values." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -1076,7 +1076,7 @@ ${ETHICS_SAFEGUARDS}`;
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an NBCE IRB field resolution specialist. Fix the field to achieve a perfect score while preserving the applicant's intent. Respond only with valid JSON." },
+        { role: "system", content: "You are an NBCE IRB field resolution specialist. Rewrite this field to score 100/100 while preserving applicant intent. State any remaining gap as [STILL MISSING: <item>]. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -1163,7 +1163,7 @@ ${ETHICS_SAFEGUARDS}`;
 
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are a senior NBCE IRB enhancement specialist. Fix all flagged fields to achieve perfect scores while maintaining cross-field consistency. Respond only with valid JSON." },
+        { role: "system", content: "You are a senior NBCE IRB enhancement specialist. Fix every flagged field to score 100/100 with cross-field consistency. For each fix, ensure ethical and legal compliance under NBCE, Helsinki, and PDPL. List any field that cannot reach 100 without applicant input as [NEEDS APPLICANT: <reason>]. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {

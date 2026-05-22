@@ -1,3 +1,4 @@
+import { FormatTemplateMenu } from "@/components/FormatTemplateMenu";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -191,7 +192,7 @@ export default function ApplyStage2() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error(isAr ? "حجم الملف يجب أن يكون أقل من 10 ميجابايت" : "File size must be under 10MB"); return; }
+    if (file.size > 15 * 1024 * 1024) { toast.error(isAr ? "حجم الملف يجب أن يكون أقل من 15 ميجابايت" : "File size must be under 15MB"); return; }
     setUploading(true);
     try {
       const reader = new FileReader();
@@ -399,6 +400,7 @@ export default function ApplyStage2() {
                 </button>
               )}
               {lastSaved && !autoSaving && !saveError && <span className="text-xs text-muted-foreground flex items-center gap-1"><Save className="h-3 w-3" /> {isAr ? "تم الحفظ" : "Saved"} {lastSaved.toLocaleTimeString()}</span>}
+              <FormatTemplateMenu appId={appId} lang={lang} compact />
               <Button variant="ghost" size="sm" onClick={handleManualSave} disabled={saveDraft.isPending}>
                 <Save className="h-4 w-4 me-1" /> {isAr ? "حفظ المسودة" : "Save Draft"}
               </Button>

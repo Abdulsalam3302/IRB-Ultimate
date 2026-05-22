@@ -15,6 +15,7 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
+import { FormatTemplateMenu } from "@/components/FormatTemplateMenu";
 import {
   ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle,
   Loader2, Upload, Plus, Trash2, UserPlus, Users, FileUp, AlertCircle, Info,
@@ -283,9 +284,12 @@ export default function ApplyStage1() {
       <div className="container py-8 max-w-3xl mx-auto">
         {/* Progress */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-3">
-            <Badge className="bg-primary text-primary-foreground">{isAr ? "المرحلة 1 من 2" : "Stage 1 of 2"}</Badge>
-            <span className="text-sm text-muted-foreground">{isAr ? "تصنيف البحث" : "Research Classification"}</span>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <Badge className="bg-primary text-primary-foreground">{isAr ? "المرحلة 1 من 2" : "Stage 1 of 2"}</Badge>
+              <span className="text-sm text-muted-foreground">{isAr ? "تصنيف البحث" : "Research Classification"}</span>
+            </div>
+            <FormatTemplateMenu appId={appId} lang={lang} compact />
           </div>
           <Progress value={50} className="h-2" />
         </div>

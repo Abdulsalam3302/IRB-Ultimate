@@ -8,7 +8,7 @@ import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
 import { ArrowLeft, ArrowRight, ChevronRight, Search, Sun, Moon } from "lucide-react";
 
-const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/91022535/HJDnd7J2v7Rqud6TxjUN74/irb-logo-oReN3TBKtvR3zcf4YvwKmu.webp";
+import { LOGO_DATA_URI } from "@shared/branding";
 
 interface NavbarProps {
   showBack?: boolean;
@@ -31,7 +31,7 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
       <nav className="sticky top-0 z-50 glass border-b border-border/50">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-3 cursor-pointer transition-apple" onClick={() => setLocation("/")}>
-          <img src={LOGO_URL} alt="IRB" className="h-9 w-9 rounded-lg object-contain" />
+          <img src={LOGO_DATA_URI} alt="IRB Ultimate" className="h-9 w-9 rounded-lg object-contain" />
           <span className="font-bold text-lg tracking-tight">{t("footer.brand")}</span>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">

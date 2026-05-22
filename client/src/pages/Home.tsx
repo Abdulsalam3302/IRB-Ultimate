@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 
-const LOGO_URL = "https://d2xsxph8kpxj0f.cloudfront.net/91022535/HJDnd7J2v7Rqud6TxjUN74/irb-logo-oReN3TBKtvR3zcf4YvwKmu.webp";
+import { LOGO_DATA_URI } from "@shared/branding";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -41,7 +41,7 @@ export default function Home() {
       <nav className="sticky top-0 z-50 glass border-b border-border/50">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={LOGO_URL} alt="IRB" className="h-9 w-9 rounded-lg object-contain" />
+            <img src={LOGO_DATA_URI} alt="IRB" className="h-9 w-9 rounded-lg object-contain" />
             <div>
               <span className="font-bold text-lg tracking-tight">{t("footer.brand")}</span>
               <span className="hidden sm:inline text-xs text-muted-foreground ms-2">Saudi Arabia</span>
@@ -94,7 +94,7 @@ export default function Home() {
           <div className="max-w-3xl mx-auto text-center">
             {/* Logo */}
             <div className="animate-fade-in-up mb-8">
-              <img src={LOGO_URL} alt="IRB Review Platform" className="h-20 w-20 mx-auto rounded-2xl shadow-lg" />
+              <img src={LOGO_DATA_URI} alt="IRB Review Platform" className="h-20 w-20 mx-auto rounded-2xl shadow-lg" />
             </div>
 
             <Badge variant="secondary" className="animate-fade-in-up animate-delay-100 mb-6 px-4 py-1.5 text-sm font-medium border-primary/20 bg-primary/5">
@@ -264,7 +264,7 @@ export default function Home() {
         <div className="container">
           <div className="flex flex-col items-center gap-8">
             <div className="flex items-center gap-3">
-              <img src={LOGO_URL} alt="IRB" className="h-8 w-8 rounded-lg object-contain" />
+              <img src={LOGO_DATA_URI} alt="IRB" className="h-8 w-8 rounded-lg object-contain" />
               <span className="font-semibold tracking-tight">{t("footer.brand")}</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">

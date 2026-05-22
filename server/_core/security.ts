@@ -11,7 +11,7 @@ import { ENV } from "./env";
 const RATE_WINDOW_MS = 60_000; // 1 minute
 const RATE_LIMIT = 120; // requests per window per IP for /api/*
 // Tighter limit for expensive routes (LLM, upload).
-const STRICT_RATE_LIMIT = 12;
+const STRICT_RATE_LIMIT = 30;
 // Hardest limit for auth surfaces — these need brute-force resistance not
 // throughput. 5/min/IP is generous for legitimate humans but kills code-
 // stuffing scripts (SA-03).

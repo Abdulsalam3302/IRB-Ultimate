@@ -3,8 +3,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Navbar } from "@/components/Navbar";
+import { FormatTemplateMenu } from "@/components/FormatTemplateMenu";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useT } from "@/contexts/LanguageContext";
 import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
 import {
   FileText, Download, BookOpen, ClipboardList,
   FileCheck, AlertTriangle, Lightbulb, ChevronRight, ExternalLink, ArrowLeft
@@ -119,9 +122,18 @@ const faqs = [
 
 export default function Resources() {
   const { t, lang } = useT();
+  const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const isAr = lang === "ar";
   const Arrow = isAr ? ArrowLeft : ChevronRight;
+
+  // Latest draft application for Format button (if signed in)
+  const { data: myApps } = trpc.application.myApplications.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const latestDraft = myApps?.find(a =>
+    ["draft", "stage1_complete", "stage2_complete", "submitted"].includes(a.status),
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -156,20 +168,45 @@ export default function Resources() {
                   </div>
                   <h3 className="font-semibold text-sm mb-1">{isAr ? tpl.titleAr : tpl.titleEn}</h3>
                   <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{isAr ? tpl.descAr : tpl.descEn}</p>
-                  {/* Both downloads are content-addressable by slug and rendered
-                      server-side from shared/resources.ts. No external CDN
-                      dependency — the platform owns its canonical content. */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={`/api/export/resource/${tpl.slug}.pdf`} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-3 w-3 me-1" /> PDF
-                      </a>
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={`/api/export/resource/${tpl.slug}.docx`} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-3 w-3 me-1" /> DOCX
-                      </a>
-                    </Button>
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                      {isAr ? "نموذج فارغ" : "Blank template"}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/api/export/resource/${tpl.slug}.pdf?lang=en`} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3 w-3 me-1" /> PDF EN
+                        </a>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/api/export/resource/${tpl.slug}.docx?lang=en`} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3 w-3 me-1" /> DOCX EN
+                        </a>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/api/export/resource/${tpl.slug}.pdf?lang=ar`} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3 w-3 me-1" /> PDF AR
+                        </a>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/api/export/resource/${tpl.slug}.docx?lang=ar`} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3 w-3 me-1" /> DOCX AR
+                        </a>
+                      </Button>
+                    </div>
+                    {latestDraft && tpl.slug !== "nbce-ethics-summary" && (
+                      <>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium pt-1">
+                          {isAr ? "تنسيق من طلبك" : "Format from your application"}
+                        </p>
+                        <FormatTemplateMenu
+                          appId={latestDraft.id}
+                          lang={lang}
+                          label={isAr ? "تنسيق" : "Format"}
+                          compact
+                        />
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>

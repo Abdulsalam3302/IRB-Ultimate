@@ -23,12 +23,12 @@
 
 const USER_DAILY_LIMIT = clampInt(
   process.env.LLM_USER_DAILY_LIMIT,
-  60,
+  200,
   { min: 1, max: 100_000 }
 );
 const GLOBAL_DAILY_LIMIT = clampInt(
   process.env.LLM_GLOBAL_DAILY_LIMIT,
-  2000,
+  10000,
   { min: 1, max: 10_000_000 }
 );
 

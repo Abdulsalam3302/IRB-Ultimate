@@ -171,7 +171,7 @@ export default function Resources() {
                   <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{isAr ? tpl.descAr : tpl.descEn}</p>
                   <div className="space-y-2">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
-                      {isAr ? "نموذج فارغ" : "Blank template"}
+                      {t("format.blankSection")}
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                       <Button variant="outline" size="sm" asChild>
@@ -198,7 +198,7 @@ export default function Resources() {
                     {isFormattableSlug(tpl.slug) && (
                       <>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium pt-1">
-                          {t("format.wizardBadge")}
+                          {t("format.filledSection")}
                         </p>
                         <FormatButton
                           context={{

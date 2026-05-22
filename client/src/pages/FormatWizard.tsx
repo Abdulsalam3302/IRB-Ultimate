@@ -12,7 +12,8 @@ import { trpc } from "@/lib/trpc";
 import { getTemplateSections, isFormattableSlug } from "@shared/templateFields";
 import { buildPrefillMap } from "@shared/resourcePrefill";
 import { SLUG_META } from "@shared/formatMeta";
-import { Loader2, Sparkles, FileDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Loader2, Sparkles, FileDown, ChevronLeft, ChevronRight, Globe, Languages } from "lucide-react";
 import { toast } from "sonner";
 import NotFound from "@/pages/NotFound";
 
@@ -91,9 +92,9 @@ export default function FormatWizard() {
         `${slug}-${lang}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(isAr ? "تم إنشاء الملف بنجاح" : "Document generated successfully");
+      toast.success(t("format.generateSuccess"));
     } catch (err) {
-      toast.error(isAr ? "فشل إنشاء الملف" : "Failed to generate document", {
+      toast.error(t("format.generateError"), {
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
@@ -128,6 +129,16 @@ export default function FormatWizard() {
               {t("format.prefilledHint")}
             </p>
           )}
+          <Alert className="mt-4 border-primary/30 bg-primary/5">
+            <Globe className="h-4 w-4" />
+            <AlertTitle className="flex items-center gap-2">
+              <Languages className="h-4 w-4" />
+              {t("format.exportLanguage")}
+            </AlertTitle>
+            <AlertDescription className="text-sm leading-relaxed">
+              {t("format.languageNotice")}
+            </AlertDescription>
+          </Alert>
         </div>
 
         {appId && appLoading ? (

@@ -156,7 +156,7 @@ const en: Record<string, string> = {
 
   // Format wizard
   "format.button": "Format",
-  "format.chooseTemplate": "Choose template",
+  "format.chooseTemplate": "Choose template — answer questions, then generate",
   "format.wizardBadge": "Guided format wizard",
   "format.prefilledHint": "Fields pre-filled from your saved application — review and edit before generating.",
   "format.generateTitle": "Generate your document",
@@ -168,6 +168,13 @@ const en: Record<string, string> = {
   "format.enterHint": "Enter:",
   "format.showExample": "Show ideal example",
   "format.answerPlaceholder": "Type your answer here…",
+  "format.filledSection": "Pre-filled format (Q&A wizard)",
+  "format.blankSection": "Blank template (manual download)",
+  "format.languageNotice":
+    "Questions and your exported file will be in English. Use the language toggle in the header to switch to Arabic (العربية) — both the Q&A and the PDF/DOCX will follow your choice.",
+  "format.exportLanguage": "Export language: English",
+  "format.generateSuccess": "Document generated successfully",
+  "format.generateError": "Failed to generate document",
 
   // Theme
   "theme.light": "Light mode",
@@ -523,7 +530,7 @@ const ar: Record<string, string> = {
 
   // Format wizard
   "format.button": "تنسيق",
-  "format.chooseTemplate": "اختر النموذج",
+  "format.chooseTemplate": "اختر النموذج — أجب على الأسئلة ثم أنشئ الملف",
   "format.wizardBadge": "معالج التنسيق الموجّه",
   "format.prefilledHint": "تم تعبئة الحقول مسبقاً من طلبك المحفوظ — راجعها وعدّلها قبل الإنشاء.",
   "format.generateTitle": "إنشاء مستندك",
@@ -535,6 +542,13 @@ const ar: Record<string, string> = {
   "format.enterHint": "أدخل:",
   "format.showExample": "عرض مثال مثالي",
   "format.answerPlaceholder": "اكتب إجابتك هنا…",
+  "format.filledSection": "تنسيق معبّأ (أسئلة وأجوبة)",
+  "format.blankSection": "نموذج فارغ (تنزيل يدوي)",
+  "format.languageNotice":
+    "ستكون الأسئلة والملف المُصدَّر بالعربية. استخدم مبدّل اللغة في الشريط العلوي للتبديل إلى English — الأسئلة وملف PDF/DOCX يتبعان اختيارك.",
+  "format.exportLanguage": "لغة التصدير: العربية",
+  "format.generateSuccess": "تم إنشاء الملف بنجاح",
+  "format.generateError": "فشل إنشاء الملف",
 
   // Theme
   "theme.light": "الوضع الفاتح",

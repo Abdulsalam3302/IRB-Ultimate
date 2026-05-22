@@ -76,6 +76,10 @@ const en: Record<string, string> = {
   "nav.logout": "Sign Out",
   "nav.language": "العربية",
 
+  // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
+  "demo.banner":
+    "Demo environment — do not submit real participant data or PHI. This deployment is for evaluation and feedback only.",
+
   // Hero
   "hero.badge": "Aligned with Saudi Vision 2030",
   "hero.title": "Institutional Review Board",
@@ -411,6 +415,10 @@ const ar: Record<string, string> = {
   "nav.login": "تسجيل الدخول",
   "nav.logout": "تسجيل الخروج",
   "nav.language": "English",
+
+  // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
+  "demo.banner":
+    "بيئة تجريبية — لا تُقدّم بيانات مشاركين حقيقية أو معلومات صحية محمية. هذا النشر مخصص للتقييم والملاحظات فقط.",
 
   // Hero
   "hero.badge": "متوافق مع رؤية السعودية 2030",

@@ -30,8 +30,8 @@ explicit cross-border transfer authorisation exists. Pick one:
 
 Deploy to Vercel + Railway + PlanetScale **with a visible banner** that
 labels the platform as a demo / pilot using non-real data. Real PHI is
-not accepted. Banner copy is already wired via env: set
-`PUBLIC_DEMO_BANNER=1` and an EN/AR notice appears in the navbar +
+not accepted. Banner copy is wired via env: set
+`VITE_PUBLIC_DEMO_BANNER=1` and an EN/AR notice appears in the navbar +
 landing hero.
 
 This is the "ship now, real launch later" path. Use for AHSS leadership
@@ -140,7 +140,9 @@ SMTP_FROM="IRB Ultimate <noreply@irb.example.sa>"
 ALLOWED_EGRESS_HOSTS=files.s3.me-central-1.amazonaws.com,api.openai.com
 
 # Demo banner. Set 1 for Option A demo deploys.
-PUBLIC_DEMO_BANNER=
+VITE_PUBLIC_DEMO_BANNER=
+# Public canonical URL for SEO (build-time).
+VITE_PUBLIC_SITE_URL=
 ```
 
 ## Deploy targets
@@ -222,7 +224,7 @@ Only after Option B or C residency move:
 
 1. Take a final backup + verify restore.
 2. Update DNS to point `irb.example.sa` → Vercel.
-3. Set `PUBLIC_DEMO_BANNER=` (empty) to remove the demo notice.
+3. Set `VITE_PUBLIC_DEMO_BANNER=` (empty) to remove the demo notice.
 4. Smoke-test in private mode.
 5. Email the AHSS list with the production URL + onboarding doc.
 

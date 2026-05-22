@@ -72,6 +72,19 @@ if (
   document.head.appendChild(s);
 }
 
+// SEO canonical — only when a public site URL is configured at build time.
+const PUBLIC_SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL;
+if (typeof window !== "undefined" && typeof PUBLIC_SITE_URL === "string" && PUBLIC_SITE_URL.length > 0) {
+  const canonical = PUBLIC_SITE_URL.replace(/\/$/, "") + "/";
+  let link = document.querySelector('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement("link");
+    link.setAttribute("rel", "canonical");
+    document.head.appendChild(link);
+  }
+  link.setAttribute("href", canonical);
+}
+
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>

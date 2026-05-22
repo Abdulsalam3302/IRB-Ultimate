@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { DemoBanner } from "@/components/DemoBanner";
 import { useT } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { getLoginUrl } from "@/const";
@@ -25,7 +26,9 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
   const ForwardArrow = isRtl ? ArrowLeft : ChevronRight;
 
   return (
-    <nav className="sticky top-0 z-50 glass border-b border-border/50">
+    <>
+      <DemoBanner />
+      <nav className="sticky top-0 z-50 glass border-b border-border/50">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-3 cursor-pointer transition-apple" onClick={() => setLocation("/")}>
           <img src={LOGO_URL} alt="IRB" className="h-9 w-9 rounded-lg object-contain" />
@@ -68,5 +71,6 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
         </div>
       </div>
     </nav>
+    </>
   );
 }

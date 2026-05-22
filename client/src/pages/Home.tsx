@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { DemoBanner } from "@/components/DemoBanner";
 import { useT } from "@/contexts/LanguageContext";
 import {
   Shield, Zap, Brain, Clock, FileCheck, Users, ArrowRight,
@@ -35,6 +36,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
+      <DemoBanner />
       {/* Apple-style Glass Navigation */}
       <nav className="sticky top-0 z-50 glass border-b border-border/50">
         <div className="container flex h-16 items-center justify-between">

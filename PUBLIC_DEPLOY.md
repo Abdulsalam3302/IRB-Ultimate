@@ -21,12 +21,16 @@ RAILWAY_TOKEN=xxx ./scripts/deploy-all.sh
 ```
 
 ### Live URLs
+
+> **Use the correct domain:** `irb-saudi-arabia.vercel.app` — **not** `ifb-saudi-arabia` (typo returns a blank 404 page).
+
 | Service | URL |
 |---------|-----|
-| **Vercel (frontend)** | https://irb-saudi-arabia.vercel.app |
-| **Railway (full stack)** | Set after first Railway deploy |
+| **Public site (Vercel)** | https://irb-saudi-arabia.vercel.app |
+| **API backend (Railway)** | https://irb-ultimate-production.up.railway.app |
+| **Pilot admin login** | https://irb-saudi-arabia.vercel.app/api/dev/login |
 
-After Railway is live, merge `vercel.rewrites.template.json` into `vercel.json` (replace `RAILWAY_API_URL` with your Railway host) so Vercel proxies `/api/*` to the backend.
+Vercel proxies `/api/*` and `/uploads/*` to Railway via `vercel.json` rewrites — no separate API URL needed in the browser.
 
 ---
 

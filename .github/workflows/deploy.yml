@@ -11,28 +11,32 @@ concurrency:
 
 jobs:
   deploy-railway:
-    name: Railway (full stack)
+    name: Railway (trigger redeploy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Skip without Railway token
         id: railway_skip
         run: |
           if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "RAILWAY_TOKEN not set — skipping Railway deploy"
+            echo "RAILWAY_TOKEN not set — Railway auto-deploys from GitHub anyway"
           fi
 
-      - name: Install Railway CLI
-        if: steps.railway_skip.outputs.skip != 'true'
-        run: npm install -g @railway/cli@4.61.1
-
-      - name: Deploy to Railway
+      - name: Trigger Railway redeploy via API
         if: steps.railway_skip.outputs.skip != 'true'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --detach
+          RAILWAY_WEB_SERVICE_ID: ${{ vars.RAILWAY_WEB_SERVICE_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+        run: |
+          if [ -z "$RAILWAY_WEB_SERVICE_ID" ] || [ -z "$RAILWAY_ENVIRONMENT_ID" ]; then
+            echo "Railway service/env vars not set — skipping API redeploy (GitHub hook still deploys)"
+            exit 0
+          fi
+          curl -sfS -X POST https://backboard.railway.com/graphql/v2 \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"mutation(\$sid: String!, \$env: String!) { serviceInstanceDeployV2(serviceId: \$sid, environmentId: \$env) }\",\"variables\":{\"sid\":\"$RAILWAY_WEB_SERVICE_ID\",\"env\":\"$RAILWAY_ENVIRONMENT_ID\"}}"
 
   deploy-vercel:
     name: Vercel (frontend)
@@ -47,6 +51,15 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "VERCEL_TOKEN not set — skipping Vercel deploy"
           fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.vercel_skip.outputs.skip != 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.vercel_skip.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Install Vercel CLI
         if: steps.vercel_skip.outputs.skip != 'true'

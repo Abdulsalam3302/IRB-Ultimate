@@ -16,7 +16,7 @@ def gql(token: str, query: str, variables: dict) -> dict:
     body = json.dumps({"query": query, "variables": variables})
     proc = subprocess.run(
         [
-            "curl", "-sfS", "-X", "POST", "https://backboard.railway.com/graphql/v2",
+            "curl", "-sS", "-X", "POST", "https://backboard.railway.com/graphql/v2",
             "-H", "Authorization: Bearer " + token,
             "-H", "Content-Type: application/json",
             "-d", body,
@@ -29,7 +29,8 @@ def gql(token: str, query: str, variables: dict) -> dict:
         sys.exit(1)
     out = json.loads(proc.stdout)
     if out.get("errors"):
-        raise RuntimeError(json.dumps(out["errors"], indent=2))
+        print(json.dumps(out["errors"], indent=2), file=sys.stderr)
+        raise RuntimeError("GraphQL error")
     return out["data"]
 
 
@@ -41,7 +42,6 @@ def main() -> None:
 
     vars_payload = {
         "PUBLIC_SIGNIN_ENABLED": "1",
-        "PILOT_LOGIN_ENABLED": "0",
         "PUBLIC_APP_URL": VERCEL_URL,
         "OWNER_OPEN_ID": "email:owner@irb-ultimate.local",
         "DATABASE_POOL_MAX": "30",

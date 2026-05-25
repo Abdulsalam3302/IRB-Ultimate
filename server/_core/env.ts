@@ -55,9 +55,11 @@ export const ENV = {
   devLoginToken: (process.env.DEV_LOGIN_TOKEN ?? "").trim(),
   // Public pilot/demo login — token-guarded, works over HTTPS when OAuth
   // is not configured. Requires PILOT_LOGIN_ENABLED=1 and PILOT_LOGIN_TOKEN.
+  // Public sign-in takes precedence over legacy pilot token login.
   pilotLoginEnabled:
     isProduction &&
     process.env.PILOT_LOGIN_ENABLED === "1" &&
+    process.env.PUBLIC_SIGNIN_ENABLED !== "1" &&
     (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
   pilotLoginToken: (process.env.PILOT_LOGIN_TOKEN ?? "").trim(),
   // Production open sign-in when OAuth is not configured (researchers use name + email).

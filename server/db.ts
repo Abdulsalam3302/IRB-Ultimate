@@ -23,6 +23,7 @@ let _db: ReturnType<typeof drizzle> | null = null;
 // a filesystem-write attack against the running container's .env can no
 // longer silently re-attribute admin on next login.
 const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
+const BOOT_OWNER_EMAIL = ENV.ownerEmail;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -65,6 +66,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     else if (BOOT_OWNER_OPEN_ID && user.openId === BOOT_OWNER_OPEN_ID) {
       // SA-26: BOOT_OWNER_OPEN_ID is captured once at module init, so a
       // mid-run env mutation can't re-target who becomes admin.
+      values.role = 'admin';
+      updateSet.role = 'admin';
+    }
+    else if (BOOT_OWNER_EMAIL && user.email?.toLowerCase() === BOOT_OWNER_EMAIL) {
       values.role = 'admin';
       updateSet.role = 'admin';
     }

@@ -10,6 +10,8 @@ ENV_ID = os.environ.get("RAILWAY_ENVIRONMENT_ID", "6ddc16bf-74d6-4367-98af-8b1db
 WEB_SERVICE_ID = os.environ.get("RAILWAY_WEB_SERVICE_ID", "90e95f9b-3597-414e-868e-68952a4718bd")
 VERCEL_URL = "https://irb-saudi-arabia.vercel.app"
 RAILWAY_URL = "https://irb-ultimate-production.up.railway.app"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://kpmbucksuisdvamgdmgl.supabase.co")
+SUPABASE_ANON_KEY = os.environ.get("VITE_SUPABASE_ANON_KEY", "")
 
 
 def gql(token: str, query: str, variables: dict) -> dict:
@@ -41,12 +43,16 @@ def main() -> None:
         sys.exit(1)
 
     vars_payload = {
-        "PUBLIC_SIGNIN_ENABLED": "1",
+        "SUPABASE_URL": SUPABASE_URL,
+        "VITE_SUPABASE_URL": SUPABASE_URL,
+        "PUBLIC_SIGNIN_ENABLED": "0",
         "PUBLIC_APP_URL": VERCEL_URL,
-        "OWNER_OPEN_ID": "email:owner@irb-ultimate.local",
+        "OWNER_EMAIL": "owner@irb-ultimate.local",
         "DATABASE_POOL_MAX": "30",
         "ALLOWED_ORIGINS": f"{VERCEL_URL},{RAILWAY_URL}",
     }
+    if SUPABASE_ANON_KEY:
+        vars_payload["VITE_SUPABASE_ANON_KEY"] = SUPABASE_ANON_KEY
 
     print("Updating Railway production variables...")
     gql(

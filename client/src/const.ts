@@ -12,8 +12,22 @@ export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
  * anything that doesn't begin with "/".
  */
 export const getLoginUrl = (next?: string) => {
-  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const safeNext = typeof next === "string" && /^\/(?!\/)/.test(next) ? next : "";
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (
+    typeof supabaseUrl === "string" &&
+    supabaseUrl.trim() &&
+    typeof supabaseKey === "string" &&
+    supabaseKey.trim()
+  ) {
+    const url = new URL("/auth", window.location.origin);
+    if (safeNext) url.searchParams.set("next", safeNext);
+    return url.toString();
+  }
+
+  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
 
   if (!oauthPortalUrl || String(oauthPortalUrl).trim() === "") {
     return `${window.location.origin}/api/sign-in`;

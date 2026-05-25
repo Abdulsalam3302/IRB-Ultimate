@@ -42,6 +42,11 @@ export const ENV = {
   // when not separately set — same value in both is fine.
   oAuthPortalUrl: (process.env.OAUTH_PORTAL_URL ?? process.env.VITE_OAUTH_PORTAL_URL ?? "").trim(),
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  ownerEmail: (process.env.OWNER_EMAIL ?? "").trim().toLowerCase(),
+  supabaseUrl: (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim(),
+  supabaseEnabled: Boolean(
+    (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()
+  ),
   isProduction,
   // SA-17: dev-login is OFF by default — devs must set DEV_LOGIN_ENABLED=1
   // explicitly. Previous code treated "unset" as enabled which made an SSH
@@ -55,17 +60,18 @@ export const ENV = {
   devLoginToken: (process.env.DEV_LOGIN_TOKEN ?? "").trim(),
   // Public pilot/demo login — token-guarded, works over HTTPS when OAuth
   // is not configured. Requires PILOT_LOGIN_ENABLED=1 and PILOT_LOGIN_TOKEN.
-  // Public sign-in takes precedence over legacy pilot token login.
   pilotLoginEnabled:
     isProduction &&
     process.env.PILOT_LOGIN_ENABLED === "1" &&
     process.env.PUBLIC_SIGNIN_ENABLED !== "1" &&
+    !((process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()) &&
     (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
   pilotLoginToken: (process.env.PILOT_LOGIN_TOKEN ?? "").trim(),
   // Production open sign-in when OAuth is not configured (researchers use name + email).
   publicSignInEnabled:
     isProduction &&
     process.env.PUBLIC_SIGNIN_ENABLED === "1" &&
+    !((process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()) &&
     (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
   // Canonical public URL (Vercel) — used for OAuth redirect URIs behind split deploy.
   publicAppUrl: (process.env.PUBLIC_APP_URL ?? process.env.VITE_PUBLIC_SITE_URL ?? "").trim(),

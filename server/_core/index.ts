@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerDevLoginRoutes } from "./devLogin";
+import { registerSupabaseAuthRoutes } from "./supabaseAuth";
 import { registerSecurity, registerApiGuards, registerErrorHandler } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
 import { appRouter } from "../routers";
@@ -171,7 +172,7 @@ async function startServer() {
   }
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
-  // Dev login (auto-disabled in production / when OAUTH_SERVER_URL is set)
+  registerSupabaseAuthRoutes(app);
   registerDevLoginRoutes(app);
   // Application export (HTML for printing, ZIP for inspectors). Streamed
   // binaries — kept off the tRPC adapter which expects JSON.

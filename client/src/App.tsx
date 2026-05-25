@@ -28,6 +28,8 @@ const VersionHistory = lazy(() => import("./pages/VersionHistory"));
 const Registry = lazy(() => import("./pages/Registry"));
 const GuidelineDoc = lazy(() => import("./pages/GuidelineDoc"));
 const FormatWizard = lazy(() => import("./pages/FormatWizard"));
+const Auth = lazy(() => import("./pages/Auth"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function PageFallback() {
@@ -61,6 +63,8 @@ function Router() {
         <Route path={"/resources/guideline/:slug"} component={GuidelineDoc} />
         <Route path={"/format/:slug"} component={FormatWizard} />
         <Route path={"/application/:id/versions"} component={VersionHistory} />
+        <Route path={"/auth"} component={Auth} />
+        <Route path={"/auth/callback"} component={AuthCallback} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

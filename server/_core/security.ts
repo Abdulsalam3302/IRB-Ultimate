@@ -28,6 +28,7 @@ const STRICT_ROUTES = [
 const AUTH_ROUTES = [
   "/api/sign-in",
   "/api/dev/login",
+  "/api/auth/supabase/session",
   "/api/oauth/callback",
   "/api/oauth/start",
 ];
@@ -97,6 +98,13 @@ function buildConnectSrc(): string {
     "https://api.openalex.org",
     "https://clinicaltrials.gov",
   ];
+  if (ENV.supabaseUrl) {
+    try {
+      base.push(new URL(ENV.supabaseUrl).origin);
+    } catch {
+      /* ignore malformed URL */
+    }
+  }
   const extra = (process.env.ALLOWED_CONNECT_HOSTS ?? "")
     .split(",")
     .map(s => s.trim())

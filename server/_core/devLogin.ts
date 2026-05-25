@@ -94,6 +94,11 @@ export function registerDevLoginRoutes(app: Express) {
     ENV.ownerOpenId && openId === ENV.ownerOpenId ? "admin" : "user";
 
   const renderSignIn = (req: Request, res: Response) => {
+    if (ENV.supabaseEnabled) {
+      const base = ENV.publicAppUrl || `${req.protocol}://${req.get("host") ?? ""}`;
+      res.redirect(302, `${base.replace(/\/$/, "")}/auth`);
+      return;
+    }
     if (!requireLoopbackUnlessPublic(req, res)) return;
     const title = publicSignIn ? "Sign In" : pilotMode ? "Secure Sign In" : "Dev Sign In";
     const intro = publicSignIn

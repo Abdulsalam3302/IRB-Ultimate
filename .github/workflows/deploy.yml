@@ -31,6 +31,8 @@ jobs:
           RAILWAY_WEB_SERVICE_ID: ${{ vars.RAILWAY_WEB_SERVICE_ID }}
           RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
           COMMIT_SHA: ${{ github.sha }}
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$RAILWAY_WEB_SERVICE_ID" ] || [ -z "$RAILWAY_ENVIRONMENT_ID" ]; then
             echo "Railway service/env vars not set — skipping API redeploy (GitHub hook still deploys)"
@@ -59,6 +61,20 @@ jobs:
       - name: Install Vercel CLI
         if: steps.vercel_skip.outputs.skip != 'true'
         run: npm install -g vercel@52
+
+      - name: Sync Supabase env on Vercel
+        if: steps.vercel_skip.outputs.skip != 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$VITE_SUPABASE_URL" ]; then
+            printf '%s' "$VITE_SUPABASE_URL" | vercel env add VITE_SUPABASE_URL production --force --token="$VERCEL_TOKEN"
+          fi
+          if [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+            printf '%s' "$VITE_SUPABASE_ANON_KEY" | vercel env add VITE_SUPABASE_ANON_KEY production --force --token="$VERCEL_TOKEN"
+          fi
 
       - name: Deploy production
         if: steps.vercel_skip.outputs.skip != 'true'

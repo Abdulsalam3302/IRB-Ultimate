@@ -81,7 +81,7 @@ def main() -> None:
         """,
         {"sid": WEB_SERVICE_ID, "env": ENV_ID},
     )
-    print("Done. Sign in at:", VERCEL_URL + "/api/sign-in")
+    print("Done. Sign in at:", VERCEL_URL + "/auth")
 
 
 if __name__ == "__main__":

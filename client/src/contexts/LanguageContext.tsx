@@ -439,6 +439,7 @@ const en: Record<string, string> = {
   "auth.noSession": "No active session. Please sign in again.",
   "auth.signingIn": "Signing you in…",
   "auth.tryAgain": "Try again",
+  "auth.notConfigured": "Sign-in is being updated. Please try again in a few minutes or contact support.",
 
   // Declaration Phase 0
   "decl.title": "Declaration of Honesty & Consent",
@@ -846,6 +847,7 @@ const ar: Record<string, string> = {
   "auth.noSession": "لا توجد جلسة نشطة. سجّل الدخول مرة أخرى.",
   "auth.signingIn": "جاري تسجيل الدخول…",
   "auth.tryAgain": "حاول مرة أخرى",
+  "auth.notConfigured": "جاري تحديث تسجيل الدخول. حاول بعد دقائق أو تواصل مع الدعم.",
 
   // Declaration Phase 0
   "decl.title": "إقرار الصدق والموافقة",

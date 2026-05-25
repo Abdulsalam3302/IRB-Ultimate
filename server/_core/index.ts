@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerDevLoginRoutes } from "./devLogin";
 import { registerSupabaseAuthRoutes } from "./supabaseAuth";
+import { registerAuthRedirectRoutes } from "./authRedirects";
 import { registerSecurity, registerApiGuards, registerErrorHandler } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
 import { appRouter } from "../routers";
@@ -82,6 +83,7 @@ async function startServer() {
   // Must come AFTER body parsers (so preflight short-circuit reads no body)
   // and BEFORE OAuth/dev-login/exports/tRPC mounts.
   registerApiGuards(app);
+  registerAuthRedirectRoutes(app);
   // Reject any /api/* request that doesn't match a defined route as JSON 404
   // (SA-21). Without this the SPA fallthrough at vite.ts returns index.html
   // for stale endpoints, which masks misconfiguration and bad clients.

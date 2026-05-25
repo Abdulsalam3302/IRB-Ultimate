@@ -15,5 +15,17 @@
       "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/sign-in",
+      "destination": "/auth",
+      "permanent": false
+    },
+    {
+      "source": "/login",
+      "destination": "/auth",
+      "permanent": false
+    }
   ]
 }

@@ -30,7 +30,9 @@ export const getLoginUrl = (next?: string) => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
 
   if (!oauthPortalUrl || String(oauthPortalUrl).trim() === "") {
-    return `${window.location.origin}/api/sign-in`;
+    const url = new URL("/auth", window.location.origin);
+    if (safeNext) url.searchParams.set("next", safeNext);
+    return url.toString();
   }
 
   const url = new URL("/api/oauth/start", window.location.origin);

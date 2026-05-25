@@ -7,7 +7,6 @@ import { Logo } from "@/components/design/Logo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useT } from "@/contexts/LanguageContext";
 import { getSupabase, isSupabaseAuthEnabled } from "@/lib/supabase";
-import { getLoginUrl } from "@/const";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,12 +55,9 @@ export default function Auth() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseAuthEnabled) {
-      window.location.href = getLoginUrl(next);
-    }
     const err = params.get("error");
     if (err) toast.error(decodeURIComponent(err));
-  }, [next, params]);
+  }, [params]);
 
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
@@ -114,8 +110,9 @@ export default function Auth() {
 
   if (!isSupabaseAuthEnabled) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-ink-soft max-w-md">{t("auth.notConfigured")}</p>
+        <a href="/" className="text-forest-800 underline underline-offset-2">{t("nav.home")}</a>
       </div>
     );
   }

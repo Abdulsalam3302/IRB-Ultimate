@@ -21,28 +21,28 @@ jobs:
         run: |
           if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "RAILWAY_TOKEN not set — Railway auto-deploys from GitHub anyway"
           fi
 
-      - name: Trigger Railway redeploy via API
+      - name: Apply Railway production env
+        if: steps.railway_skip.outputs.skip != 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: python3 scripts/railway-production-env.py
+
+      - name: Trigger Railway deploy
         if: steps.railway_skip.outputs.skip != 'true'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_WEB_SERVICE_ID: ${{ vars.RAILWAY_WEB_SERVICE_ID }}
           RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
           COMMIT_SHA: ${{ github.sha }}
-          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "$RAILWAY_WEB_SERVICE_ID" ] || [ -z "$RAILWAY_ENVIRONMENT_ID" ]; then
-            echo "Railway service/env vars not set — skipping API redeploy (GitHub hook still deploys)"
-            exit 0
-          fi
           curl -sfS -X POST https://backboard.railway.com/graphql/v2 \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"query\":\"mutation(\$sid: String!, \$env: String!, \$sha: String) { serviceInstanceDeployV2(serviceId: \$sid, environmentId: \$env, commitSha: \$sha) }\",\"variables\":{\"sid\":\"$RAILWAY_WEB_SERVICE_ID\",\"env\":\"$RAILWAY_ENVIRONMENT_ID\",\"sha\":\"$COMMIT_SHA\"}}"
-          python3 scripts/railway-production-env.py || true
 
   deploy-vercel:
     name: Vercel (frontend)
@@ -55,8 +55,16 @@ jobs:
         run: |
           if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "VERCEL_TOKEN not set — skipping Vercel deploy"
           fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.vercel_skip.outputs.skip != 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.vercel_skip.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Install Vercel CLI
         if: steps.vercel_skip.outputs.skip != 'true'
@@ -64,16 +72,19 @@ jobs:
 
       - name: Sync Supabase env on Vercel
         if: steps.vercel_skip.outputs.skip != 'true'
+        continue-on-error: true
         env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
           if [ -n "$VITE_SUPABASE_URL" ]; then
-            printf '%s' "$VITE_SUPABASE_URL" | vercel env add VITE_SUPABASE_URL production --force --token="$VERCEL_TOKEN"
+            printf '%s' "$VITE_SUPABASE_URL" | vercel env add VITE_SUPABASE_URL production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
           fi
           if [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
-            printf '%s' "$VITE_SUPABASE_ANON_KEY" | vercel env add VITE_SUPABASE_ANON_KEY production --force --token="$VERCEL_TOKEN"
+            printf '%s' "$VITE_SUPABASE_ANON_KEY" | vercel env add VITE_SUPABASE_ANON_KEY production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
           fi
 
       - name: Deploy production
@@ -82,4 +93,13 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel deploy --prod --token="$VERCEL_TOKEN"
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_SITE_URL: https://irb-saudi-arabia.vercel.app
+          VITE_APP_ID: irb-sa-prod
+        run: |
+          vercel deploy --prod --token="$VERCEL_TOKEN" \
+            --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
+            --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" \
+            --build-env "VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL" \
+            --build-env "VITE_APP_ID=$VITE_APP_ID"

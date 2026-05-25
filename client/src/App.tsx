@@ -65,6 +65,8 @@ function Router() {
         <Route path={"/application/:id/versions"} component={VersionHistory} />
         <Route path={"/auth"} component={Auth} />
         <Route path={"/auth/callback"} component={AuthCallback} />
+        <Route path={"/sign-in"} component={Auth} />
+        <Route path={"/login"} component={Auth} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

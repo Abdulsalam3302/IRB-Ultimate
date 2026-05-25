@@ -52,15 +52,6 @@ jobs:
             echo "VERCEL_TOKEN not set — skipping Vercel deploy"
           fi
 
-      - uses: pnpm/action-setup@v4
-        if: steps.vercel_skip.outputs.skip != 'true'
-
-      - uses: actions/setup-node@v4
-        if: steps.vercel_skip.outputs.skip != 'true'
-        with:
-          node-version: 22
-          cache: pnpm
-
       - name: Install Vercel CLI
         if: steps.vercel_skip.outputs.skip != 'true'
         run: npm install -g vercel@52

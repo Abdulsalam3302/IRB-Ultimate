@@ -64,18 +64,17 @@ jobs:
         run: pnpm build
 
       - name: Bundle-size budget
-        # First-paint chunk should stay small. Fail the build if the
-        # initial entry chunk exceeds 80KB raw or vendor-react > 650KB.
+        # First-paint entry stays small; main vendor chunk includes React + UI libs.
         run: |
           ENTRY_BYTES=$(stat -c%s dist/public/assets/index-*.js | head -1)
-          REACT_BYTES=$(stat -c%s dist/public/assets/vendor-react-*.js | head -1)
-          echo "entry=${ENTRY_BYTES}b  react=${REACT_BYTES}b"
+          VENDOR_BYTES=$(stat -c%s dist/public/assets/vendor-*.js | grep -v charts | grep -v utils | head -1)
+          echo "entry=${ENTRY_BYTES}b  vendor=${VENDOR_BYTES}b"
           if [ "$ENTRY_BYTES" -gt 81920 ]; then
             echo "::error::Initial entry chunk exceeded 80KB budget"
             exit 1
           fi
-          if [ "$REACT_BYTES" -gt 665600 ]; then
-            echo "::error::vendor-react exceeded 650KB budget"
+          if [ "$VENDOR_BYTES" -gt 1048576 ]; then
+            echo "::error::vendor chunk exceeded 1MB budget"
             exit 1
           fi
 

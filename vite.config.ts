@@ -170,41 +170,16 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        // Split the bundle so first-paint stays small. Routes lazy-load
-        // pages on demand; vendor libs are cached separately.
+        // Route pages lazy-load; keep one React vendor chunk so Radix/tRPC/etc.
+        // share the same React 19 singleton (splitting causes blank-page crashes).
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          // React 19 requires react + react-dom + scheduler in one chunk — splitting
-          // them causes "Cannot set properties of undefined (setting 'Activity')".
-          if (
-            id.includes("react-dom") ||
-            id.includes("/react/") ||
-            id.includes("/scheduler/")
-          )
-            return "vendor-react";
-          if (id.includes("/react-hook-form/") || id.includes("/wouter/"))
-            return "vendor-react";
-          if (id.includes("@radix-ui")) return "vendor-radix";
           if (
             id.includes("/recharts/") ||
             id.includes("/d3-") ||
             id.includes("/victory-")
           )
             return "vendor-charts";
-          if (id.includes("@tanstack") || id.includes("/@trpc/"))
-            return "vendor-data";
-          if (
-            id.includes("/lucide-react/") ||
-            id.includes("/framer-motion/") ||
-            id.includes("/embla-carousel") ||
-            id.includes("/sonner/") ||
-            id.includes("/cmdk/") ||
-            id.includes("/vaul/") ||
-            id.includes("/input-otp/") ||
-            id.includes("/react-day-picker/") ||
-            id.includes("/react-resizable-panels/")
-          )
-            return "vendor-ui";
           if (
             id.includes("/zod/") ||
             id.includes("/superjson/") ||

@@ -1,0 +1,9 @@
+{
+  "experimentalServices": {
+    "web": {
+      "routePrefix": "/",
+      "framework": "vite",
+      "buildCommand": "npm run build"
+    }
+  }
+}

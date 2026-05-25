@@ -1,11 +1,6 @@
 {
-  "experimentalServices": {
-    "web": {
-      "routePrefix": "/",
-      "framework": "vite",
-      "buildCommand": "npm run build"
-    }
-  },
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -14,6 +9,10 @@
     {
       "source": "/uploads/:path*",
       "destination": "https://irb-ultimate-production.up.railway.app/uploads/:path*"
+    },
+    {
+      "source": "/((?!assets/).*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -76,7 +76,7 @@ export default function Home() {
               </Button>
             </div>
             <div className="mt-8 flex flex-wrap gap-4 text-[12.5px] text-ink-muted">
-              {[t("stats.digitalDesc"), "NBCE", "PDPL"].map(item => (
+              {[t("footer.stamp.pdpl"), t("footer.stamp.nbceGuidelines"), t("footer.stamp.helsinki")].map(item => (
                 <span key={item} className="inline-flex items-center gap-1.5">
                   <Check className="h-3.5 w-3.5 text-jade-600" /> {item}
                 </span>
@@ -242,7 +242,7 @@ export default function Home() {
             <p className="text-muted-foreground text-lg max-w-xl mx-auto mb-10 leading-relaxed">
               {t("hero.cta.desc")}
             </p>
-            <Button size="lg" className="btn-apple text-base px-10 h-13 shadow-lg gradient-accent text-white border-0" onClick={handleStartApplication}>
+            <Button size="lg" className="bg-forest-900 hover:bg-forest-800 text-cream-50 text-base px-10 h-13 shadow-lg" onClick={handleStartApplication}>
               {t("hero.apply")} <ArrowIcon className="ms-2 h-5 w-5" />
             </Button>
           </div>

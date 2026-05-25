@@ -266,16 +266,14 @@
   );
 }
 
-/* Animated gradient for hero accent */
+/* Hero / stats accent — unified forest green matching logo */
 .gradient-accent {
   background: linear-gradient(
     135deg,
-    oklch(0.432 0.095 166.913) 0%,
-    oklch(0.508 0.118 165.612) 50%,
-    oklch(0.696 0.17 162.48) 100%
+    #03281e 0%,
+    #064e3b 45%,
+    #0e3a2b 100%
   );
-  background-size: 200% 200%;
-  animation: gradient-shift 8s ease infinite;
 }
 
 @keyframes gradient-shift {

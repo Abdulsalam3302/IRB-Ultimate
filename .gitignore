@@ -125,3 +125,9 @@ backups/
 
 # Security audit artifacts (re-generated; not source of truth)
 SECURITY-AUDIT.md
+
+# Design imports / large artifacts
+*.zip
+Apply Stage*.html
+Dashboard _*.html
+IRB design*.zip

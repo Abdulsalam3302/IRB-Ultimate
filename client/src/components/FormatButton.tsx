@@ -43,7 +43,7 @@ export function FormatButton({ context, compact, wizardCta }: Props) {
         size={wizardCta ? "default" : "sm"}
         className={
           wizardCta
-            ? "w-full h-9 gap-1.5 bg-jade-500 hover:bg-jade-600 text-white font-semibold text-[12px]"
+            ? "w-full h-9 gap-1.5 bg-forest-900 hover:bg-forest-800 text-cream-50 font-semibold text-[12px]"
             : "gap-1.5"
         }
         onClick={() => go(slugs[0]!)}

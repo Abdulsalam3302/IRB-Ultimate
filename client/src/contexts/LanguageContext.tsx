@@ -76,12 +76,16 @@ const en: Record<string, string> = {
   "nav.logout": "Sign Out",
   "nav.language": "العربية",
 
+  // Platform independence notice (always visible)
+  "platform.notice":
+    "Independent platform by AHSS (ahss-sa.org) — not an official NBCE IRB provider. Compliant with PDPL, NBCE ethical guidelines, Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization.",
+
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
     "Demo environment — do not submit real participant data or PHI. This deployment is for evaluation and feedback only.",
 
   // Hero
-  "hero.badge": "Aligned with Saudi Vision 2030",
+  "hero.badge": "Digital IRB Review Platform",
   "hero.title": "Institutional Review Board",
   "hero.subtitle": "Ethical Research Approval Platform",
   "hero.desc": "A modern, AI-powered platform for fast, transparent, and compliant IRB review — reducing approval time from weeks to 24–48 hours with increasing quality and quantity of the service.",
@@ -123,7 +127,7 @@ const en: Record<string, string> = {
   // Features
   "features.title": "Platform Features",
   "features.ai.title": "AI Pre-Screening",
-  "features.ai.desc": "Automated compliance checks against NBCE guidelines, Helsinki Declaration, and ICH-GCP standards before human review.",
+  "features.ai.desc": "Automated compliance checks against NBCE ethical guidelines, the Declaration of Helsinki, and ICH-GCP standards before human review.",
   "features.fast.title": "Rapid Processing",
   "features.fast.desc": "24-48 hour target turnaround with automated committee assignment and real-time status tracking.",
   "features.secure.title": "Secure & Compliant",
@@ -132,12 +136,13 @@ const en: Record<string, string> = {
   "features.digital.desc": "Instantly generated PDF certificates with unique IRB numbers, verifiable through our public portal.",
   "features.analytics.title": "Real-time Analytics",
   "features.analytics.desc": "Administrators can track metrics, response times, approval rates, and committee performance in real time.",
-  "features.vision.title": "Vision 2030 Aligned",
-  "features.vision.desc": "Fully aligned with Saudi Arabia's digital transformation goals and NBCE regulatory requirements.",
+  "features.vision.title": "Standards Compliant",
+  "features.vision.desc": "Designed to support NBCE ethical guidelines, PDPL, Helsinki, ICH-GCP, and Saudi Vision 2030 — as an independent AHSS platform.",
 
   // Footer
   "footer.brand": "IRB Review Platform",
-  "footer.desc": "Accelerating ethical research approval in the Kingdom of Saudi Arabia through AI-powered review and digital certification.",
+  "footer.desc": "Independent ethical research review platform for the Kingdom of Saudi Arabia — AI-powered workflows and digital certification by AHSS.",
+  "footer.independence": "Not an official NBCE Institutional Review Board provider. AHSS operates this platform independently in compliance with applicable Saudi regulations and international ethical standards.",
   "footer.quickLinks": "Quick Links",
   "footer.legal": "Legal",
   "footer.contact": "Contact",
@@ -145,13 +150,21 @@ const en: Record<string, string> = {
   "footer.terms": "Terms of Service",
   "footer.madeWith": "Made with Love in Saudi Arabia",
   "footer.org": "Advanced Healthcare Systems Society",
-  "footer.approved": "Approved by Dr. Abdulsalam Aleid",
+  "footer.stamp.ahss": "AHSS Independent",
+  "footer.stamp.pdpl": "PDPL compliant",
+  "footer.stamp.nbceGuidelines": "NBCE guidelines",
+  "footer.stamp.helsinki": "Helsinki",
+  "footer.stamp.vision2030": "Vision 2030",
+  "footer.nbceReference": "For official NBCE regulations and guidance, visit",
+  "footer.founded": "Founded by Dr. Abdulsalam Aleid",
   "footer.rights": "All rights reserved and registered.",
-  "footer.nbce": "Operating under the National Bioethics Committee of Saudi Arabia (NBCE)",
+  "footer.nbce": "Reference: National Bioethics Committee of Saudi Arabia (NBCE) ethical guidelines",
+  "footer.nbceLink": "National Bioethics Committee (NBCE)",
+  "footer.vision2030": "Saudi Vision 2030",
   "footer.feedback": "Suggestions & complaints",
   "footer.feedbackCta": "Reach Dr. Aleid on LinkedIn",
-  "footer.copyright": "All copyrights are preserved and registered to Dr. Abdulsalam Aleid.",
-  "footer.partnership": "For partnership and cooperation, contact Dr. Aleid on LinkedIn",
+  "footer.copyright": "All copyrights are preserved and registered to",
+  "footer.partnership": "For partnership and cooperation inquiries, reach us on LinkedIn.",
   "footer.partnershipCta": "Connect on LinkedIn",
 
   // Format wizard
@@ -332,7 +345,7 @@ const en: Record<string, string> = {
 
   // Policy
   "policy.title": "Usage Policy & Terms of Service",
-  "policy.subtitle": "IRB Review Platform — National Bioethics Committee of Saudi Arabia (NBCE)",
+  "policy.subtitle": "IRB Saudi Arabia — Independent platform by AHSS · PDPL · NBCE guidelines · Helsinki · Vision 2030",
 
   // Admin
   "admin.title": "Admin Dashboard",
@@ -409,7 +422,7 @@ const en: Record<string, string> = {
 
   // Declaration Phase 0
   "decl.title": "Declaration of Honesty & Consent",
-  "decl.desc": "Before proceeding with your IRB application, you must read and accept the following declarations. These are required by the National Bioethics Committee of Saudi Arabia (NBCE).",
+  "decl.desc": "Before proceeding with your IRB application, you must read and accept the following declarations. These reflect ethical standards aligned with NBCE guidelines, Helsinki, and ICH-GCP.",
   "decl.honesty": "I declare that all information provided in this application is truthful, accurate, and complete to the best of my knowledge.",
   "decl.nbce": "I confirm that I hold a valid NBCE certification or equivalent bioethics training certification.",
   "decl.consent": "I confirm that all participants will be provided with clear, understandable informed consent documents and that their participation will be voluntary.",
@@ -450,12 +463,16 @@ const ar: Record<string, string> = {
   "nav.logout": "تسجيل الخروج",
   "nav.language": "English",
 
+  // Platform independence notice (always visible)
+  "platform.notice":
+    "منصة مستقلة من AHSS (ahss-sa.org) — ليست جهة IRB رسمية تابعة للـ NBCE. متوافقة مع PDPL وإرشادات NBCE الأخلاقية وإعلان هلسنكي وICH-GCP ورؤية السعودية 2030 للتحول الرقمي.",
+
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
     "بيئة تجريبية — لا تُقدّم بيانات مشاركين حقيقية أو معلومات صحية محمية. هذا النشر مخصص للتقييم والملاحظات فقط.",
 
   // Hero
-  "hero.badge": "متوافق مع رؤية السعودية 2030",
+  "hero.badge": "منصة مراجعة IRB الرقمية",
   "hero.title": "مجلس المراجعة المؤسسية",
   "hero.subtitle": "منصة الموافقة على الأبحاث الأخلاقية",
   "hero.desc": "منصة حديثة مدعومة بالذكاء الاصطناعي لمراجعة IRB سريعة وشفافة ومتوافقة — تقليل وقت الموافقة من أسابيع إلى 24-48 ساعة مع زيادة جودة وكمية الخدمة.",
@@ -506,12 +523,13 @@ const ar: Record<string, string> = {
   "features.digital.desc": "شهادات PDF يتم إنشاؤها فوريًا بأرقام IRB فريدة، قابلة للتحقق عبر بوابتنا العامة.",
   "features.analytics.title": "تحليلات في الوقت الفعلي",
   "features.analytics.desc": "يمكن للمسؤولين تتبع المقاييس وأوقات الاستجابة ومعدلات الموافقة وأداء اللجان في الوقت الفعلي.",
-  "features.vision.title": "متوافق مع رؤية 2030",
-  "features.vision.desc": "متوافق تمامًا مع أهداف التحول الرقمي في المملكة العربية السعودية ومتطلبات NBCE التنظيمية.",
+  "features.vision.title": "متوافق مع المعايير",
+  "features.vision.desc": "مصممة لدعم إرشادات NBCE الأخلاقية وPDPL وهلسنكي وICH-GCP ورؤية 2030 — كمنصة مستقلة من AHSS.",
 
   // Footer
   "footer.brand": "منصة مراجعة IRB",
-  "footer.desc": "تسريع الموافقة على الأبحاث الأخلاقية في المملكة العربية السعودية من خلال المراجعة المدعومة بالذكاء الاصطناعي والشهادات الرقمية.",
+  "footer.desc": "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة — سير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية من AHSS.",
+  "footer.independence": "ليست جهة IRB رسمية تابعة للـ NBCE. تُشغّل AHSS هذه المنصة بشكل مستقل وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
   "footer.quickLinks": "روابط سريعة",
   "footer.legal": "قانوني",
   "footer.contact": "اتصل بنا",
@@ -519,13 +537,21 @@ const ar: Record<string, string> = {
   "footer.terms": "شروط الخدمة",
   "footer.madeWith": "صنع بحب في المملكة العربية السعودية",
   "footer.org": "جمعية أنظمة الرعاية الصحية المتقدمة",
-  "footer.approved": "بإشراف د. عبدالسلام العيد",
+  "footer.stamp.ahss": "AHSS مستقلة",
+  "footer.stamp.pdpl": "متوافق PDPL",
+  "footer.stamp.nbceGuidelines": "إرشادات NBCE",
+  "footer.stamp.helsinki": "هلسنكي",
+  "footer.stamp.vision2030": "رؤية 2030",
+  "footer.nbceReference": "للاطلاع على لوائح NBCE الرسمية، زُر",
+  "footer.founded": "أسسها د. عبدالسلام العيد",
   "footer.rights": "جميع الحقوق محفوظة ومسجلة.",
-  "footer.nbce": "تعمل تحت إشراف اللجنة الوطنية للأخلاقيات الحيوية بالمملكة العربية السعودية (NBCE)",
+  "footer.nbce": "مرجع: إرشادات اللجنة الوطنية للأخلاقيات الحيوية (NBCE)",
+  "footer.nbceLink": "اللجنة الوطنية للأخلاقيات (NBCE)",
+  "footer.vision2030": "رؤية السعودية 2030",
   "footer.feedback": "اقتراحات وشكاوى",
   "footer.feedbackCta": "تواصل مع د. العيد على لينكدإن",
-  "footer.copyright": "جميع حقوق النشر محفوظة ومسجلة لـ د. عبدالسلام العيد.",
-  "footer.partnership": "للشراكة والتعاون، تواصل مع د. العيد على لينكدإن",
+  "footer.copyright": "جميع حقوق النشر محفوظة ومسجلة لـ",
+  "footer.partnership": "للشراكة والتعاون، تواصل معنا عبر لينكدإن.",
   "footer.partnershipCta": "تواصل عبر لينكدإن",
 
   // Format wizard
@@ -706,7 +732,7 @@ const ar: Record<string, string> = {
 
   // Policy
   "policy.title": "سياسة الاستخدام وشروط الخدمة",
-  "policy.subtitle": "منصة مراجعة IRB — اللجنة الوطنية للأخلاقيات الحيوية بالمملكة العربية السعودية (NBCE)",
+  "policy.subtitle": "IRB السعودية — منصة مستقلة من AHSS · PDPL · إرشادات NBCE · هلسنكي · رؤية 2030",
 
   // Admin
   "admin.title": "لوحة الإدارة",
@@ -783,7 +809,7 @@ const ar: Record<string, string> = {
 
   // Declaration Phase 0
   "decl.title": "إقرار الصدق والموافقة",
-  "decl.desc": "قبل المتابعة في طلب IRB، يجب عليك قراءة وقبول الإقرارات التالية. هذه مطلوبة من قبل اللجنة الوطنية للأخلاقيات الحيوية بالمملكة العربية السعودية (NBCE).",
+  "decl.desc": "قبل المتابعة في طلب IRB، يجب قراءة وقبول الإقرارات التالية. تعكس معايير أخلاقية متوافقة مع إرشادات NBCE وهلسنكي وICH-GCP.",
   "decl.honesty": "أقر بأن جميع المعلومات المقدمة في هذا الطلب صادقة ودقيقة وكاملة على حد علمي.",
   "decl.nbce": "أؤكد أنني أحمل شهادة NBCE سارية أو شهادة تدريب أخلاقيات حيوية معادلة.",
   "decl.consent": "أؤكد أن جميع المشاركين سيتم تزويدهم بوثائق موافقة مستنيرة واضحة ومفهومة وأن مشاركتهم ستكون طوعية.",

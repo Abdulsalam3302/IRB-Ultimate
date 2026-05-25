@@ -1,4 +1,3 @@
-import { FormatButton } from "@/components/FormatButton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,7 +14,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
-import { ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle, Loader2, Upload, Wand2, Calculator, Save, Star, MessageSquare, Lightbulb } from "lucide-react";
+import { Logo } from "@/components/design/Logo";
+import { ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle, Loader2, Upload, Wand2, Calculator, Save, Star, MessageSquare, Lightbulb, FileDown } from "lucide-react";
 import RelatedLiterature from "@/components/RelatedLiterature";
 import { AI_PASS_THRESHOLD } from "@shared/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -61,6 +61,7 @@ export default function ApplyStage2() {
   const [showProceedDespiteModal, setShowProceedDespiteModal] = useState(false);
   const [proceedDespiteReason, setProceedDespiteReason] = useState("");
   const [fixingAll, setFixingAll] = useState(false);
+  const [generatingProposal, setGeneratingProposal] = useState(false);
   const proceedDespite = trpc.application.proceedDespiteStage2.useMutation();
   const fixAllComments = trpc.application.fixAllComments.useMutation();
 
@@ -327,6 +328,44 @@ export default function ApplyStage2() {
     }
   };
 
+  const stage2CoreFields = [
+    "researchObjectives", "methodology", "sampleSize", "targetPopulation",
+    "inclusionCriteria", "exclusionCriteria", "dataCollectionMethods",
+    "informedConsentProcess", "riskAssessment", "benefitAssessment", "confidentialityMeasures",
+  ] as const;
+  const isStage2FormComplete = stage2CoreFields.every(f => (form as any)[f]?.trim?.())
+    && Boolean(app?.researchTitle?.trim())
+    && Boolean(app?.principalInvestigator?.trim());
+
+  const handleGenerateProposal = async () => {
+    if (!isStage2FormComplete) {
+      toast.error(isAr ? "أكمل جميع حقول المرحلة 2 قبل إنشاء حزمة الاقتراح" : "Complete all Stage 2 fields before generating the proposal.");
+      return;
+    }
+    setGeneratingProposal(true);
+    try {
+      if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
+      await saveStage2.mutateAsync({ id: appId, ...form, rejectionFileUrl: rejectionFileUrl || undefined });
+      const res = await fetch(`/api/export/proposal/${appId}.docx`, { credentials: "include" });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || "Proposal generation failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `SNIH-Proposal-${appId}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(isAr ? "تم إنشاء حزمة الاقتراح" : "SNIH proposal package generated.");
+    } catch (error: any) {
+      toast.error(error.message || (isAr ? "فشل إنشاء حزمة الاقتراح" : "Proposal generation failed"));
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
+
   const handleSubmitFeedback = async () => {
     if (feedbackRating === 0) { toast.error(isAr ? "يرجى تقييم المراجعة" : "Please rate the review"); return; }
     try {
@@ -381,7 +420,6 @@ export default function ApplyStage2() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="container py-8 max-w-3xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -400,7 +438,6 @@ export default function ApplyStage2() {
                 </button>
               )}
               {lastSaved && !autoSaving && !saveError && <span className="text-xs text-muted-foreground flex items-center gap-1"><Save className="h-3 w-3" /> {isAr ? "تم الحفظ" : "Saved"} {lastSaved.toLocaleTimeString()}</span>}
-              <FormatButton context={{ kind: "stage2", appId }} compact />
               <Button variant="ghost" size="sm" onClick={handleManualSave} disabled={saveDraft.isPending}>
                 <Save className="h-4 w-4 me-1" /> {isAr ? "حفظ المسودة" : "Save Draft"}
               </Button>
@@ -409,9 +446,8 @@ export default function ApplyStage2() {
           <Progress value={100} className="h-2" />
         </div>
 
-        {/* App Summary */}
         {app && (
-          <Card className="mb-6 bg-muted/30">
+          <Card className="irb-card mb-6 border-0 shadow-none bg-forest-50/40">
             <CardContent className="py-4">
               <div className="text-sm">
                 <span className="font-medium">{app.researchTitle}</span>
@@ -511,8 +547,13 @@ export default function ApplyStage2() {
 
         <div className="space-y-6">
           {fieldGroups.map((group, gi) => (
-            <Card key={gi}>
-              <CardHeader className="pb-4"><CardTitle className="text-lg">{group.title}</CardTitle></CardHeader>
+            <Card key={gi} id={`section-${gi + 1}`} className="irb-card scroll-mt-28 border-0 shadow-none">
+              <CardHeader className="pb-4">
+                <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-ink-muted mb-1">
+                  {isAr ? `القسم ${gi + 1}` : `Section ${gi + 1}`}
+                </div>
+                <CardTitle className="text-lg text-forest-900">{group.title}</CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4">
                 {group.fields.map((field: any) => (
                   <div key={field.key} className="space-y-2">
@@ -697,7 +738,19 @@ export default function ApplyStage2() {
             <Button variant="outline" onClick={() => setLocation(`/apply/${appId}/stage1`)}>
               <ArrowLeft className="h-4 w-4 me-1" /> {isAr ? "العودة للمرحلة 1" : "Back to Stage 1"}
             </Button>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={handleGenerateProposal}
+                disabled={!isStage2FormComplete || generatingProposal || saveStage2.isPending}
+                title={!isStage2FormComplete ? (isAr ? "أكمل المرحلة 2 أولاً" : "Complete Stage 2 first") : undefined}
+              >
+                {generatingProposal ? (
+                  <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري الإنشاء..." : "Generating..."}</>
+                ) : (
+                  <><FileDown className="h-4 w-4 me-2" /> {isAr ? "إنتاج الاقتراح (DOCX)" : "Proposal Production (DOCX)"}</>
+                )}
+              </Button>
               <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage2.isPending || runAiReview.isPending}>
                 {(saveStage2.isPending || runAiReview.isPending) ? (
                   <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري المراجعة..." : "Reviewing..."}</>
@@ -705,9 +758,6 @@ export default function ApplyStage2() {
                   <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
                 )}
               </Button>
-              {/* Stage 2 action gating mirrors Stage 1: score-based,
-                  not redFlag-based. Score >= 65 → submit normally;
-                  < 65 → only the proceed-despite path is offered. */}
               {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score >= 65 && (
                 <Button className="btn-apple shadow-sm" onClick={() => setLocation(`/apply/${appId}/submit`)}>
                   {isAr ? "تقديم الطلب" : "Submit Application"} <ArrowRight className="h-4 w-4 ms-1" />

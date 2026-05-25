@@ -20,8 +20,9 @@ import {
   Shield, ArrowLeft, Users, FileText, BarChart3, CheckCircle, XCircle,
   Clock, UserPlus, Trash2, Eye, Loader2, Award, Activity,
   TrendingUp, AlertTriangle, History, Download, Calendar, ArrowRight,
-  Ban, EyeOff, RotateCcw, RefreshCw, Filter
+  Ban, EyeOff, RotateCcw, RefreshCw, Filter, MessageSquare
 } from "lucide-react";
+import { Logo } from "@/components/design/Logo";
 import { STATUS_LABELS, STATUS_COLORS } from "@shared/types";
 import type { ApplicationStatus } from "@shared/types";
 
@@ -49,10 +50,8 @@ export default function AdminDashboard() {
       <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setLocation("/")}>
-            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-              <Shield className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-lg">{isAr ? "إدارة IRB" : "IRB Admin"}</span>
+            <Logo size={32} />
+            <span className="font-display font-bold text-lg hidden sm:inline">{isAr ? "إدارة IRB" : "IRB Admin"}</span>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/dashboard")}>
@@ -69,10 +68,11 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold mb-6">{isAr ? "لوحة الإدارة" : "Administration Panel"}</h1>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 max-w-3xl">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 max-w-5xl">
             <TabsTrigger value="overview"><BarChart3 className="h-4 w-4 me-1" /> {isAr ? "نظرة عامة" : "Overview"}</TabsTrigger>
             <TabsTrigger value="applications"><FileText className="h-4 w-4 me-1" /> {isAr ? "الطلبات" : "Applications"}</TabsTrigger>
             <TabsTrigger value="committee"><Users className="h-4 w-4 me-1" /> {isAr ? "اللجنة" : "Committee"}</TabsTrigger>
+            <TabsTrigger value="tickets"><MessageSquare className="h-4 w-4 me-1" /> {t("admin.tickets")}</TabsTrigger>
             <TabsTrigger value="reports"><Download className="h-4 w-4 me-1" /> {isAr ? "التقارير" : "Reports"}</TabsTrigger>
             <TabsTrigger value="audit"><History className="h-4 w-4 me-1" /> {isAr ? "السجل" : "Audit"}</TabsTrigger>
             <TabsTrigger value="users"><Shield className="h-4 w-4 me-1" /> {isAr ? "المستخدمون" : "Users"}</TabsTrigger>
@@ -81,6 +81,7 @@ export default function AdminDashboard() {
           <TabsContent value="overview"><OverviewTab /></TabsContent>
           <TabsContent value="applications"><ApplicationsTab /></TabsContent>
           <TabsContent value="committee"><CommitteeTab /></TabsContent>
+          <TabsContent value="tickets"><SupportTicketsTab /></TabsContent>
           <TabsContent value="reports"><ReportsTab /></TabsContent>
           <TabsContent value="audit"><AuditTab /></TabsContent>
           <TabsContent value="users"><UsersTab /></TabsContent>
@@ -1278,6 +1279,83 @@ function UsersTab() {
             </div>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SupportTicketsTab() {
+  const { t, lang } = useT();
+  const isAr = lang === "ar";
+  const { data: tickets, isLoading, refetch } = trpc.admin.supportTickets.useQuery();
+  const updateStatus = trpc.support.updateStatus.useMutation({
+    onSuccess: () => { toast.success(isAr ? "تم تحديث التذكرة" : "Ticket updated"); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const statusColor: Record<string, string> = {
+    open: "bg-amber-100 text-amber-800",
+    in_progress: "bg-blue-100 text-blue-800",
+    resolved: "bg-emerald-100 text-emerald-800",
+    closed: "bg-gray-100 text-gray-700",
+  };
+
+  if (isLoading) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  }
+
+  const list = tickets ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="h-5 w-5" /> {t("admin.tickets")}
+        </CardTitle>
+        <CardDescription>
+          {isAr ? "تذاكر الدعم المقدمة من المستخدمين عبر صفحة الدعم." : "Support tickets submitted via the Support page."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {list.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">{isAr ? "لا توجد تذاكر بعد." : "No support tickets yet."}</p>
+        ) : (
+          <div className="space-y-4">
+            {list.map((ticket: any) => (
+              <div key={ticket.id} className="border rounded-lg p-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold">{ticket.subject}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {ticket.name} · {ticket.email} · {ticket.category}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className={statusColor[ticket.status] || ""}>{ticket.status.replace(/_/g, " ")}</Badge>
+                    <Select
+                      value={ticket.status}
+                      onValueChange={(v) => updateStatus.mutate({ id: ticket.id, status: v as any })}
+                    >
+                      <SelectTrigger className="w-[140px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="open">{isAr ? "مفتوحة" : "Open"}</SelectItem>
+                        <SelectItem value="in_progress">{isAr ? "قيد المعالجة" : "In progress"}</SelectItem>
+                        <SelectItem value="resolved">{isAr ? "محلولة" : "Resolved"}</SelectItem>
+                        <SelectItem value="closed">{isAr ? "مغلقة" : "Closed"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-sm whitespace-pre-wrap">{ticket.message}</p>
+                <div className="text-xs text-muted-foreground">
+                  #{ticket.id} · {new Date(ticket.createdAt).toLocaleString(isAr ? "ar-SA" : "en-US")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

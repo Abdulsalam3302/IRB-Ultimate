@@ -13,7 +13,7 @@ import {
 } from "docx";
 import type { ResourceItem } from "@shared/resources";
 import { getTemplateSections, type TemplateField, type TemplateSection } from "@shared/templateFields";
-import { BRAND, STAMPED_TICK_SVG, AUTHOR } from "@shared/branding";
+import { BRAND, STAMPED_TICK_SVG, AUTHOR, PLATFORM } from "@shared/branding";
 
 export type ExportLang = "en" | "ar";
 export type ExportMode = "blank" | "filled" | "generated";
@@ -102,7 +102,7 @@ function authorStampHtml(lang: ExportLang): string {
 function footerHtml(lang: ExportLang, dateStr: string): string {
   const isAr = lang === "ar";
   return `<footer>
-    ${isAr ? "IRB Ultimate — متوافق مع NBCE" : "IRB Ultimate — NBCE aligned"} · ${dateStr}<br/>
+    ${isAr ? `${PLATFORM.nameAr} — منصة AHSS مستقلة · PDPL · إرشادات NBCE` : `${PLATFORM.nameEn} — Independent AHSS platform · PDPL · NBCE guidelines`} · ${dateStr}<br/>
     © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · ${isAr ? "جميع الحقوق محفوظة ومسجلة" : "All rights reserved and registered"}
   </footer>`;
 }
@@ -383,7 +383,7 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
       bidirectional: isAr,
       children: [
         new TextRun({
-          text: `IRB Ultimate — NBCE · ${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
+          text: `${PLATFORM.nameEn} — Independent AHSS · PDPL · NBCE guidelines · ${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
           italics: true,
           color: "888888",
           size: 18,
@@ -394,7 +394,7 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
   );
 
   const doc = new Document({
-    creator: "IRB Ultimate",
+    creator: PLATFORM.nameEn,
     title,
     sections: [{ properties: { page: { size: { orientation: PageOrientation.PORTRAIT } } }, children }],
   });

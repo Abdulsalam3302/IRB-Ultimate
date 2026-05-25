@@ -16,6 +16,11 @@ import {
   resourceFilename,
   type ExportMode,
 } from "./resourceExport";
+import {
+  generateSnihProposalDocx,
+  isStage2CompleteForProposal,
+  proposalFilename,
+} from "../snihProposalExport";
 
 type GenerateFormatBody = {
   slug?: string;
@@ -164,23 +169,18 @@ export function registerExportRoutes(app: Express) {
       if (!application) {
         res.status(404).type("text/plain").send("not found"); return;
       }
-      // Public access only for approved certificates. Otherwise require
-      // either the owner or an admin.
+      // Public access for approved or retracted certificates. Otherwise require owner/admin.
       let viewerKind: "public" | "owner-or-admin" = "owner-or-admin";
-      if (application.status !== "approved") {
+      if (application.status === "approved" || application.status === "retracted") {
+        const user = await sdk.authenticateRequest(req).catch(() => null);
+        if (!user) viewerKind = "public";
+        else if (application.applicantId !== user.id && user.role !== "admin") viewerKind = "public";
+      } else {
         const user = await sdk.authenticateRequest(req).catch(() => null);
         if (!user) { res.status(401).type("text/plain").send("authentication required"); return; }
         if (application.applicantId !== user.id && user.role !== "admin") {
           res.status(403).type("text/plain").send("forbidden"); return;
         }
-      } else {
-        // Approved + no auth needed → mark this as a public render. We
-        // still want to redact the applicant email so the unauth
-        // endpoint can't be scraped for a "principal investigator → email"
-        // harvest.
-        const user = await sdk.authenticateRequest(req).catch(() => null);
-        if (!user) viewerKind = "public";
-        else if (application.applicantId !== user.id && user.role !== "admin") viewerKind = "public";
       }
       const applicant = await db.getUserById(application.applicantId);
       const applicantEmailForRender = viewerKind === "public" ? null : (applicant?.email ?? null);
@@ -403,6 +403,44 @@ export function registerExportRoutes(app: Express) {
     } catch (err) {
       console.error("[Export Format Generate] failed:", err);
       if (!res.headersSent) res.status(500).type("text/plain").send("format generation failed");
+    }
+  });
+
+  // SNIH combined proposal DOCX — Stage 2 must be complete (all core fields filled)
+  app.get("/api/export/proposal/:id.docx", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) {
+        res.status(400).type("text/plain").send("invalid id");
+        return;
+      }
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) {
+        res.status(401).type("text/plain").send("authentication required");
+        return;
+      }
+      const application = await db.getApplicationById(id);
+      if (!application) {
+        res.status(404).type("text/plain").send("not found");
+        return;
+      }
+      if (application.applicantId !== user.id && user.role !== "admin") {
+        res.status(403).type("text/plain").send("forbidden");
+        return;
+      }
+      if (!isStage2CompleteForProposal(application)) {
+        res.status(400).type("text/plain").send("Complete Stage 2 before generating the proposal package.");
+        return;
+      }
+      const buf = await generateSnihProposalDocx(application);
+      const name = proposalFilename(application);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.send(buf);
+    } catch (err) {
+      console.error("[Export Proposal] failed:", err);
+      if (!res.headersSent) res.status(500).type("text/plain").send("proposal generation failed");
     }
   });
 }

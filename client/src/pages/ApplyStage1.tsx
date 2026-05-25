@@ -15,7 +15,6 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
-import { FormatButton } from "@/components/FormatButton";
 import {
   ArrowLeft, ArrowRight, Brain, CheckCircle, XCircle,
   Loader2, Upload, Plus, Trash2, UserPlus, Users, FileUp, AlertCircle, Info,
@@ -282,14 +281,10 @@ export default function ApplyStage1() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="container py-8 max-w-3xl mx-auto">
-        {/* Progress */}
         <div className="mb-8">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-3">
-              <Badge className="bg-primary text-primary-foreground">{isAr ? "المرحلة 1 من 2" : "Stage 1 of 2"}</Badge>
-              <span className="text-sm text-muted-foreground">{isAr ? "تصنيف البحث" : "Research Classification"}</span>
-            </div>
-            <FormatButton context={{ kind: "stage1", appId }} compact />
+          <div className="flex items-center gap-3 mb-3">
+            <Badge className="bg-primary text-primary-foreground">{isAr ? "المرحلة 1 من 2" : "Stage 1 of 2"}</Badge>
+            <span className="text-sm text-muted-foreground">{isAr ? "تصنيف البحث" : "Research Classification"}</span>
           </div>
           <Progress value={50} className="h-2" />
         </div>
@@ -298,7 +293,7 @@ export default function ApplyStage1() {
           <CardHeader>
             <CardTitle>{isAr ? "نوع البحث والمعلومات الأساسية" : "Research Type & Basic Information"}</CardTitle>
             <CardDescription>
-              {isAr ? "صنف بحثك وقدم المعلومات الأساسية للمشروع. جميع الحقول المميزة بـ * مطلوبة." : "Classify your research and provide basic project information. All fields marked with * are required."}
+              {isAr ? "يستخدم الذكاء الاصطناعي هذه الإجابات لتوجيه ملفك وللفحص المسبق وفق فئات NBCE." : "The AI uses these answers to route your file and pre-screen against NBCE categories."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -328,6 +323,10 @@ export default function ApplyStage1() {
               <Input placeholder={isAr ? "أدخل العنوان الكامل لبحثك" : "Enter the full title of your research"} value={form.researchTitle} onChange={(e) => setForm({ ...form, researchTitle: e.target.value })} />
             </div>
 
+            <div id="investigator" className="space-y-4 scroll-mt-28 pt-4 border-t border-forest-900/10">
+              <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-ink-muted">
+                {isAr ? "القسم 2 · الباحث الرئيسي" : "Section 2 · Principal investigator"}
+              </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{isAr ? "الباحث الرئيسي *" : "Principal Investigator *"}</Label>
@@ -359,6 +358,7 @@ export default function ApplyStage1() {
                 <Label>{isAr ? "المدة المتوقعة" : "Estimated Duration"}</Label>
                 <Input placeholder={isAr ? "مثال: 12 شهر" : "e.g., 12 months"} value={form.estimatedDuration} onChange={(e) => setForm({ ...form, estimatedDuration: e.target.value })} />
               </div>
+            </div>
             </div>
 
             {/* Research-Type-Specific Fields */}
@@ -577,55 +577,7 @@ export default function ApplyStage1() {
               </Card>
             )}
 
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-4 border-t">
-              <Button variant="outline" onClick={() => setLocation("/dashboard")}>
-                <ArrowLeft className="h-4 w-4 me-1" /> {isAr ? "رجوع" : "Back"}
-              </Button>
-              <div className="flex gap-3 flex-wrap">
-                <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage1.isPending || runAiReview.isPending || aiEnhanceStage1.isPending}>
-                  {(saveStage1.isPending || runAiReview.isPending) ? (
-                    <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري المراجعة..." : "Reviewing..."}</>
-                  ) : (
-                    <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
-                  )}
-                </Button>
-                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 90 && (
-                  <Button
-                    variant="default"
-                    className="bg-amber-600 hover:bg-amber-700 text-white"
-                    onClick={handleAiEnhance}
-                    disabled={aiEnhanceStage1.isPending}
-                  >
-                    {aiEnhanceStage1.isPending ? (
-                      <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {enhanceProgress || (isAr ? "جاري التحسين..." : "Enhancing…")}</>
-                    ) : (
-                      <><Sparkles className="h-4 w-4 me-1" /> {isAr ? "تحسين AI وإعادة المراجعة" : "AI Enhance & Re-review"}</>
-                    )}
-                  </Button>
-                )}
-                {/* Score threshold drives which actions are offered.
-                    >= 65 → normal "Proceed to Stage 2" (red flags shown
-                            as a warning but don't block).
-                    <  65 → only the proceed-despite path is offered,
-                            because the AI judged the application
-                            genuinely insufficient. */}
-                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score >= 65 && (
-                  <Button className="btn-apple shadow-sm" onClick={() => setLocation(`/apply/${appId}/stage2`)}>
-                    {isAr ? "المرحلة الثانية" : "Proceed to Stage 2"} <ArrowRight className="h-4 w-4 ms-1" />
-                  </Button>
-                )}
-                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 65 && (
-                  <Button variant="destructive" className="btn-apple" onClick={() => setShowProceedDespiteModal(true)}>
-                    <AlertCircle className="h-4 w-4 me-1" />
-                    {isAr ? "المتابعة رغم النتيجة" : "Proceed Despite Score"}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* AI Enhance review-required banner. Stays until applicant
-                clicks "I've reviewed" or edits any field manually. */}
+            {/* AI Enhance review-required banner */}
             {enhanceAlert && (
               <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
                 <CardContent className="py-3 flex items-start gap-3">
@@ -712,11 +664,47 @@ export default function ApplyStage1() {
                 </Card>
               </div>
             )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-4 border-t">
+              <Button variant="outline" onClick={() => setLocation("/dashboard")}>
+                <ArrowLeft className="h-4 w-4 me-1" /> {isAr ? "رجوع" : "Back"}
+              </Button>
+              <div className="flex gap-3 flex-wrap">
+                <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage1.isPending || runAiReview.isPending || aiEnhanceStage1.isPending}>
+                  {(saveStage1.isPending || runAiReview.isPending) ? (
+                    <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري المراجعة..." : "Reviewing..."}</>
+                  ) : (
+                    <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
+                  )}
+                </Button>
+                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 90 && (
+                  <Button variant="default" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={handleAiEnhance} disabled={aiEnhanceStage1.isPending}>
+                    {aiEnhanceStage1.isPending ? (
+                      <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {enhanceProgress || (isAr ? "جاري التحسين..." : "Enhancing…")}</>
+                    ) : (
+                      <><Sparkles className="h-4 w-4 me-1" /> {isAr ? "تحسين AI" : "AI Enhance"}</>
+                    )}
+                  </Button>
+                )}
+                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score >= 65 && (
+                  <Button className="btn-apple shadow-sm" onClick={() => setLocation(`/apply/${appId}/stage2`)}>
+                    {isAr ? "المرحلة الثانية" : "Proceed to Stage 2"} <ArrowRight className="h-4 w-4 ms-1" />
+                  </Button>
+                )}
+                {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 65 && (
+                  <Button variant="destructive" className="btn-apple" onClick={() => setShowProceedDespiteModal(true)}>
+                    <AlertCircle className="h-4 w-4 me-1" />
+                    {isAr ? "المتابعة رغم النتيجة" : "Proceed Despite Score"}
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         {/* Authors Section */}
-        <Card>
+        <Card className="mb-6">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>

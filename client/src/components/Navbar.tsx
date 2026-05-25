@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { DemoBanner } from "@/components/DemoBanner";
+import { PlatformNotice } from "@/components/PlatformNotice";
 import { useT } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { getLoginUrl } from "@/const";
@@ -27,6 +28,7 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
   return (
     <>
       <DemoBanner />
+      <PlatformNotice />
       <nav className="sticky top-0 z-50 glass border-b border-forest-900/10">
       <div className="container flex h-16 items-center justify-between gap-4">
         <div className="cursor-pointer transition-apple shrink-0" onClick={() => setLocation("/")}>
@@ -54,6 +56,12 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
             <>
               <Button variant="ghost" size="sm" onClick={() => setLocation("/verify")} className="hidden sm:inline-flex transition-apple">
                 <Search className="h-3.5 w-3.5 me-1" /> {t("nav.verify")}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/resources")} className="hidden md:inline-flex transition-apple">
+                {t("nav.resources")}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/policy")} className="hidden lg:inline-flex transition-apple">
+                {t("nav.policy")}
               </Button>
               {isAuthenticated ? (
                 <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-sm" onClick={() => setLocation("/dashboard")}>

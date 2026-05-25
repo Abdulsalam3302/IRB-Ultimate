@@ -12,6 +12,7 @@ import { getLoginUrl } from "@/const";
 import { useT } from "@/contexts/LanguageContext";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { Logo } from "@/components/design/Logo";
 import {
   Plus, FileText, Clock, CheckCircle, XCircle, ArrowRight,
   Shield, AlertTriangle, Eye, Download, Brain,
@@ -219,10 +220,8 @@ export default function Dashboard() {
       <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setLocation("/")}>
-            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-              <Shield className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-lg">{isAr ? "منصة IRB" : "IRB Platform"}</span>
+            <Logo size={32} />
+            <span className="font-display font-bold text-lg hidden sm:inline">{isAr ? "لوحة التحكم" : "Dashboard"}</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/verify")}>

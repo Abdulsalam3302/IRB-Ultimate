@@ -174,13 +174,15 @@ export default defineConfig({
         // pages on demand; vendor libs are cached separately.
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          if (id.includes("react-dom")) return "vendor-react-dom";
+          // React 19 requires react + react-dom + scheduler in one chunk — splitting
+          // them causes "Cannot set properties of undefined (setting 'Activity')".
           if (
+            id.includes("react-dom") ||
             id.includes("/react/") ||
-            id.includes("/react-hook-form/") ||
-            id.includes("/wouter/") ||
             id.includes("/scheduler/")
           )
+            return "vendor-react";
+          if (id.includes("/react-hook-form/") || id.includes("/wouter/"))
             return "vendor-react";
           if (id.includes("@radix-ui")) return "vendor-radix";
           if (

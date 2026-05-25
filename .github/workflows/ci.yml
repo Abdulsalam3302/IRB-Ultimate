@@ -47,7 +47,7 @@ jobs:
       - name: Apply migrations
         env:
           DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
-        run: pnpm db:push
+        run: pnpm db:migrate
 
       - name: Typecheck
         run: pnpm check
@@ -65,17 +65,17 @@ jobs:
 
       - name: Bundle-size budget
         # First-paint chunk should stay small. Fail the build if the
-        # initial entry chunk exceeds 80KB raw or vendor-react-dom > 600KB.
+        # initial entry chunk exceeds 80KB raw or vendor-react > 650KB.
         run: |
           ENTRY_BYTES=$(stat -c%s dist/public/assets/index-*.js | head -1)
-          REACT_BYTES=$(stat -c%s dist/public/assets/vendor-react-dom-*.js | head -1)
-          echo "entry=${ENTRY_BYTES}b  react-dom=${REACT_BYTES}b"
+          REACT_BYTES=$(stat -c%s dist/public/assets/vendor-react-*.js | head -1)
+          echo "entry=${ENTRY_BYTES}b  react=${REACT_BYTES}b"
           if [ "$ENTRY_BYTES" -gt 81920 ]; then
             echo "::error::Initial entry chunk exceeded 80KB budget"
             exit 1
           fi
-          if [ "$REACT_BYTES" -gt 614400 ]; then
-            echo "::error::vendor-react-dom exceeded 600KB budget"
+          if [ "$REACT_BYTES" -gt 665600 ]; then
+            echo "::error::vendor-react exceeded 650KB budget"
             exit 1
           fi
 
@@ -109,7 +109,7 @@ jobs:
             mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpw --silent 2>/dev/null && break
             sleep 2
           done
-          pnpm db:push
+          pnpm db:migrate
 
       - name: Boot dev server
         env:

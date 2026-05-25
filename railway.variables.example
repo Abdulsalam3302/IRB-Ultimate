@@ -1,0 +1,12 @@
+# Paste into Railway → Web service → Variables → Raw Editor
+# (Replace service names if yours differ: IRB-Ultimate / MySQL)
+
+NODE_ENV=production
+JWT_SECRET=<same value as GitHub secret JWT_SECRET>
+VITE_APP_ID=irb-sa-prod
+OWNER_OPEN_ID=dev-owner-001
+PILOT_LOGIN_ENABLED=1
+PILOT_LOGIN_TOKEN=<same value as GitHub secret PILOT_LOGIN_TOKEN>
+VITE_PUBLIC_DEMO_BANNER=1
+DATABASE_URL=${{MySQL.MYSQL_URL}}
+ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://${{IRB-Ultimate.RAILWAY_PUBLIC_DOMAIN}}

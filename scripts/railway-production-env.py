@@ -52,8 +52,9 @@ def main() -> None:
     gql(
         token,
         """
-        mutation($sid: String!, $env: String!, $vars: EnvironmentVariables!) {
+        mutation($pid: String!, $sid: String!, $env: String!, $vars: EnvironmentVariables!) {
           variableCollectionUpsert(input: {
+            projectId: $pid
             serviceId: $sid
             environmentId: $env
             variables: $vars
@@ -61,7 +62,7 @@ def main() -> None:
           })
         }
         """,
-        {"sid": WEB_SERVICE_ID, "env": ENV_ID, "vars": vars_payload},
+        {"pid": PROJECT_ID, "sid": WEB_SERVICE_ID, "env": ENV_ID, "vars": vars_payload},
     )
 
     print("Triggering redeploy...")

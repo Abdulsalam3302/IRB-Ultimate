@@ -104,9 +104,7 @@ export function SiteFooter() {
               >
                 {isAr ? AUTHOR.nameAr : AUTHOR.nameEn}
               </a>
-              .
             </p>
-            <p className="text-cream-50/60">{t("footer.rights")}</p>
             <a
               href={AHSS_URL}
               target="_blank"

@@ -103,7 +103,7 @@ function footerHtml(lang: ExportLang, dateStr: string): string {
   const isAr = lang === "ar";
   return `<footer>
     ${isAr ? `${PLATFORM.nameAr} — منصة AHSS مستقلة · PDPL · إرشادات NBCE` : `${PLATFORM.nameEn} — Independent AHSS platform · PDPL · NBCE guidelines`} · ${dateStr}<br/>
-    © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · ${isAr ? "جميع الحقوق محفوظة ومسجلة" : "All rights reserved and registered"}
+    © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · AHSS · ${isAr ? "المملكة العربية السعودية" : "Kingdom of Saudi Arabia"}
   </footer>`;
 }
 

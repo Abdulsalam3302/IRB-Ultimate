@@ -36,8 +36,10 @@ function clearStateCookie(req: Request, res: Response) {
 }
 
 function getOwnRedirectUri(req: Request): string {
-  // Server-derived — never trust attacker-supplied query/state for this.
   const proto = isSecure(req) ? "https" : req.protocol;
+  if (ENV.publicAppUrl) {
+    return `${ENV.publicAppUrl.replace(/\/$/, "")}/api/oauth/callback`;
+  }
   return `${proto}://${req.get("host")}/api/oauth/callback`;
 }
 

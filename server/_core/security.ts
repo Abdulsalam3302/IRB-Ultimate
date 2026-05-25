@@ -9,7 +9,7 @@ import { ENV } from "./env";
  */
 
 const RATE_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT = 120; // requests per window per IP for /api/*
+const RATE_LIMIT = 200; // requests per window per IP for /api/*
 // Tighter limit for expensive routes (LLM, upload).
 const STRICT_RATE_LIMIT = 30;
 // Hardest limit for auth surfaces — these need brute-force resistance not
@@ -26,6 +26,7 @@ const STRICT_ROUTES = [
   "/api/trpc/application.fixAllComments",
 ];
 const AUTH_ROUTES = [
+  "/api/sign-in",
   "/api/dev/login",
   "/api/oauth/callback",
   "/api/oauth/start",

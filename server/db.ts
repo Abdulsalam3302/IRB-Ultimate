@@ -14,7 +14,7 @@ import {
   amendments, InsertAmendment,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import mysql from 'mysql2';
+import { createMysqlPool } from "./_core/mysql";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -27,21 +27,8 @@ const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // SA-19: force TLS in production. mysql2 enables TLS automatically when
-      // the URL carries `?ssl={...}`, but we shouldn't depend on every
-      // operator remembering to append that. In production we attach a
-      // strict SSL block that rejects unauthenticated certs. In dev we keep
-      // the URL-only path so localhost MySQL still works.
       if (ENV.isProduction) {
-        const pool = mysql.createPool({
-          uri: process.env.DATABASE_URL,
-          ssl: { rejectUnauthorized: true },
-          // Reasonable pool defaults for a small platform; tune via
-          // DATABASE_POOL_MAX if you outgrow them.
-          connectionLimit: parseInt(process.env.DATABASE_POOL_MAX ?? "10", 10),
-          waitForConnections: true,
-        });
-        _db = drizzle(pool);
+        _db = drizzle(createMysqlPool(process.env.DATABASE_URL));
       } else {
         _db = drizzle(process.env.DATABASE_URL);
       }
@@ -58,7 +45,7 @@ export async function getDb() {
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
-  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
+  if (!db) throw new Error("Database not available");
 
   try {
     const values: InsertUser = { openId: user.openId };

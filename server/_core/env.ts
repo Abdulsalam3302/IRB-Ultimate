@@ -60,6 +60,13 @@ export const ENV = {
     process.env.PILOT_LOGIN_ENABLED === "1" &&
     (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
   pilotLoginToken: (process.env.PILOT_LOGIN_TOKEN ?? "").trim(),
+  // Production open sign-in when OAuth is not configured (researchers use name + email).
+  publicSignInEnabled:
+    isProduction &&
+    process.env.PUBLIC_SIGNIN_ENABLED === "1" &&
+    (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
+  // Canonical public URL (Vercel) — used for OAuth redirect URIs behind split deploy.
+  publicAppUrl: (process.env.PUBLIC_APP_URL ?? process.env.VITE_PUBLIC_SITE_URL ?? "").trim(),
   // Optional explicit allow-list for CORS / origin validation on
   // cookie-bound endpoints. Comma-separated list of origins.
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "")

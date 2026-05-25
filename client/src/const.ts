@@ -16,7 +16,7 @@ export const getLoginUrl = (next?: string) => {
   const safeNext = typeof next === "string" && /^\/(?!\/)/.test(next) ? next : "";
 
   if (!oauthPortalUrl || String(oauthPortalUrl).trim() === "") {
-    return `${window.location.origin}/api/dev/login`;
+    return `${window.location.origin}/api/sign-in`;
   }
 
   const url = new URL("/api/oauth/start", window.location.origin);

@@ -1,7 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { DemoBanner } from "@/components/DemoBanner";
 import { PlatformNotice } from "@/components/PlatformNotice";
 import { useT } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -27,7 +26,6 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
 
   return (
     <>
-      <DemoBanner />
       <PlatformNotice />
       <nav className="sticky top-0 z-50 glass border-b border-forest-900/10">
       <div className="container flex h-16 items-center justify-between gap-4">

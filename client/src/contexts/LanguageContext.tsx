@@ -78,7 +78,7 @@ const en: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "Independent platform by AHSS (ahss-sa.org) — not an official NBCE IRB provider. Compliant with PDPL, NBCE ethical guidelines, Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization.",
+    "Independent ethical research review platform for the Kingdom of Saudi Arabia, operated by AHSS with AI-powered workflows and digital certification in alignment with applicable Saudi regulations and international ethical standards.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
@@ -142,7 +142,7 @@ const en: Record<string, string> = {
   // Footer
   "footer.brand": "IRB Review Platform",
   "footer.desc": "Independent ethical research review platform for the Kingdom of Saudi Arabia — AI-powered workflows and digital certification by AHSS.",
-  "footer.independence": "Not an official NBCE Institutional Review Board provider. AHSS operates this platform independently in compliance with applicable Saudi regulations and international ethical standards.",
+  "footer.independence": "Independent ethical research review platform for the Kingdom of Saudi Arabia, operated by AHSS with AI-powered workflows and digital certification in alignment with applicable Saudi regulations and international ethical standards.",
   "footer.quickLinks": "Quick Links",
   "footer.legal": "Legal",
   "footer.contact": "Contact",
@@ -157,13 +157,11 @@ const en: Record<string, string> = {
   "footer.stamp.vision2030": "Vision 2030",
   "footer.nbceReference": "For official NBCE regulations and guidance, visit",
   "footer.founded": "Founded by Dr. Abdulsalam Aleid",
-  "footer.rights": "All rights reserved and registered.",
-  "footer.nbce": "Reference: National Bioethics Committee of Saudi Arabia (NBCE) ethical guidelines",
   "footer.nbceLink": "National Bioethics Committee (NBCE)",
   "footer.vision2030": "Saudi Vision 2030",
   "footer.feedback": "Suggestions & complaints",
   "footer.feedbackCta": "Reach Dr. Aleid on LinkedIn",
-  "footer.copyright": "All copyrights are preserved and registered to",
+  "footer.copyright": "©",
   "footer.partnership": "For partnership and cooperation inquiries, reach us on LinkedIn.",
   "footer.partnershipCta": "Connect on LinkedIn",
 
@@ -465,7 +463,7 @@ const ar: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "منصة مستقلة من AHSS (ahss-sa.org) — ليست جهة IRB رسمية تابعة للـ NBCE. متوافقة مع PDPL وإرشادات NBCE الأخلاقية وإعلان هلسنكي وICH-GCP ورؤية السعودية 2030 للتحول الرقمي.",
+    "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة العربية السعودية، تُشغّلها AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
@@ -529,7 +527,7 @@ const ar: Record<string, string> = {
   // Footer
   "footer.brand": "منصة مراجعة IRB",
   "footer.desc": "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة — سير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية من AHSS.",
-  "footer.independence": "ليست جهة IRB رسمية تابعة للـ NBCE. تُشغّل AHSS هذه المنصة بشكل مستقل وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
+  "footer.independence": "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة العربية السعودية، تُشغّلها AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
   "footer.quickLinks": "روابط سريعة",
   "footer.legal": "قانوني",
   "footer.contact": "اتصل بنا",
@@ -544,13 +542,11 @@ const ar: Record<string, string> = {
   "footer.stamp.vision2030": "رؤية 2030",
   "footer.nbceReference": "للاطلاع على لوائح NBCE الرسمية، زُر",
   "footer.founded": "أسسها د. عبدالسلام العيد",
-  "footer.rights": "جميع الحقوق محفوظة ومسجلة.",
-  "footer.nbce": "مرجع: إرشادات اللجنة الوطنية للأخلاقيات الحيوية (NBCE)",
   "footer.nbceLink": "اللجنة الوطنية للأخلاقيات (NBCE)",
   "footer.vision2030": "رؤية السعودية 2030",
   "footer.feedback": "اقتراحات وشكاوى",
   "footer.feedbackCta": "تواصل مع د. العيد على لينكدإن",
-  "footer.copyright": "جميع حقوق النشر محفوظة ومسجلة لـ",
+  "footer.copyright": "©",
   "footer.partnership": "للشراكة والتعاون، تواصل معنا عبر لينكدإن.",
   "footer.partnershipCta": "تواصل عبر لينكدإن",
 

@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { DemoBanner } from "@/components/DemoBanner";
 import { Logo } from "@/components/design/Logo";
 import { Stamp } from "@/components/design/Stamp";
 import { SiteFooter } from "@/components/design/SiteFooter";
@@ -32,7 +31,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-cream-50">
-      <DemoBanner />
       <nav className="sticky top-0 z-50 glass border-b border-forest-900/10">
         <div className="container flex h-16 items-center justify-between gap-4">
           <Logo size={32} />

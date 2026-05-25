@@ -17,17 +17,19 @@ import { sdk } from "./sdk";
  *   POST /api/dev/login   {openId,name,email,role}  — set session cookie
  */
 export function registerDevLoginRoutes(app: Express) {
-  // Dev-login is OFF in production AND off when DEV_LOGIN_ENABLED=0 even
-  // in dev. We refuse to expose the endpoint over a network address —
-  // the route returns 403 unless the request originated from loopback.
-  const enabled =
+  const pilotMode = ENV.pilotLoginEnabled && ENV.pilotLoginToken.length >= 16;
+  // Dev-login is OFF in production unless pilot mode is explicitly enabled.
+  const devMode =
     !ENV.isProduction &&
     ENV.devLoginEnabled &&
     (!ENV.oAuthServerUrl || ENV.oAuthServerUrl.trim() === "");
 
+  const enabled = pilotMode || devMode;
   if (!enabled) return;
 
-  if (ENV.devLoginToken) {
+  if (pilotMode) {
+    console.log("[PilotLogin] Enabled at /api/dev/login (token required, demo/pilot only).");
+  } else if (ENV.devLoginToken) {
     console.log(
       `[DevLogin] Enabled at /api/dev/login (loopback only, token required: ${ENV.devLoginToken}).`
     );
@@ -37,6 +39,22 @@ export function registerDevLoginRoutes(app: Express) {
       "Set DEV_LOGIN_TOKEN to require a shared secret on POST."
     );
   }
+
+  const requireLoopbackUnlessPilot = (req: Request, res: Response): boolean => {
+    if (pilotMode) return true;
+    return requireLoopback(req, res);
+  };
+
+  const verifyAccessToken = (req: Request, res: Response): boolean => {
+    const required = pilotMode ? ENV.pilotLoginToken : ENV.devLoginToken;
+    if (!required) return true;
+    const provided = String(req.body?.token || req.query?.token || "");
+    if (provided !== required) {
+      res.status(401).json({ error: "login token mismatch" });
+      return false;
+    }
+    return true;
+  };
 
   // Refuse dev-login from non-loopback clients. Anything else is too
   // risky on a shared LAN / staging tunnel / forwarded port.
@@ -55,9 +73,14 @@ export function registerDevLoginRoutes(app: Express) {
     ENV.ownerOpenId && openId === ENV.ownerOpenId ? "admin" : "user";
 
   app.get("/api/dev/login", (req: Request, res: Response) => {
-    if (!requireLoopback(req, res)) return;
+    if (!requireLoopbackUnlessPilot(req, res)) return;
+    const tokenField = pilotMode
+      ? `<input type="hidden" name="token" value="${ENV.pilotLoginToken}">`
+      : ENV.devLoginToken
+        ? `<label>Pilot / dev token</label><input name="token" value="${ENV.devLoginToken}" required>`
+        : "";
     res.type("html").send(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Dev Login — IRB Ultimate</title>
+<html><head><meta charset="utf-8"><title>${pilotMode ? "Pilot Login" : "Dev Login"} — IRB Saudi Arabia</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:60px auto;padding:24px;background:#fafafa;color:#111}
@@ -71,9 +94,10 @@ export function registerDevLoginRoutes(app: Express) {
   .muted{font-size:12px;color:#888;margin-top:14px}
   .row{display:flex;gap:8px}.row > *{flex:1}
 </style></head><body>
-<h1>IRB Ultimate — Dev Login</h1>
-<p>Local-dev only. Disabled when <code>NODE_ENV=production</code> or <code>OAUTH_SERVER_URL</code> is set.</p>
+<h1>IRB Saudi Arabia — ${pilotMode ? "Pilot Login" : "Dev Login"}</h1>
+<p>${pilotMode ? "Public pilot environment. Do not submit real participant PHI." : "Local-dev only. Disabled when <code>NODE_ENV=production</code> unless pilot mode is enabled."}</p>
 <form class="card" method="POST" action="/api/dev/login">
+  ${tokenField}
   <label>Display name</label>
   <input name="name" value="Dr. Abdulsalam Aleid" required>
   <label>Email</label>
@@ -86,16 +110,8 @@ export function registerDevLoginRoutes(app: Express) {
   });
 
   app.post("/api/dev/login", async (req: Request, res: Response) => {
-    if (!requireLoopback(req, res)) return;
-    // SA-17: shared-secret guard. Even on loopback, if DEV_LOGIN_TOKEN is
-    // set in env, the POST body must include a matching `token`.
-    if (ENV.devLoginToken) {
-      const provided = String(req.body?.token || "");
-      if (provided !== ENV.devLoginToken) {
-        res.status(401).json({ error: "dev login token mismatch" });
-        return;
-      }
-    }
+    if (!requireLoopbackUnlessPilot(req, res)) return;
+    if (!verifyAccessToken(req, res)) return;
     try {
       const openId = String(req.body?.openId || "dev-user-001").slice(0, 64);
       const name = String(req.body?.name || "Dev User").slice(0, 255);

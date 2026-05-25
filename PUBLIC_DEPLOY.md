@@ -1,71 +1,93 @@
 # Public deployment guide — IRB Saudi Arabia
 
+## Quick auto deploy (recommended)
+
+### Already configured in GitHub
+These secrets are stored on `Abdulsalam3302/IRB-Ultimate`:
+- `JWT_SECRET` — production session signing
+- `PILOT_LOGIN_TOKEN` — pilot login (demo)
+- `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` — Vercel CI
+
+Add once in GitHub → Settings → Secrets:
+- `RAILWAY_TOKEN` — from [railway.app/account/tokens](https://railway.app/account/tokens)
+- `VERCEL_TOKEN` — from [vercel.com/account/tokens](https://vercel.com/account/tokens)
+
+Then push to `main` — `.github/workflows/deploy.yml` deploys automatically.
+
+### One-command local setup
+```bash
+chmod +x scripts/deploy-all.sh
+RAILWAY_TOKEN=xxx ./scripts/deploy-all.sh
+```
+
+### Live URLs
+| Service | URL |
+|---------|-----|
+| **Vercel (frontend)** | https://irb-saudi-arabia.vercel.app |
+| **Railway (full stack)** | Set after first Railway deploy |
+
+After Railway is live, merge `vercel.rewrites.template.json` into `vercel.json` (replace `RAILWAY_API_URL` with your Railway host) so Vercel proxies `/api/*` to the backend.
+
+---
+
 ## Important: independence & data safety
 
 - This platform is **not** an official NBCE IRB provider. It is operated independently by **AHSS** (ahss-sa.org).
-- For any **public/demo** deployment, set `VITE_PUBLIC_DEMO_BANNER=1` so users see a pilot notice.
-- Do **not** accept real participant PHI on non–KSA-resident hosts without PDPL/NDMO review (see `DEPLOY.md`).
+- Set `VITE_PUBLIC_DEMO_BANNER=1` on public deploys (already set on Vercel).
+- Do **not** accept real participant PHI on non–KSA-resident hosts without PDPL/NDMO review.
 
-## Stack (current codebase)
+## Stack
 
-| Layer | Technology | Notes |
-|-------|------------|--------|
-| App | Node.js + Express + tRPC | Monolith serves API + SPA |
-| Frontend | Vite + React | Builds to `dist/public` |
-| Database | **MySQL 8** (Drizzle ORM) | Not Supabase Postgres out of the box |
-| Files | S3-compatible storage | Certificates, uploads |
-| PDF | Playwright Chromium | Requires Node server (not static-only hosting) |
+| Layer | Technology |
+|-------|------------|
+| App | Node.js + Express + tRPC monolith |
+| Frontend | Vite + React → `dist/public` |
+| Database | **MySQL 8** (Drizzle) — use Railway MySQL |
+| PDF | Playwright (Docker image included) |
 
-**Supabase:** The schema is MySQL/Drizzle today. Moving to Supabase Postgres requires a migration project. For fastest public launch, use **Railway MySQL**, **PlanetScale**, or a KSA-resident MySQL host.
+**Supabase:** You have a Supabase project, but this codebase uses **MySQL/Drizzle**. Postgres migration is a separate project. Use **Railway MySQL** for immediate full functionality.
 
-## Recommended: Railway (full stack, one click from GitHub)
+## Railway (full stack)
 
-1. Push this repo to GitHub `main`.
-2. [railway.app](https://railway.app) → New Project → Deploy from GitHub → select `IRB-Ultimate`.
-3. Add **MySQL** plugin → copy `DATABASE_URL` into service variables.
-4. Set required env vars (see `.env.example`):
-   - `NODE_ENV=production`
-   - `JWT_SECRET` — `openssl rand -hex 48`
-   - `VITE_APP_ID=irb-sa-prod`
-   - `OWNER_OPEN_ID=<your-oauth-sub>`
-   - `VITE_PUBLIC_DEMO_BANNER=1` (public pilot)
-   - `VITE_PUBLIC_SITE_URL=https://your-railway-domain.up.railway.app`
-   - `ALLOWED_ORIGINS=https://your-railway-domain.up.railway.app`
-   - LLM keys (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)
-5. Deploy uses `railway.toml`: `npm run build` → `npm start`.
-6. Health check: `GET /api/health`.
+1. [railway.app/new](https://railway.app/new) → Deploy from GitHub → `IRB-Ultimate`
+2. Add **MySQL** service → link `DATABASE_URL` to the web service
+3. Set variables on the web service:
 
-## Alternative: Vercel (frontend) + Railway (API)
-
-Because Playwright and long-running Express do not fit Vercel serverless well:
-
-1. Deploy **API** on Railway (steps above).
-2. Deploy **static SPA** on Vercel with `VITE_PUBLIC_SITE_URL` and API proxy, **or** point Vercel to Railway URL as single origin (custom domain on Railway only — simpler).
-
-For a single public URL, prefer **Railway only**.
-
-## GitHub push
-
-```bash
-git add -A
-git commit -m "Public launch: independence disclaimer, footer fix, certificate v2"
-git push origin main
+```
+NODE_ENV=production
+JWT_SECRET=<from GitHub secret JWT_SECRET>
+VITE_APP_ID=irb-sa-prod
+OWNER_OPEN_ID=dev-owner-001
+PILOT_LOGIN_ENABLED=1
+PILOT_LOGIN_TOKEN=<from GitHub secret PILOT_LOGIN_TOKEN>
+VITE_PUBLIC_DEMO_BANNER=1
+ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://YOUR-SERVICE.up.railway.app
 ```
 
-## Security checklist (production)
+4. Dockerfile + `railway.toml` handle build (Playwright included).
+5. Migrations run automatically on boot (`server/migrate.ts`).
+6. Health: `GET /api/health`
+7. Pilot login: `GET /api/dev/login` (token embedded when `PILOT_LOGIN_ENABLED=1`)
 
-- [ ] Strong `JWT_SECRET` (≥48 hex chars)
-- [ ] `DEV_LOGIN_ENABLED` unset or `0`
-- [ ] `ALLOWED_ORIGINS` set to your exact SPA origin(s)
-- [ ] OAuth redirect URI registered for production API host
-- [ ] S3 bucket private; presigned URLs only
-- [ ] `VITE_PUBLIC_DEMO_BANNER=1` until KSA data residency is confirmed
-- [ ] Daily backups via `scripts/backup.sh` (see `BACKUP.md`)
+## Vercel (frontend)
 
-## Verify deployment
+- Project: `irb-saudi-arabia` (linked to GitHub)
+- Env vars set: `VITE_PUBLIC_DEMO_BANNER=1`, `VITE_APP_ID`, `VITE_PUBLIC_SITE_URL`
+- Rebuild after env changes: `vercel deploy --prod`
+
+## Security checklist
+
+- [x] `JWT_SECRET` generated (GitHub secret)
+- [x] `PILOT_LOGIN_TOKEN` generated (GitHub secret)
+- [ ] `RAILWAY_TOKEN` added to GitHub
+- [ ] `DEV_LOGIN_ENABLED` unset in production
+- [ ] `ALLOWED_ORIGINS` includes Vercel + Railway URLs
+- [ ] OAuth configured when moving beyond pilot
+
+## Verify
 
 ```bash
-curl -s https://YOUR_HOST/api/health | jq
+curl -s https://YOUR-RAILWAY-HOST/api/health | jq
 ```
 
-Open `/` — confirm **Platform notice** banner and footer show independent AHSS positioning.
+Open `/` — confirm platform independence notice and demo banner.

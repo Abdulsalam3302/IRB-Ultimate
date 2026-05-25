@@ -34,7 +34,17 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+import { runMigrations } from "../migrate";
+
 async function startServer() {
+  if (process.env.NODE_ENV === "production" && process.env.DATABASE_URL) {
+    try {
+      await runMigrations();
+    } catch (err) {
+      console.error("[migrate] Failed:", err);
+      throw err;
+    }
+  }
   const app = express();
   const server = createServer(app);
   // Security headers + naive rate limit on /api/*

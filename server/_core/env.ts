@@ -53,6 +53,13 @@ export const ENV = {
   // The POST /api/dev/login body must include `token: <this value>` when
   // set; the GET landing page reads it from a hidden field.
   devLoginToken: (process.env.DEV_LOGIN_TOKEN ?? "").trim(),
+  // Public pilot/demo login — token-guarded, works over HTTPS when OAuth
+  // is not configured. Requires PILOT_LOGIN_ENABLED=1 and PILOT_LOGIN_TOKEN.
+  pilotLoginEnabled:
+    isProduction &&
+    process.env.PILOT_LOGIN_ENABLED === "1" &&
+    (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
+  pilotLoginToken: (process.env.PILOT_LOGIN_TOKEN ?? "").trim(),
   // Optional explicit allow-list for CORS / origin validation on
   // cookie-bound endpoints. Comma-separated list of origins.
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "")

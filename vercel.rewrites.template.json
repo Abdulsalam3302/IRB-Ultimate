@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "RAILWAY_API_URL/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "RAILWAY_API_URL/uploads/:path*"
+    }
+  ]
+}

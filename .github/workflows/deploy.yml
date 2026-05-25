@@ -28,6 +28,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_WEB_SERVICE_ID: ${{ vars.RAILWAY_WEB_SERVICE_ID }}
           RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           if [ -z "$RAILWAY_WEB_SERVICE_ID" ] || [ -z "$RAILWAY_ENVIRONMENT_ID" ]; then
             echo "Railway service/env vars not set — skipping API redeploy (GitHub hook still deploys)"
@@ -36,7 +37,8 @@ jobs:
           curl -sfS -X POST https://backboard.railway.com/graphql/v2 \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"query\":\"mutation(\$sid: String!, \$env: String!) { serviceInstanceDeployV2(serviceId: \$sid, environmentId: \$env) }\",\"variables\":{\"sid\":\"$RAILWAY_WEB_SERVICE_ID\",\"env\":\"$RAILWAY_ENVIRONMENT_ID\"}}"
+            -d "{\"query\":\"mutation(\$sid: String!, \$env: String!, \$sha: String) { serviceInstanceDeployV2(serviceId: \$sid, environmentId: \$env, commitSha: \$sha) }\",\"variables\":{\"sid\":\"$RAILWAY_WEB_SERVICE_ID\",\"env\":\"$RAILWAY_ENVIRONMENT_ID\",\"sha\":\"$COMMIT_SHA\"}}"
+          python3 scripts/railway-production-env.py || true
 
   deploy-vercel:
     name: Vercel (frontend)

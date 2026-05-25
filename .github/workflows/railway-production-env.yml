@@ -14,7 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Apply production Railway variables
-        if: ${{ secrets.RAILWAY_TOKEN != '' }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: python3 scripts/railway-production-env.py
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN not set — skipping"
+            exit 0
+          fi
+          python3 scripts/railway-production-env.py

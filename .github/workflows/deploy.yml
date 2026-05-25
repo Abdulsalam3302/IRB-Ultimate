@@ -13,32 +13,49 @@ jobs:
   deploy-railway:
     name: Railway (full stack)
     runs-on: ubuntu-latest
-    if: ${{ secrets.RAILWAY_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Skip without Railway token
+        id: railway_skip
+        run: |
+          if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "RAILWAY_TOKEN not set — skipping Railway deploy"
+          fi
+
       - name: Install Railway CLI
+        if: steps.railway_skip.outputs.skip != 'true'
         run: npm install -g @railway/cli@4.61.1
 
       - name: Deploy to Railway
+        if: steps.railway_skip.outputs.skip != 'true'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          railway link --project "${{ vars.RAILWAY_PROJECT_ID }}" --environment production || railway link
-          railway up --detach
+        run: railway up --detach
 
   deploy-vercel:
     name: Vercel (frontend)
     runs-on: ubuntu-latest
-    if: ${{ secrets.VERCEL_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Skip without Vercel token
+        id: vercel_skip
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_TOKEN not set — skipping Vercel deploy"
+          fi
+
       - name: Install Vercel CLI
+        if: steps.vercel_skip.outputs.skip != 'true'
         run: npm install -g vercel@52
 
       - name: Deploy production
+        if: steps.vercel_skip.outputs.skip != 'true'
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel deploy --prod --token="${{ secrets.VERCEL_TOKEN }}"
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prod --token="$VERCEL_TOKEN"

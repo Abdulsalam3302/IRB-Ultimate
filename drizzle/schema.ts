@@ -6,6 +6,10 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  // Native email/password auth — scrypt hash (format: scrypt$N$r$p$salt$hash).
+  // NULL for users who signed up via an OAuth/social provider (no local
+  // password). Login-by-password only succeeds when this is set.
+  passwordHash: varchar("passwordHash", { length: 255 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   // ORCID iD — optional; pre-fills PI fields on Stage 1 once linked.
   // 19-char "0000-0000-0000-0000" format. We don't run the OAuth dance

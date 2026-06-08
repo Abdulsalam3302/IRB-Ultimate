@@ -421,7 +421,7 @@ const en: Record<string, string> = {
   // Auth (Supabase)
   "auth.signInTitle": "Sign in to IRB Platform",
   "auth.signUpTitle": "Create your account",
-  "auth.subtitle": "Use Google, Apple, or your institutional email to access the platform.",
+  "auth.subtitle": "Sign in or create an account to access the platform.",
   "auth.continueGoogle": "Continue with Google",
   "auth.continueApple": "Continue with Apple",
   "auth.orEmail": "or email",
@@ -440,6 +440,12 @@ const en: Record<string, string> = {
   "auth.signingIn": "Signing you in…",
   "auth.tryAgain": "Try again",
   "auth.notConfigured": "Sign-in is being updated. Please try again in a few minutes or contact support.",
+  "auth.invalidEmail": "Please enter a valid email address.",
+  "auth.weakPassword": "Password must be at least 8 characters.",
+  "auth.emailExists": "An account with this email already exists. Please sign in.",
+  "auth.invalidCredentials": "Invalid email or password.",
+  "auth.rateLimited": "Too many attempts. Please wait a few minutes and try again.",
+  "auth.networkError": "Network error. Please check your connection and try again.",
 
   // Declaration Phase 0
   "decl.title": "Declaration of Honesty & Consent",
@@ -829,7 +835,7 @@ const ar: Record<string, string> = {
   // Auth (Supabase)
   "auth.signInTitle": "تسجيل الدخول إلى منصة IRB",
   "auth.signUpTitle": "إنشاء حساب",
-  "auth.subtitle": "استخدم Google أو Apple أو بريدك المؤسسي للوصول إلى المنصة.",
+  "auth.subtitle": "سجّل الدخول أو أنشئ حسابًا للوصول إلى المنصة.",
   "auth.continueGoogle": "المتابعة مع Google",
   "auth.continueApple": "المتابعة مع Apple",
   "auth.orEmail": "أو البريد الإلكتروني",
@@ -848,6 +854,12 @@ const ar: Record<string, string> = {
   "auth.signingIn": "جاري تسجيل الدخول…",
   "auth.tryAgain": "حاول مرة أخرى",
   "auth.notConfigured": "جاري تحديث تسجيل الدخول. حاول بعد دقائق أو تواصل مع الدعم.",
+  "auth.invalidEmail": "يرجى إدخال بريد إلكتروني صالح.",
+  "auth.weakPassword": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.",
+  "auth.emailExists": "يوجد حساب بهذا البريد الإلكتروني بالفعل. يرجى تسجيل الدخول.",
+  "auth.invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+  "auth.rateLimited": "محاولات كثيرة جدًا. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.",
+  "auth.networkError": "خطأ في الشبكة. تحقق من اتصالك وحاول مرة أخرى.",
 
   // Declaration Phase 0
   "decl.title": "إقرار الصدق والموافقة",

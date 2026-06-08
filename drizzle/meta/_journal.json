@@ -78,6 +78,13 @@
       "when": 1778100000000,
       "tag": "0010_orcid_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1778200000000,
+      "tag": "0011_native_password_auth",
+      "breakpoints": true
     }
   ]
 }

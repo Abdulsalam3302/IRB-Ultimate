@@ -43,6 +43,17 @@ export async function getDb() {
 
 // ─── User helpers ───────────────────────────────────────────────────────────
 
+// Never let a password hash leave the DB layer through a general-purpose read.
+// Only getLocalUserByEmail (the login path) keeps it. Everything that can reach
+// a client — ctx.user/auth.me, admin user lists, applicant lookups — flows
+// through helpers that call this first.
+function withoutPassword<T extends { passwordHash?: string | null }>(row: T): T {
+  if (row && row.passwordHash !== undefined && row.passwordHash !== null) {
+    row.passwordHash = null;
+  }
+  return row;
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
@@ -86,20 +97,83 @@ export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  return result.length > 0 ? withoutPassword(result[0]!) : undefined;
 }
 
 export async function getUserById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? withoutPassword(result[0]!) : undefined;
+}
+
+// ─── Native email/password auth helpers ─────────────────────────────────────
+
+/** Case-insensitive lookup of ANY user with this email (any login method). */
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const result = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalized}`)
+    .limit(1);
+  return result.length > 0 ? withoutPassword(result[0]!) : undefined;
+}
+
+/**
+ * Lookup a user who has a local password set (loginMethod-agnostic). Prefers
+ * the row carrying a passwordHash so an OAuth row sharing the same address
+ * never shadows the credentialed account.
+ */
+export async function getLocalUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const result = await db
+    .select()
+    .from(users)
+    .where(and(sql`lower(${users.email}) = ${normalized}`, sql`${users.passwordHash} IS NOT NULL`))
+    .limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Create a new email/password user. Email is normalised to lowercase. The
+ * platform owner (BOOT_OWNER_EMAIL) is promoted to admin on creation. Returns
+ * the persisted row.
+ */
+export async function createLocalUser(input: {
+  openId: string;
+  name: string | null;
+  email: string;
+  passwordHash: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const role: "user" | "admin" =
+    BOOT_OWNER_EMAIL && normalizedEmail === BOOT_OWNER_EMAIL ? "admin" : "user";
+  await db.insert(users).values({
+    openId: input.openId,
+    name: input.name,
+    email: normalizedEmail,
+    passwordHash: input.passwordHash,
+    loginMethod: "password",
+    role,
+    lastSignedIn: new Date(),
+  });
+  return getUserByOpenId(input.openId);
 }
 
 export async function getAllUsers() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(users).orderBy(desc(users.createdAt));
+  const rows = await db.select().from(users).orderBy(desc(users.createdAt));
+  return rows.map(withoutPassword);
 }
 
 // ─── Application helpers ────────────────────────────────────────────────────

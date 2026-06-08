@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/design/Logo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useT } from "@/contexts/LanguageContext";
-import { getSupabase, isSupabaseAuthEnabled } from "@/lib/supabase";
+import { getSupabase, isSupabaseAuthEnabled, isSupabaseReachable } from "@/lib/supabase";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,17 +47,35 @@ export default function Auth() {
   const { t } = useT();
   const [, setLocation] = useLocation();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const next = params.get("next") || "/dashboard";
+  const rawNext = params.get("next") || "/dashboard";
+  // Only allow same-origin path redirects — blocks open-redirect via ?next=//evil.com
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
   const [mode, setMode] = useState<Mode>("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  // Social buttons only render once we confirm the Supabase project is live —
+  // a deleted/paused project never produces a dead-end button. Self-heals the
+  // moment valid, reachable Supabase credentials are configured.
+  const [socialAvailable, setSocialAvailable] = useState(false);
 
   useEffect(() => {
     const err = params.get("error");
     if (err) toast.error(decodeURIComponent(err));
   }, [params]);
+
+  useEffect(() => {
+    let active = true;
+    if (isSupabaseAuthEnabled) {
+      isSupabaseReachable().then(ok => {
+        if (active) setSocialAvailable(ok);
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
@@ -69,53 +87,59 @@ export default function Auth() {
         options: { redirectTo },
       });
       if (error) toast.error(error.message);
+    } catch {
+      toast.error(t("auth.networkError"));
     } finally {
       setBusy(false);
     }
   };
 
+  const mapError = (code: string | undefined, fallback: string): string => {
+    switch (code) {
+      case "INVALID_EMAIL":
+        return t("auth.invalidEmail");
+      case "WEAK_PASSWORD":
+        return t("auth.weakPassword");
+      case "EMAIL_EXISTS":
+        return t("auth.emailExists");
+      case "INVALID_CREDENTIALS":
+        return t("auth.invalidCredentials");
+      case "RATE_LIMITED":
+        return t("auth.rateLimited");
+      default:
+        return fallback || t("auth.failed");
+    }
+  };
+
+  // First-party email/password auth. Hits the backend directly, which sets the
+  // session cookie in its response — no Supabase, no callback bridge needed.
   const emailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      const supabase = getSupabase();
-      if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: name.trim() || undefined },
-            emailRedirectTo: redirectTo,
-          },
-        });
-        if (error) throw error;
-        if (data.session) {
-          window.location.href = `/auth/callback?next=${encodeURIComponent(next)}`;
-          return;
-        }
-        toast.success(t("auth.checkEmail"));
+      const path = mode === "signup" ? "/api/auth/register" : "/api/auth/login";
+      const payload =
+        mode === "signup"
+          ? { name: name.trim() || undefined, email: email.trim(), password }
+          : { email: email.trim(), password };
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+        toast.error(mapError(body.code, body.error ?? ""));
         return;
       }
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      if (data.session) {
-        window.location.href = `/auth/callback?next=${encodeURIComponent(next)}`;
-      }
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t("auth.failed"));
+      window.location.href = next;
+    } catch {
+      toast.error(t("auth.networkError"));
     } finally {
       setBusy(false);
     }
   };
-
-  if (!isSupabaseAuthEnabled) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-ink-soft max-w-md">{t("auth.notConfigured")}</p>
-        <a href="/" className="text-forest-800 underline underline-offset-2">{t("nav.home")}</a>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-cream-50 flex flex-col">
@@ -135,36 +159,43 @@ export default function Auth() {
           </h1>
           <p className="mt-2 text-center text-sm text-ink-soft">{t("auth.subtitle")}</p>
 
-          <div className="mt-8 space-y-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 gap-2 bg-white"
-              disabled={busy}
-              onClick={() => oauth("google")}
-            >
-              <GoogleIcon />
-              {t("auth.continueGoogle")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 gap-2 bg-white"
-              disabled={busy}
-              onClick={() => oauth("apple")}
-            >
-              <AppleIcon />
-              {t("auth.continueApple")}
-            </Button>
-          </div>
+          {socialAvailable && (
+            <>
+              <div className="mt-8 space-y-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-11 gap-2 bg-white"
+                  disabled={busy}
+                  onClick={() => oauth("google")}
+                >
+                  <GoogleIcon />
+                  {t("auth.continueGoogle")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-11 gap-2 bg-white"
+                  disabled={busy}
+                  onClick={() => oauth("apple")}
+                >
+                  <AppleIcon />
+                  {t("auth.continueApple")}
+                </Button>
+              </div>
 
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-forest-900/10" />
-            <span className="text-xs text-ink-soft uppercase tracking-wider">{t("auth.orEmail")}</span>
-            <div className="h-px flex-1 bg-forest-900/10" />
-          </div>
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-forest-900/10" />
+                <span className="text-xs text-ink-soft uppercase tracking-wider">{t("auth.orEmail")}</span>
+                <div className="h-px flex-1 bg-forest-900/10" />
+              </div>
+            </>
+          )}
 
-          <form onSubmit={emailAuth} className="space-y-4 rounded-2xl border border-forest-900/10 bg-white p-6 shadow-sm">
+          <form
+            onSubmit={emailAuth}
+            className={`${socialAvailable ? "" : "mt-8 "}space-y-4 rounded-2xl border border-forest-900/10 bg-white p-6 shadow-sm`}
+          >
             {mode === "signup" && (
               <div className="space-y-2">
                 <Label htmlFor="name">{t("auth.fullName")}</Label>

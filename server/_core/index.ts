@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerDevLoginRoutes } from "./devLogin";
 import { registerSupabaseAuthRoutes } from "./supabaseAuth";
+import { registerNativeAuthRoutes } from "./nativeAuth";
 import { registerAuthRedirectRoutes } from "./authRedirects";
 import { registerSecurity, registerApiGuards, registerErrorHandler } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
@@ -175,6 +176,10 @@ async function startServer() {
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   registerSupabaseAuthRoutes(app);
+  // First-party email/password auth (no external dependency). Sets the same
+  // session cookie as every other auth path, so the rest of the app is
+  // provider-agnostic.
+  registerNativeAuthRoutes(app);
   registerDevLoginRoutes(app);
   // Application export (HTML for printing, ZIP for inspectors). Streamed
   // binaries — kept off the tRPC adapter which expects JSON.

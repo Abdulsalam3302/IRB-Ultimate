@@ -3,6 +3,21 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { reserveLlmCall } from "./budget";
 import type { TrpcContext } from "./context";
+import { ENV } from "./env";
+
+// Captured once at module init (same SA-26 rationale as db.ts): a mid-run
+// env mutation cannot re-target who counts as the platform owner.
+const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
+const BOOT_OWNER_EMAIL = ENV.ownerEmail;
+
+/** True only for the platform owner (admin whose identity matches
+ *  OWNER_OPEN_ID / OWNER_EMAIL). Fails closed when neither env is set. */
+export function isPlatformOwner(user: { role: string; openId: string; email?: string | null } | null): boolean {
+  if (!user || user.role !== "admin") return false;
+  if (BOOT_OWNER_OPEN_ID && user.openId === BOOT_OWNER_OPEN_ID) return true;
+  if (BOOT_OWNER_EMAIL && (user.email ?? "").toLowerCase() === BOOT_OWNER_EMAIL) return true;
+  return false;
+}
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -63,6 +78,22 @@ export const adminProcedure = t.procedure.use(
         user: ctx.user,
       },
     });
+  }),
+);
+
+/**
+ * Owner-only procedures. Stricter than adminProcedure: the caller must be
+ * an admin AND match the boot-time owner identity. Secondary admins get
+ * the same FORBIDDEN error as everyone else, so the existence of
+ * owner-only features is not advertised to non-owners.
+ */
+export const ownerProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!isPlatformOwner(ctx.user)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user! } });
   }),
 );
 

@@ -2,13 +2,14 @@ import { randomBytes } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminProcedure, aiProcedure, router } from "./_core/trpc";
-import { inspectLlmBudget } from "./_core/budget";
+import { publicProcedure, protectedProcedure, adminProcedure, aiProcedure, ownerProcedure, isPlatformOwner, router } from "./_core/trpc";
+import { inspectLlmBudget, reserveLlmCall } from "./_core/budget";
 import { ENV } from "./_core/env";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { runStage1AiReview, runStage2AiReview, aiAutoCompleteFields, aiResolveField, aiFixAllComments, calculateSampleSize, aiEnhanceStage1Fields } from "./aiReview";
+import { runSwarmPanel, SWARM_LLM_CALLS_PER_RUN } from "./aiSwarmReview";
 import { generateCertificatePdf } from "./certificate";
 import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
@@ -2205,6 +2206,108 @@ const literatureRouter = router({
     }),
 });
 
+// ─── AI Swarm Review Router (owner-only, hidden from public) ────────────────
+// Two fully independent AI panels, each simulating 510 expert reviewers
+// across six specialty clusters, deep-audit an application and return a
+// strict pass/fail verdict with structured, actionable feedback. The swarm
+// is ADVISORY: it never mutates application status, never notifies the
+// applicant, and is invisible to every role except the platform owner.
+// Secondary admins receive the same FORBIDDEN as regular users.
+
+const aiSwarmRouter = router({
+  // The only non-owner-gated endpoint: lets the SPA decide whether to
+  // render the owner console at all. Returns a bare boolean — leaks
+  // nothing about the feature to non-owners beyond its existence in the
+  // bundled client code.
+  amOwner: protectedProcedure.query(({ ctx }) => ({
+    isOwner: isPlatformOwner(ctx.user),
+  })),
+
+  byApplication: ownerProcedure
+    .input(z.object({ applicationId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      return db.getAiSwarmReviewsByApplication(input.applicationId);
+    }),
+
+  run: ownerProcedure
+    .input(z.object({ applicationId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      // A swarm audit needs substance to audit — require at least a
+      // completed Stage 1 (gateway) data set.
+      if (["draft", "declaration_pending"].includes(app.status) || !app.researchTitle) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "The application must complete Stage 1 before a swarm audit can run.",
+        });
+      }
+
+      // SA-03: a full dual-panel run costs SWARM_LLM_CALLS_PER_RUN LLM
+      // calls. Reserve them all up front against the owner's daily
+      // budget — no refund on failure (deliberate, same policy as
+      // aiProcedure) so retry pressure can't amplify spend.
+      for (let i = 0; i < SWARM_LLM_CALLS_PER_RUN; i++) {
+        const check = reserveLlmCall(ctx.user.id);
+        if (!check.ok) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `A swarm audit needs ${SWARM_LLM_CALLS_PER_RUN} AI calls; your remaining daily budget is too low. Resets at ${check.resetAt}.`,
+          });
+        }
+      }
+
+      const runGroup = randomBytes(8).toString("hex");
+      const rowIds: number[] = [];
+      for (const panel of [1, 2]) {
+        rowIds.push(await db.createAiSwarmReview({
+          applicationId: input.applicationId,
+          requestedByUserId: ctx.user.id,
+          runGroup,
+          panel,
+          status: "running",
+        }));
+      }
+
+      // The two panels run concurrently and never see each other's output.
+      const [panel1, panel2] = await Promise.all([
+        runSwarmPanel(app, 0),
+        runSwarmPanel(app, 1),
+      ]);
+
+      const results = [panel1, panel2];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.unavailable) {
+          await db.updateAiSwarmReview(rowIds[i], {
+            status: "failed",
+            errorMessage: r.summary,
+            completedAt: new Date(),
+          });
+        } else {
+          await db.updateAiSwarmReview(rowIds[i], {
+            status: "completed",
+            verdict: r.verdict,
+            score: r.score,
+            report: JSON.stringify(r),
+            completedAt: new Date(),
+          });
+        }
+      }
+
+      await db.addAuditLog({
+        applicationId: input.applicationId,
+        userId: ctx.user.id,
+        action: "ai_swarm_review_run",
+        details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Advisory only — no status change.`,
+      });
+
+      return { runGroup, panels: results };
+    }),
+});
+
 // ─── Main Router ────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -2238,6 +2341,7 @@ export const appRouter = router({
   literature: literatureRouter,
   adverseEvents: adverseEventsRouter,
   amendments: amendmentsRouter,
+  aiSwarm: aiSwarmRouter,
 });
 
 export type AppRouter = typeof appRouter;

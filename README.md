@@ -99,6 +99,7 @@ server/
     llm.ts               OpenAI-compatible chat-completions client
   routers.ts             Full tRPC API surface
   aiReview.ts            Stage 1 & Stage 2 AI compliance reviewers
+  aiSwarmReview.ts       Owner-only dual-panel AI swarm deep-audit engine
   certificate.ts         Approved-IRB certificate generator
   retractionCertificate.ts  Retraction certificate (white/red)
   emailService.ts        SMTP notifications (no-op when unset)
@@ -118,6 +119,36 @@ Submitted applications are randomly assigned to 5 scientific committee members
 with a 24-hour expiry. Three approvals advance to admin for final decision.
 Approved IRBs receive a downloadable certificate; retracted IRBs return a
 retraction PDF on the public verify page.
+
+### AI Swarm Review (owner-only)
+
+The platform owner — and only the owner — can run a **dual-panel AI swarm
+deep audit** on any application from the admin panel's *AI Swarm* tab
+(`server/aiSwarmReview.ts`, `client/src/components/AiSwarmConsole.tsx`):
+
+- **Two fully independent panels** per run (Panel Alpha — adversarial audit;
+  Panel Beta — standards review). They never see each other's output and are
+  persisted separately so the owner can compare them for agreement.
+- **510 simulated expert perspectives per panel** across six specialty
+  clusters: methodology & biostatistics, ethics & consent, regulatory & legal,
+  patient & community advocacy, data privacy & security, scientific merit &
+  novelty. Each cluster reports vote tallies, findings, red flags, required
+  changes, and dissenting opinions; a panel chair synthesises the verdict.
+- **Strict by construction.** The pass/fail verdict is enforced server-side
+  (score ≥ 80, every cluster ≥ 60, zero red flags, ≥ 70% approve votes) — a
+  lenient model cannot soften it, and fenced applicant input defeats prompt
+  injection.
+- **Fair and unbiased.** Binding anti-bias rules in every prompt, evidence-only
+  scoring, mandatory actionable feedback on every fail, and dissent reporting.
+- **Advisory and hidden.** It never changes application status, never notifies
+  the applicant, and is invisible to applicants, reviewers, and even secondary
+  admins (`ownerProcedure` fails closed; the UI tab renders only for the
+  owner). Results live in the `ai_swarm_reviews` table; every run is audited.
+- **Budgeted.** One run reserves 14 LLM calls against the owner's daily AI
+  budget up front (SA-03 policy, no refunds on failure).
+
+The owner is identified by `OWNER_OPEN_ID` (or `OWNER_EMAIL`) captured at
+boot — if neither is set, the feature is disabled for everyone (fails closed).
 
 ---
 
@@ -158,9 +189,17 @@ A non-exhaustive checklist before exposing this publicly:
 
 ## Testing
 
-`pnpm test` runs the vitest suite (95 tests covering tRPC procedures, RBAC,
-input validation, and shared types). The tests boot a real MySQL connection
-using `DATABASE_URL` from `.env` — make sure migrations are applied first.
+`pnpm test` runs the vitest suite (106 tests covering tRPC procedures, RBAC,
+input validation, owner-gating of the AI swarm, and shared types). The tests
+boot a real MySQL connection using `DATABASE_URL` from `.env` — make sure
+migrations are applied first.
+
+`pnpm e2e:roles` drives the running dev server through all five privilege
+levels — visitor, applier, reviewer, secondary admin, and owner — covering
+registration/login, the full application journey, committee voting, final
+approval + public certificate verification, and the owner-only AI swarm
+endpoints (57 checks). Requires `DEV_LOGIN_ENABLED=1` and
+`OWNER_OPEN_ID=dev-owner-001` in `.env`.
 
 ---
 

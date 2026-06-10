@@ -85,6 +85,13 @@
       "when": 1778200000000,
       "tag": "0011_native_password_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1781076273576,
+      "tag": "0012_ai_swarm_reviews",
+      "breakpoints": true
     }
   ]
 }

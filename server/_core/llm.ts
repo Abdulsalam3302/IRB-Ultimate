@@ -316,6 +316,21 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   if (normalizedResponseFormat) {
     payload.response_format = normalizedResponseFormat;
+    // Some OpenAI-compatible providers (MiniMax among them) accept
+    // response_format but do NOT enforce the schema server-side — the model
+    // never sees it and invents its own key names (often snake_case),
+    // which silently zeroes out every field lookup downstream. Embed the
+    // exact schema in the conversation as well; providers that do enforce
+    // it are unaffected.
+    if (normalizedResponseFormat.type === "json_schema") {
+      (payload.messages as unknown[]).push({
+        role: "user",
+        content:
+          "Your entire reply must be a single JSON object that validates against this JSON Schema. " +
+          "Use these EXACT property names (same casing) and types — no extra keys, no prose:\n" +
+          JSON.stringify(normalizedResponseFormat.json_schema.schema),
+      });
+    }
   }
 
   // Hard timeout. Reasoning models (M2 / R1) can take a while, but

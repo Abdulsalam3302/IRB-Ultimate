@@ -345,23 +345,25 @@ async function ownerSuite(ownerClient, appId) {
   const history = await ownerClient.query("aiSwarm.byApplication", { applicationId: appId });
   check("Owner can read swarm history", Array.isArray(data(history)));
 
-  // Without an LLM key the run must complete with two FAILED panel rows
-  // (graceful outage), never a fake verdict and never a 500.
+  // The run is asynchronous (background deliberation): the mutation must
+  // return immediately with accepted:true, and the rows must settle into
+  // completed/failed. Without an LLM key locally they settle to FAILED
+  // (graceful outage) — never a fake verdict, never a 500.
   const run = await ownerClient.mutate("aiSwarm.run", { applicationId: appId });
-  const panels = data(run)?.panels;
-  check("Swarm run returns two panels", Array.isArray(panels) && panels.length === 2);
-  if (Array.isArray(panels)) {
-    const unavailable = panels.every(p => p.unavailable === true);
-    const completed = panels.every(p => !p.unavailable && typeof p.score === "number");
-    check("Panels either complete or report outage honestly", unavailable || completed,
-      JSON.stringify(panels?.map(p => ({ unavailable: p.unavailable, verdict: p.verdict }))));
-  }
+  const runGroup = data(run)?.runGroup;
+  check("Swarm run accepted asynchronously", data(run)?.accepted === true && typeof runGroup === "string");
 
-  const historyAfter = await ownerClient.query("aiSwarm.byApplication", { applicationId: appId });
-  const rows = data(historyAfter) ?? [];
-  check("Swarm run persisted (2 rows)", rows.length >= 2);
-  check("Persisted rows carry status", rows.every(r => ["completed", "failed"].includes(r.status)),
-    JSON.stringify(rows.map(r => r.status)));
+  let rows = [];
+  for (let i = 0; i < 20; i++) {
+    const h = await ownerClient.query("aiSwarm.byApplication", { applicationId: appId });
+    rows = (data(h) ?? []).filter(r => r.runGroup === runGroup);
+    if (rows.length === 2 && rows.every(r => r.status !== "running")) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  check("Swarm run persisted as two panel rows", rows.length === 2, `rows=${rows.length}`);
+  check("Panel rows settle (completed/failed, no fake verdicts)",
+    rows.every(r => ["completed", "failed"].includes(r.status)),
+    JSON.stringify(rows.map(r => ({ status: r.status, verdict: r.verdict }))));
 
   // The swarm must not have mutated the application status.
   const app = await ownerClient.query("application.getById", { id: appId });

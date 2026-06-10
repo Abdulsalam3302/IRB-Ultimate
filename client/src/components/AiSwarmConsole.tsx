@@ -226,22 +226,24 @@ export function AiSwarmConsole() {
   const { data: applications } = trpc.admin.allApplications.useQuery();
   const { data: history, isLoading: historyLoading } = trpc.aiSwarm.byApplication.useQuery(
     { applicationId: appId! },
-    { enabled: appId != null },
+    {
+      enabled: appId != null,
+      // Deliberation finishes in the background on the server; poll while
+      // any panel row is still running, stop as soon as all settle.
+      refetchInterval: query =>
+        (query.state.data ?? []).some(r => r.status === "running") ? 4000 : false,
+    },
   );
   const { data: budget } = trpc.application.aiBudget.useQuery();
+  const anyRunning = (history ?? []).some(r => r.status === "running");
 
   const runSwarm = trpc.aiSwarm.run.useMutation({
-    onSuccess: (res) => {
-      const ok = res.panels.filter(p => !(p as any).unavailable);
-      if (ok.length === 0) {
-        toast.error(isAr ? "موفر الذكاء الاصطناعي غير متاح حالياً." : "AI provider is unavailable right now — try again later.");
-      } else {
-        toast.success(
-          isAr
-            ? "اكتمل تدقيق السرب — لجنتان مستقلتان أصدرتا حكمهما."
-            : `Swarm audit complete — Panel 1: ${res.panels[0].verdict.toUpperCase()} (${res.panels[0].score}), Panel 2: ${res.panels[1].verdict.toUpperCase()} (${res.panels[1].score}).`,
-        );
-      }
+    onSuccess: () => {
+      toast.success(
+        isAr
+          ? "بدأ تدقيق السرب — اللجنتان تتداولان الآن. تظهر النتائج هنا خلال دقيقة أو دقيقتين."
+          : "Swarm audit started — both panels are deliberating. Results appear here within a minute or two.",
+      );
       if (appId != null) utils.aiSwarm.byApplication.invalidate({ applicationId: appId });
       utils.application.aiBudget.invalidate();
     },
@@ -304,8 +306,8 @@ export function AiSwarmConsole() {
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button disabled={!appId || runSwarm.isPending}>
-                  {runSwarm.isPending
+                <Button disabled={!appId || runSwarm.isPending || anyRunning}>
+                  {runSwarm.isPending || anyRunning
                     ? <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "السرب يتداول…" : "Swarm deliberating…"}</>
                     : <><Bot className="h-4 w-4 me-2" /> {isAr ? "تشغيل تدقيق السرب" : "Run Swarm Audit"}</>}
                 </Button>
@@ -334,7 +336,7 @@ export function AiSwarmConsole() {
             </AlertDialog>
           </div>
 
-          {runSwarm.isPending && (
+          {(runSwarm.isPending || anyRunning) && (
             <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
               <p className="text-sm font-medium">
                 {isAr ? "اللجنتان تتداولان بشكل مستقل…" : "Both panels are deliberating independently…"}

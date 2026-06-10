@@ -2228,7 +2228,23 @@ const aiSwarmRouter = router({
     .query(async ({ input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      return db.getAiSwarmReviewsByApplication(input.applicationId);
+      const rows = await db.getAiSwarmReviewsByApplication(input.applicationId);
+      // Watchdog: if the process restarted mid-deliberation, rows could be
+      // stuck in "running" forever. Anything older than 15 minutes is dead.
+      const STALE_MS = 15 * 60_000;
+      const now = Date.now();
+      for (const row of rows) {
+        if (row.status === "running" && now - row.createdAt.getTime() > STALE_MS) {
+          row.status = "failed";
+          row.errorMessage = "Deliberation timed out (server restarted or provider hung). Run the audit again.";
+          await db.updateAiSwarmReview(row.id, {
+            status: "failed",
+            errorMessage: row.errorMessage,
+            completedAt: new Date(),
+          });
+        }
+      }
+      return rows;
     }),
 
   run: ownerProcedure
@@ -2242,6 +2258,16 @@ const aiSwarmRouter = router({
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "The application must complete Stage 1 before a swarm audit can run.",
+        });
+      }
+      // One deliberation at a time per application — a second concurrent
+      // run would double-spend budget and confuse the report history.
+      const existing = await db.getAiSwarmReviewsByApplication(input.applicationId);
+      const RUNNING_FRESH_MS = 15 * 60_000;
+      if (existing.some(r => r.status === "running" && Date.now() - r.createdAt.getTime() < RUNNING_FRESH_MS)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "A swarm audit is already deliberating on this application. Wait for it to finish.",
         });
       }
 
@@ -2271,40 +2297,61 @@ const aiSwarmRouter = router({
         }));
       }
 
-      // The two panels run concurrently and never see each other's output.
-      const [panel1, panel2] = await Promise.all([
-        runSwarmPanel(app, 0),
-        runSwarmPanel(app, 1),
-      ]);
+      const requesterId = ctx.user.id;
+      // Deliberation takes 1-2 minutes — far past the ~30s proxy timeout
+      // in front of the API. Respond immediately and finish in the
+      // background; the client polls byApplication for the "running" →
+      // "completed"/"failed" transition. Safe here because the API runs
+      // on a long-lived Node process (Railway), never on serverless.
+      void (async () => {
+        try {
+          // The two panels run concurrently and never see each other's output.
+          const [panel1, panel2] = await Promise.all([
+            runSwarmPanel(app, 0),
+            runSwarmPanel(app, 1),
+          ]);
 
-      const results = [panel1, panel2];
-      for (let i = 0; i < results.length; i++) {
-        const r = results[i];
-        if (r.unavailable) {
-          await db.updateAiSwarmReview(rowIds[i], {
-            status: "failed",
-            errorMessage: r.summary,
-            completedAt: new Date(),
+          const results = [panel1, panel2];
+          for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            if (r.unavailable) {
+              await db.updateAiSwarmReview(rowIds[i], {
+                status: "failed",
+                errorMessage: r.summary,
+                completedAt: new Date(),
+              });
+            } else {
+              await db.updateAiSwarmReview(rowIds[i], {
+                status: "completed",
+                verdict: r.verdict,
+                score: r.score,
+                report: JSON.stringify(r),
+                completedAt: new Date(),
+              });
+            }
+          }
+
+          await db.addAuditLog({
+            applicationId: input.applicationId,
+            userId: requesterId,
+            action: "ai_swarm_review_run",
+            details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Advisory only — no status change.`,
           });
-        } else {
-          await db.updateAiSwarmReview(rowIds[i], {
-            status: "completed",
-            verdict: r.verdict,
-            score: r.score,
-            report: JSON.stringify(r),
-            completedAt: new Date(),
-          });
+        } catch (err) {
+          console.error("[AI Swarm] background run failed:", err);
+          for (const id of rowIds) {
+            try {
+              await db.updateAiSwarmReview(id, {
+                status: "failed",
+                errorMessage: "Swarm deliberation crashed unexpectedly. Check server logs and run again.",
+                completedAt: new Date(),
+              });
+            } catch { /* best-effort */ }
+          }
         }
-      }
+      })();
 
-      await db.addAuditLog({
-        applicationId: input.applicationId,
-        userId: ctx.user.id,
-        action: "ai_swarm_review_run",
-        details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Advisory only — no status change.`,
-      });
-
-      return { runGroup, panels: results };
+      return { runGroup, accepted: true as const };
     }),
 });
 

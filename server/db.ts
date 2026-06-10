@@ -12,6 +12,7 @@ import {
   applicationVersions, InsertApplicationVersion,
   adverseEvents, InsertAdverseEvent,
   amendments, InsertAmendment,
+  aiSwarmReviews, InsertAiSwarmReview,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
@@ -817,4 +818,28 @@ export async function setUserOrcid(userId: number, orcidId: string | null, verif
     throw new Error("Invalid ORCID iD format (expected 0000-0000-0000-0000)");
   }
   await dbi.update(users).set({ orcidId, orcidVerified: verified }).where(eq(users.id, userId));
+}
+
+// ─── AI Swarm Reviews (owner-only) ───────────────────────────────────────
+
+export async function createAiSwarmReview(data: InsertAiSwarmReview) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const r = await dbi.insert(aiSwarmReviews).values(data);
+  return r[0].insertId;
+}
+
+export async function updateAiSwarmReview(id: number, data: Partial<InsertAiSwarmReview>) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  await dbi.update(aiSwarmReviews).set(data).where(eq(aiSwarmReviews.id, id));
+}
+
+export async function getAiSwarmReviewsByApplication(applicationId: number) {
+  const dbi = await getDb();
+  if (!dbi) return [];
+  return dbi.select().from(aiSwarmReviews)
+    .where(eq(aiSwarmReviews.applicationId, applicationId))
+    .orderBy(desc(aiSwarmReviews.createdAt), aiSwarmReviews.panel)
+    .limit(100);
 }

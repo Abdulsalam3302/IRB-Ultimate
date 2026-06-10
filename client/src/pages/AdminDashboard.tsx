@@ -23,14 +23,24 @@ import {
   Ban, EyeOff, RotateCcw, RefreshCw, Filter, MessageSquare
 } from "lucide-react";
 import { Logo } from "@/components/design/Logo";
+import { AiSwarmConsole } from "@/components/AiSwarmConsole";
 import { STATUS_LABELS, STATUS_COLORS } from "@shared/types";
 import type { ApplicationStatus } from "@shared/types";
+import { Bot } from "lucide-react";
 
 export default function AdminDashboard() {
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { t, lang } = useT();
   const isAr = lang === "ar";
+  const isAdmin = isAuthenticated && user?.role === "admin";
+  // Owner-only AI Swarm console. The query is admin-gated client-side and
+  // owner-verified server-side; non-owners simply never see the tab.
+  const { data: ownerCheck } = trpc.aiSwarm.amOwner.useQuery(undefined, {
+    enabled: isAdmin,
+    staleTime: 5 * 60_000,
+  });
+  const isOwner = ownerCheck?.isOwner === true;
 
   if (!isAuthenticated || user?.role !== "admin") {
     return (
@@ -68,7 +78,7 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold mb-6">{isAr ? "لوحة الإدارة" : "Administration Panel"}</h1>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 max-w-5xl">
+          <TabsList className={`grid w-full grid-cols-4 ${isOwner ? "sm:grid-cols-8" : "sm:grid-cols-7"} max-w-5xl`}>
             <TabsTrigger value="overview"><BarChart3 className="h-4 w-4 me-1" /> {isAr ? "نظرة عامة" : "Overview"}</TabsTrigger>
             <TabsTrigger value="applications"><FileText className="h-4 w-4 me-1" /> {isAr ? "الطلبات" : "Applications"}</TabsTrigger>
             <TabsTrigger value="committee"><Users className="h-4 w-4 me-1" /> {isAr ? "اللجنة" : "Committee"}</TabsTrigger>
@@ -76,6 +86,9 @@ export default function AdminDashboard() {
             <TabsTrigger value="reports"><Download className="h-4 w-4 me-1" /> {isAr ? "التقارير" : "Reports"}</TabsTrigger>
             <TabsTrigger value="audit"><History className="h-4 w-4 me-1" /> {isAr ? "السجل" : "Audit"}</TabsTrigger>
             <TabsTrigger value="users"><Shield className="h-4 w-4 me-1" /> {isAr ? "المستخدمون" : "Users"}</TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="aiswarm"><Bot className="h-4 w-4 me-1" /> {isAr ? "سرب الذكاء" : "AI Swarm"}</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview"><OverviewTab /></TabsContent>
@@ -85,6 +98,7 @@ export default function AdminDashboard() {
           <TabsContent value="reports"><ReportsTab /></TabsContent>
           <TabsContent value="audit"><AuditTab /></TabsContent>
           <TabsContent value="users"><UsersTab /></TabsContent>
+          {isOwner && <TabsContent value="aiswarm"><AiSwarmConsole /></TabsContent>}
         </Tabs>
       </div>
     </div>

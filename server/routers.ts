@@ -1759,6 +1759,18 @@ const adminRouter = router({
       return { success: true };
     }),
 
+  // OWNER-ONLY: purge dev test accounts (@example.com) and their data.
+  // Hard-scoped in the DB layer; can never delete a real account.
+  purgeTestAccounts: ownerProcedure.mutation(async ({ ctx }) => {
+    const result = await db.purgeExampleTestAccounts();
+    await db.addAuditLog({
+      userId: ctx.user.id,
+      action: "test_accounts_purged",
+      details: `Removed ${result.users} @example.com test account(s) and ${result.applications} application(s).`,
+    });
+    return result;
+  }),
+
   userCount: adminProcedure.query(async () => {
     return db.getUserCount();
   }),

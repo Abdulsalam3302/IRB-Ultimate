@@ -13,6 +13,7 @@ import {
   adverseEvents, InsertAdverseEvent,
   amendments, InsertAmendment,
   aiSwarmReviews, InsertAiSwarmReview,
+  notifications,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
@@ -184,6 +185,48 @@ export async function createLocalUser(input: {
     lastSignedIn: new Date(),
   });
   return getUserByOpenId(input.openId);
+}
+
+/**
+ * OWNER-ONLY maintenance: permanently remove development TEST accounts whose
+ * email ends in @example.com, plus their applications and dependent rows.
+ * Hard-scoped to @example.com — it can never touch a real account. Runs in a
+ * transaction; child rows are removed before parents to satisfy FKs.
+ */
+export async function purgeExampleTestAccounts(): Promise<{ users: number; applications: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const targets = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(sql`lower(${users.email}) like '%@example.com'`);
+  if (targets.length === 0) return { users: 0, applications: 0 };
+  // Defence in depth: refuse if anything slipped through the LIKE filter.
+  if (!targets.every(u => (u.email ?? "").toLowerCase().endsWith("@example.com"))) {
+    throw new Error("purgeExampleTestAccounts: non-test email in target set; aborting");
+  }
+  const userIds = targets.map(u => u.id);
+  const apps = await db.select({ id: applications.id }).from(applications).where(inArray(applications.applicantId, userIds));
+  const appIds = apps.map(a => a.id);
+
+  if (appIds.length) {
+    await db.delete(researchAuthors).where(inArray(researchAuthors.applicationId, appIds));
+    await db.delete(reviewAssignments).where(inArray(reviewAssignments.applicationId, appIds));
+    await db.delete(applicationVersions).where(inArray(applicationVersions.applicationId, appIds));
+    await db.delete(adverseEvents).where(inArray(adverseEvents.applicationId, appIds));
+    await db.delete(amendments).where(inArray(amendments.applicationId, appIds));
+    await db.delete(aiSwarmReviews).where(inArray(aiSwarmReviews.applicationId, appIds));
+    await db.delete(fileUploads).where(inArray(fileUploads.applicationId, appIds));
+    await db.delete(notifications).where(inArray(notifications.applicationId, appIds));
+    await db.delete(auditLog).where(inArray(auditLog.applicationId, appIds));
+    await db.delete(applications).where(inArray(applications.id, appIds));
+  }
+  await db.delete(committeeMembers).where(inArray(committeeMembers.userId, userIds));
+  await db.delete(notifications).where(inArray(notifications.userId, userIds));
+  await db.delete(auditLog).where(inArray(auditLog.userId, userIds));
+  await db.delete(users).where(inArray(users.id, userIds));
+
+  return { users: userIds.length, applications: appIds.length };
 }
 
 export async function getAllUsers() {

@@ -1178,6 +1178,10 @@ function UsersTab() {
     onSuccess: () => { toast.success("Role updated successfully"); refetch(); },
     onError: (e: any) => toast.error(e.message),
   });
+  const purgeTest = trpc.admin.purgeTestAccounts.useMutation({
+    onSuccess: (r: any) => { toast.success(`Removed ${r.users} test account(s) and ${r.applications} application(s).`); refetch(); },
+    onError: (e: any) => toast.error(e.message),
+  });
   const [search, setSearch] = useState("");
   const { lang } = useT();
   const isAr = lang === "ar";
@@ -1243,6 +1247,22 @@ function UsersTab() {
               <Download className="h-4 w-4 me-1" />
               {isAr ? "تصدير Excel" : "Export Excel"}
             </Button>
+            {isOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/30"
+                onClick={() => {
+                  if (confirm(isAr ? "حذف جميع حسابات الاختبار (@example.com) وبياناتها نهائيًا؟" : "Permanently delete all test accounts (@example.com) and their data?")) {
+                    purgeTest.mutate();
+                  }
+                }}
+                disabled={purgeTest.isPending}
+              >
+                {purgeTest.isPending ? <Loader2 className="h-4 w-4 me-1 animate-spin" /> : <Trash2 className="h-4 w-4 me-1" />}
+                {isAr ? "حذف حسابات الاختبار" : "Purge test accounts"}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4" />
             </Button>

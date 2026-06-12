@@ -7,7 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
 import { Logo } from "@/components/design/Logo";
-import { ArrowLeft, ArrowRight, ChevronRight, Search, Sun, Moon } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, Search, Sun, Moon, LogOut } from "lucide-react";
 
 interface NavbarProps {
   showBack?: boolean;
@@ -16,7 +16,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { t, isRtl } = useT();
   const { theme, toggleTheme } = useTheme();
@@ -62,9 +62,20 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
                 {t("nav.policy")}
               </Button>
               {isAuthenticated ? (
-                <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-sm" onClick={() => setLocation("/dashboard")}>
-                  {t("nav.dashboard")} <ForwardArrow className="h-4 w-4 ms-1" />
-                </Button>
+                <>
+                  <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-sm" onClick={() => setLocation("/dashboard")}>
+                    {t("nav.dashboard")} <ForwardArrow className="h-4 w-4 ms-1" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="transition-apple"
+                    title={t("nav.logout")}
+                    onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+                  >
+                    <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
+                  </Button>
+                </>
               ) : (
                 <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50 shadow-sm" onClick={() => { window.location.href = getLoginUrl(); }}>
                   {t("nav.login")} <ForwardArrow className="h-4 w-4 ms-1" />

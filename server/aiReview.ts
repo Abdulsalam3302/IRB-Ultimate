@@ -855,10 +855,11 @@ QUALITY STANDARDS
 2. FILL ALL BLANKS: If a field is empty, generate appropriate content that is consistent with the research title and type
 3. CROSS-FIELD CONSISTENCY: All fields must be internally consistent (e.g., methodology matches objectives, sample size matches target population), AND consistent with the STAGE 1 GATEWAY FACTS above when present (do not invent a different PI, institution, funding source, or duration)
 4. PROFESSIONAL LANGUAGE: Use academic, precise language appropriate for an IRB submission
-5. ETHICAL COMPLIANCE: Every field must align with Declaration of Helsinki, ICH-GCP, Belmont Report, and NCBE regulations
+5. ETHICAL COMPLIANCE: Every field must align with the Declaration of Helsinki (2024 revision), ICH-GCP, the Belmont Report, CIOMS, and Saudi NCBE/PDPL regulations — name the specific principle being satisfied where it matters (e.g., voluntariness, minimisation of risk, justice in participant selection).
 6. SPECIFICITY: Avoid generic statements — be specific to THIS research and this Saudi setting
-7. COMPLETENESS: Each field should be comprehensive enough to stand alone without additional explanation
-8. PRIOR-ART AWARENESS: When the LITERATURE & PRIOR-ART CONTEXT block is provided, mention how this study aligns with or differs from existing work in the methodology field
+7. QUALITY OVER QUANTITY: Write the way a top reviewer wishes applicants wrote — precise, complete, and CONCISE. Every sentence must carry information a reviewer needs; no padding, no restating the question, no filler. A short, airtight answer beats a long vague one.
+8. PRIOR-ART AWARENESS: When the LITERATURE & PRIOR-ART CONTEXT block is provided, ground claims in it and state how this study aligns with or differs from existing work in the methodology field.
+9. PASS-FIRST-TIME STANDARD: Write each field so it would survive a strict, adversarial institutional audit across all six review dimensions — methodology & biostatistics, ethics & informed consent, regulatory & legal, participant/community welfare, data privacy & security, and scientific merit — leaving no obvious gap for a reviewer to flag.
 
 ═══════════════════════════════════════════════════
 TEMPLATE FALLBACK RULE — when you cannot honestly fill a field

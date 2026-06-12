@@ -1724,25 +1724,30 @@ const adminRouter = router({
     }),
 
   allUsers: adminProcedure.query(async () => {
-    return db.getAllUsers();
+    const users = await db.getAllUsers();
+    // Flag the platform-owner row so the UI can show an Owner badge and
+    // suppress the demote action against it.
+    return users.map(u => ({ ...u, isOwner: isPlatformOwner(u) }));
   }),
 
   searchUsers: adminProcedure
     .input(z.object({ query: z.string() }))
     .query(async ({ input }) => {
-      return db.searchUsersByEmail(input.query);
+      const users = await db.searchUsersByEmail(input.query);
+      return users.map(u => ({ ...u, isOwner: isPlatformOwner(u) }));
     }),
 
-  updateUserRole: adminProcedure
+  // OWNER-ONLY: promoting/demoting between admin and user is reserved for
+  // the platform owner. Admins can do everything else but cannot change
+  // roles — so a compromised or rogue admin can't mint more admins or strip
+  // the owner. Secondary admins get the same FORBIDDEN as any non-owner.
+  updateUserRole: ownerProcedure
     .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
     .mutation(async ({ ctx, input }) => {
       if (input.userId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot change your own role" });
-      // SA-25: refuse to demote the platform owner. Without this, a
-      // compromised secondary admin (or a CSRF that survives SA-01) could
-      // strip the owner of their access — leaving nobody with the keys
-      // unless they re-trip auto-promotion via OWNER_OPEN_ID.
+      // Refuse to demote the platform owner account itself.
       const target = await db.getUserById(input.userId);
-      if (target && ENV.ownerOpenId && target.openId === ENV.ownerOpenId && input.role !== "admin") {
+      if (target && isPlatformOwner(target) && input.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Platform owner cannot be demoted" });
       }
       await db.updateUserRole(input.userId, input.role);
@@ -2373,7 +2378,14 @@ const aiSwarmRouter = router({
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      const u = opts.ctx.user;
+      if (!u) return null;
+      // Surface owner status so the client can show the Owner badge and
+      // gate promote/demote (owner-only) in the UI. Authoritative checks
+      // still happen server-side on ownerProcedure.
+      return { ...u, isOwner: isPlatformOwner(u) };
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

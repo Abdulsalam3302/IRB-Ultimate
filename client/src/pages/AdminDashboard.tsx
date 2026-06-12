@@ -1172,6 +1172,8 @@ function AuditTab() {
 
 function UsersTab() {
   const { data: allUsers, isLoading, refetch } = trpc.admin.allUsers.useQuery();
+  const { data: ownerCheck } = trpc.aiSwarm.amOwner.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const isOwner = ownerCheck?.isOwner === true;
   const updateRole = trpc.admin.updateUserRole.useMutation({
     onSuccess: () => { toast.success("Role updated successfully"); refetch(); },
     onError: (e: any) => toast.error(e.message),
@@ -1179,6 +1181,35 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const { lang } = useT();
   const isAr = lang === "ar";
+
+  // Export the current user list to a real .xlsx (SpreadsheetML) the user can
+  // open in Excel. Reflects any active search filter.
+  const exportUsersExcel = () => {
+    const rows = filteredUsers as any[];
+    const headers = ["ID", "Name", "Email", "Role", "Login Method", "Joined", "Last Login"];
+    const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const cell = (v: unknown) => `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
+    const row = (cells: unknown[]) => `<Row>${cells.map(cell).join("")}</Row>`;
+    const body = rows.map(u => row([
+      u.id,
+      u.name || "",
+      u.email || "",
+      u.isOwner ? "Owner" : u.role === "admin" ? "Admin" : "User",
+      u.loginMethod || "",
+      u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : "",
+      u.lastSignedIn ? new Date(u.lastSignedIn).toISOString().replace("T", " ").slice(0, 19) : "",
+    ])).join("");
+    const xml =
+      `<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n` +
+      `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">` +
+      `<Worksheet ss:Name="Users"><Table>${row(headers)}${body}</Table></Worksheet></Workbook>`;
+    const blob = new Blob(["﻿", xml], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `irb-users-${new Date().toISOString().slice(0, 10)}.xls`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const filteredUsers = useMemo(() => {
     if (!allUsers) return [];
@@ -1208,6 +1239,10 @@ function UsersTab() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-64"
             />
+            <Button variant="outline" size="sm" onClick={exportUsersExcel} disabled={!filteredUsers.length}>
+              <Download className="h-4 w-4 me-1" />
+              {isAr ? "تصدير Excel" : "Export Excel"}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -1242,15 +1277,22 @@ function UsersTab() {
                   </td>
                   <td className="p-3 text-muted-foreground">{u.email || "—"}</td>
                   <td className="p-3">
-                    <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-xs">
-                      {u.role === "admin" ? (isAr ? "مسؤول" : "Admin") : (isAr ? "مستخدم" : "User")}
+                    <Badge
+                      variant={u.isOwner ? "default" : u.role === "admin" ? "default" : "secondary"}
+                      className={`text-xs ${u.isOwner ? "bg-forest-900 hover:bg-forest-900" : ""}`}
+                    >
+                      {u.isOwner ? (isAr ? "المالك" : "Owner") : u.role === "admin" ? (isAr ? "مسؤول" : "Admin") : (isAr ? "مستخدم" : "User")}
                     </Badge>
                   </td>
                   <td className="p-3 text-xs text-muted-foreground">{new Date(u.createdAt).toLocaleDateString(isAr ? "ar-SA" : "en-US")}</td>
                   <td className="p-3 text-xs text-muted-foreground">{new Date(u.lastSignedIn).toLocaleString(isAr ? "ar-SA" : "en-US")}</td>
                   <td className="p-3">
                     <div className="flex items-center gap-1">
-                      {u.role === "user" ? (
+                      {/* Promote/demote is OWNER-ONLY and never applies to the
+                          owner row itself. Admins see no role controls. */}
+                      {!isOwner || u.isOwner ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : u.role === "user" ? (
                         <Button
                           variant="outline"
                           size="sm"

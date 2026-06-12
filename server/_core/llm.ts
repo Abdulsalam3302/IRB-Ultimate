@@ -300,7 +300,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = ENV.llmMaxTokens;
+  // Per-call override wins, else the env default. Reasoning models (MiniMax
+  // M2) burn a large hidden reasoning budget BEFORE the answer, so callers
+  // that ask for big structured output (e.g. the proposal generator) need
+  // more headroom or the JSON truncates inside the <think> block.
+  payload.max_tokens = params.maxTokens ?? params.max_tokens ?? ENV.llmMaxTokens;
   // `thinking` is Anthropic-specific. Only emit it for providers that
   // accept it; MiniMax / OpenAI / generic gateways will 400 on this field.
   if (ENV.llmProvider === "anthropic" || ENV.llmProvider === "claude") {

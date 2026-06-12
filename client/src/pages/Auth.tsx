@@ -43,6 +43,14 @@ function AppleIcon() {
   );
 }
 
+function LinkedInIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18.34V9.94H5.67v8.4h2.67zM7 8.78a1.55 1.55 0 1 0 0-3.1 1.55 1.55 0 0 0 0 3.1zm11.34 9.56v-4.6c0-2.46-1.31-3.6-3.06-3.6-1.41 0-2.04.78-2.4 1.32v-1.13h-2.66c.04.75 0 8.4 0 8.4h2.66v-4.69c0-.24.02-.48.09-.65.19-.48.63-.97 1.36-.97.96 0 1.35.73 1.35 1.81v4.5h2.66z" />
+    </svg>
+  );
+}
+
 export default function Auth() {
   const { t } = useT();
   const [, setLocation] = useLocation();
@@ -79,7 +87,7 @@ export default function Auth() {
 
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
-  const oauth = async (provider: "google" | "apple") => {
+  const oauth = async (provider: "google" | "apple" | "linkedin_oidc") => {
     setBusy(true);
     try {
       const { error } = await getSupabase().auth.signInWithOAuth({
@@ -181,6 +189,16 @@ export default function Auth() {
                 >
                   <AppleIcon />
                   {t("auth.continueApple")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-11 gap-2 bg-white"
+                  disabled={busy}
+                  onClick={() => oauth("linkedin_oidc")}
+                >
+                  <LinkedInIcon />
+                  {t("auth.continueLinkedIn")}
                 </Button>
               </div>
 

@@ -32,6 +32,7 @@ async function verifySupabaseAccessToken(token: string) {
   );
   const { payload } = await jwtVerify(token, jwks, {
     issuer: `${ENV.supabaseUrl.replace(/\/$/, "")}/auth/v1`,
+    audience: "authenticated",
   });
   const sub = payload.sub;
   if (typeof sub !== "string" || !sub) {
@@ -40,9 +41,12 @@ async function verifySupabaseAccessToken(token: string) {
   return payload as Record<string, unknown> & { sub: string };
 }
 
-function roleForUser(openId: string, email: string | null): "admin" | "user" {
+function roleForUser(openId: string, email: string | null, emailVerified: boolean): "admin" | "user" {
   if (ENV.ownerOpenId && openId === ENV.ownerOpenId) return "admin";
-  if (ENV.ownerEmail && email && email.toLowerCase() === ENV.ownerEmail) return "admin";
+  // Owner-by-email promotion only when Supabase has actually confirmed the
+  // address — otherwise a provider with email-confirmation disabled would let
+  // anyone sign up as the owner email and inherit admin.
+  if (emailVerified && ENV.ownerEmail && email && email.toLowerCase() === ENV.ownerEmail) return "admin";
   return "user";
 }
 
@@ -70,7 +74,10 @@ export function registerSupabaseAuthRoutes(app: Express) {
           ? (appMeta as Record<string, unknown>).provider
           : payload.aal;
       const name = displayName(payload);
-      const role = roleForUser(openId, email);
+      const emailVerified =
+        payload.email_confirmed_at != null ||
+        (payload.user_metadata as Record<string, unknown> | undefined)?.email_verified === true;
+      const role = roleForUser(openId, email, Boolean(emailVerified));
 
       await db.upsertUser({
         openId,

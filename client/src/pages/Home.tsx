@@ -105,6 +105,11 @@ export default function Home() {
                 <dd className="text-forest-900 font-medium">Dr. Abdulsalam Aleid</dd>
               </dl>
             </div>
+            <p className="mt-4 text-[12.5px] text-ink-soft leading-relaxed text-center px-2">
+              {isRtl
+                ? "تُصدَر شهادات IRB من هذه المنصة وفق الممارسات الأخلاقية الدولية المعتمدة — إعلان هلسنكي وICH-GCP وإرشادات CIOMS — ويمكن التحقق منها إلكترونيًا من أي مكان في العالم."
+                : "IRB certificates from this platform are issued on internationally recognized ethical practices — the Declaration of Helsinki, ICH-GCP, and CIOMS — and are verifiable online worldwide."}
+            </p>
           </div>
         </div>
       </section>

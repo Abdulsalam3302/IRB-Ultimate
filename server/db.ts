@@ -142,10 +142,26 @@ export async function getLocalUserByEmail(email: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+/** True if at least one admin account already exists. Used to gate the
+ *  one-time owner bootstrap so admin can never be re-claimed by a later
+ *  self-registration. */
+export async function adminExists(): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin")).limit(1);
+  return rows.length > 0;
+}
+
 /**
- * Create a new email/password user. Email is normalised to lowercase. The
- * platform owner (BOOT_OWNER_EMAIL) is promoted to admin on creation. Returns
- * the persisted row.
+ * Create a new email/password user. Email is normalised to lowercase.
+ *
+ * SECURITY (admin bootstrap): the platform owner email (BOOT_OWNER_EMAIL) is
+ * promoted to admin ONLY when no admin account exists yet — a one-time
+ * bootstrap during initial setup. Once an admin exists the path is closed,
+ * so an attacker cannot self-register the owner email later to seize admin.
+ * Native registration is otherwise never auto-promoted; subsequent admins are
+ * granted by an existing admin via updateUserRole or by OWNER_OPEN_ID match.
+ * Returns the persisted row.
  */
 export async function createLocalUser(input: {
   openId: string;
@@ -156,8 +172,8 @@ export async function createLocalUser(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const normalizedEmail = input.email.trim().toLowerCase();
-  const role: "user" | "admin" =
-    BOOT_OWNER_EMAIL && normalizedEmail === BOOT_OWNER_EMAIL ? "admin" : "user";
+  const isOwnerEmail = Boolean(BOOT_OWNER_EMAIL) && normalizedEmail === BOOT_OWNER_EMAIL;
+  const role: "user" | "admin" = isOwnerEmail && !(await adminExists()) ? "admin" : "user";
   await db.insert(users).values({
     openId: input.openId,
     name: input.name,
@@ -300,10 +316,15 @@ export async function getAuthorsByApplication(applicationId: number) {
   return db.select().from(researchAuthors).where(eq(researchAuthors.applicationId, applicationId)).orderBy(researchAuthors.id);
 }
 
-export async function removeAuthor(id: number) {
+export async function removeAuthor(id: number, applicationId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(researchAuthors).where(eq(researchAuthors.id, id));
+  // Scope the delete to the owning application so a caller authorised on
+  // application A cannot delete an author row belonging to application B
+  // by passing a foreign author id (cross-tenant IDOR).
+  await db
+    .delete(researchAuthors)
+    .where(and(eq(researchAuthors.id, id), eq(researchAuthors.applicationId, applicationId)));
 }
 
 export async function removeAllAuthorsByApplication(applicationId: number) {

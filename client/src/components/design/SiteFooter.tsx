@@ -35,11 +35,21 @@ export function SiteFooter() {
     <footer className="bg-forest-950 text-cream-50 grain">
       <div className="container py-14">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
-          {/* Brand */}
+          {/* Brand — one section: platform description + independence, AHSS linked */}
           <div className="md:col-span-5">
             <Logo size={30} tone="cream" />
-            <p className="mt-5 text-cream-200/70 text-[14px] leading-relaxed max-w-md">{t("footer.desc")}</p>
-            <p className="mt-3 text-[12.5px] text-cream-50/75 leading-relaxed max-w-md">{t("footer.independence")}</p>
+            <p className="mt-5 text-cream-200/75 text-[13.5px] leading-relaxed max-w-md">
+              {t("footer.desc")}{" "}
+              {t("footer.independence")}{" "}
+              <a
+                href={AHSS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 text-cream-50/90 hover:text-jade-400 transition-colors"
+              >
+                ahss-sa.org
+              </a>
+            </p>
             <div className="mt-5 flex flex-wrap gap-2">
               {COMPLIANCE_STAMPS.map((key) => (
                 <Stamp key={key} className="!bg-cream-50/10 !text-cream-50 !ring-cream-50/15">
@@ -109,9 +119,15 @@ export function SiteFooter() {
               href={AHSS_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="block font-mono uppercase tracking-[0.16em] text-[11px] text-cream-50/80 hover:text-jade-400 transition-colors"
+              className="inline-flex items-center gap-2 font-mono uppercase tracking-[0.16em] text-[11px] text-cream-50/80 hover:text-jade-400 transition-colors"
             >
-              AHSS · KSA · ahss-sa.org
+              <img
+                src="/ahss-logo.png"
+                alt="AHSS — Advanced Healthcare & Service Society"
+                className="h-5 w-5 rounded-full bg-white/90 p-px"
+                loading="lazy"
+              />
+              ahss-sa.org
             </a>
             <p className="flex items-center justify-center gap-1.5 text-cream-50/70">
               {t("footer.madeWith")}

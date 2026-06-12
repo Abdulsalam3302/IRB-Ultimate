@@ -21,6 +21,7 @@ import {
   isStage2CompleteForProposal,
   proposalFilename,
 } from "../snihProposalExport";
+import { reserveLlmCall } from "./budget";
 
 type GenerateFormatBody = {
   slug?: string;
@@ -430,6 +431,18 @@ export function registerExportRoutes(app: Express) {
       }
       if (!isStage2CompleteForProposal(application)) {
         res.status(400).type("text/plain").send("Complete Stage 2 before generating the proposal package.");
+        return;
+      }
+      // This export runs a large LLM completion — charge it against the same
+      // per-user/global daily AI budget as the tRPC AI routes, otherwise it's
+      // an unmetered way to burn the LLM bill.
+      const budget = reserveLlmCall(user.id);
+      if (!budget.ok) {
+        res.status(429).type("text/plain").send(
+          budget.reason === "global"
+            ? "The platform's daily AI limit has been reached. Please try again tomorrow."
+            : "You've reached your daily AI limit. Please try again tomorrow.",
+        );
         return;
       }
       const buf = await generateSnihProposalDocx(application);

@@ -27,6 +27,11 @@ interface CertData {
   app: Application;
   applicantName: string | null;
   applicantEmail: string | null;
+  // When true the certificate is the publicly-downloadable artifact reached
+  // by anyone via the verify link, so it must redact the same fields
+  // verify.verifyIrb withholds: applicant email, department, funding source,
+  // and the internal AI scores. The stored PDF always sets this.
+  redactForPublic?: boolean;
 }
 
 function verifyBaseUrl(): string {
@@ -72,7 +77,10 @@ const RETRACTED_CSS = `
 `;
 
 export function renderCertificateHtml(data: CertData): string {
-  const { app, applicantName, applicantEmail } = data;
+  const { app, applicantName, redactForPublic } = data;
+  // Drop the email entirely on the public artifact (don't leak PII to anon
+  // verifiers); keep it only on internal copies.
+  const applicantEmail = redactForPublic ? null : data.applicantEmail;
   const approvedAt = app.approvedAt ? new Date(app.approvedAt) : new Date();
   const approvalDate = approvedAt.toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   const approvalTime = approvedAt.toISOString().slice(0, 19).replace("T", " ") + " UTC";
@@ -92,7 +100,7 @@ export function renderCertificateHtml(data: CertData): string {
   const verifyUrl = `${verifyBaseUrl()}/verify/${encodeURIComponent(irbNumber)}`;
   const verifyHost = verifyBaseUrl().replace(/^https?:\/\//, "");
   const submittedBy = applicantName
-    ? `${applicantName}${applicantEmail ? ` <span class="sub mono" style="font-size:11px;">&lt;${escapeHtml(applicantEmail)}&gt;</span>` : ""}`
+    ? `${escapeHtml(applicantName)}${applicantEmail ? ` <span class="sub mono" style="font-size:11px;">&lt;${escapeHtml(applicantEmail)}&gt;</span>` : ""}`
     : "—";
   const stampMonth = String(approvedAt.getMonth() + 1).padStart(2, "0");
   const stampYear = approvedAt.getFullYear();
@@ -109,7 +117,19 @@ export function renderCertificateHtml(data: CertData): string {
     );
   }
 
-  const aiScoresHtml = buildAiScoresHtml(app);
+  // On the public artifact, replace the internal AI score panel with a
+  // neutral standing note rather than exposing compliance/ethics numbers.
+  const aiScoresHtml = redactForPublic
+    ? `<div class="scores" style="grid-template-columns: 1fr; padding: 14px 0; margin-bottom: 28px;">
+      <div style="display:flex; align-items:center; gap: 18px; padding: 12px 18px; background: var(--paper-2); border: 1px dashed var(--rule); border-radius: 6px;">
+        <div style="flex:1;">
+          <div class="k" style="font-family:ui-monospace,monospace; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color: var(--ink-muted);">Ethics standing</div>
+          <div style="font-family:Inter,system-ui; font-size:12.5px; color: var(--ink-soft); margin-top: 2px;">This study completed the platform's two-stage AI compliance and committee ethics review and was approved. Detailed scores are retained on the confidential institutional record.</div>
+        </div>
+        <span style="font-family:ui-monospace,monospace; font-size:10.5px; color: var(--jade); letter-spacing:.16em; text-transform:uppercase;">Reviewed</span>
+      </div>
+    </div>`
+    : buildAiScoresHtml(app);
   const pendingBlock = html.match(/<div class="scores" style="grid-template-columns: 1fr;[\s\S]*?<\/div>\s*<\/div>/)?.[0];
   if (pendingBlock) html = html.replace(pendingBlock, aiScoresHtml);
 
@@ -121,10 +141,10 @@ export function renderCertificateHtml(data: CertData): string {
     "IRB-SA-2026-00024": escapeHtml(irbNumber),
     "Dr. Test": escapeHtml(app.principalInvestigator || "—"),
     "University": escapeHtml(app.piInstitution || "—"),
-    "Medicine": escapeHtml(app.piDepartment || "—"),
+    "Medicine": redactForPublic ? "—" : escapeHtml(app.piDepartment || "—"),
     "Clinical Trial": escapeHtml(researchType),
     "Full Board": escapeHtml(reviewCategory),
-    "Not disclosed": escapeHtml(app.fundingSource || "Not disclosed"),
+    "Not disclosed": redactForPublic ? "Not disclosed" : escapeHtml(app.fundingSource || "Not disclosed"),
     "Not specified": escapeHtml(app.estimatedDuration || "Not specified"),
     "Dr. Abdulsalam Aleid <span class=\"sub mono\" style=\"font-size:11px;\">&lt;owner@irb-ultimate.local&gt;</span>": submittedBy,
     "22 May 2026 · 10:54 UTC": escapeHtml(`${approvalDate} · ${approvalTime.split(" ")[1]} UTC`),
@@ -180,31 +200,36 @@ async function getBrowser() {
 }
 
 export async function renderCertificatePdf(data: CertData): Promise<Buffer> {
-  const html = renderCertificateHtml(data);
-  const browser = await getBrowser();
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
-  await page.route("**/*", async route => {
-    const url = route.request().url();
-    if (url.startsWith("data:")) return route.continue();
-    return route.abort();
-  });
-  try {
-    await page.setContent(html, { waitUntil: "load", timeout: 15000 });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" },
+  const { pdfSemaphore } = await import("./_core/concurrency");
+  return pdfSemaphore.run(async () => {
+    const html = renderCertificateHtml(data);
+    const browser = await getBrowser();
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.route("**/*", async route => {
+      const url = route.request().url();
+      if (url.startsWith("data:")) return route.continue();
+      return route.abort();
     });
-    return Buffer.from(pdf);
-  } finally {
-    await ctx.close();
-  }
+    try {
+      await page.setContent(html, { waitUntil: "load", timeout: 15000 });
+      const pdf = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: "0", bottom: "0", left: "0", right: "0" },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await ctx.close();
+    }
+  });
 }
 
 export async function generateAndStoreCertificatePdf(data: CertData): Promise<string> {
-  const pdf = await renderCertificatePdf(data);
+  // The stored PDF is fetched by anyone with the verify link — force the
+  // public redaction regardless of what the caller passed.
+  const pdf = await renderCertificatePdf({ ...data, redactForPublic: true });
   const key = `certificates/${(data.app.irbNumber || `app-${data.app.id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}-${Date.now()}.pdf`;
   const { url } = await storagePut(key, pdf, "application/pdf");
   return url;

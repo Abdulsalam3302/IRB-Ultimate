@@ -24,6 +24,12 @@ const STRICT_ROUTES = [
   "/api/trpc/application.aiAutoComplete",
   "/api/trpc/application.aiResolveField",
   "/api/trpc/application.fixAllComments",
+  // Public/expensive endpoints: literature fans out to 5 external APIs;
+  // support.create is an anonymous write; /api/export/* launches Chromium /
+  // runs an LLM for proposal DOCX. Prefix match below covers all export verbs.
+  "/api/trpc/literature.search",
+  "/api/trpc/support.create",
+  "/api/export",
 ];
 const AUTH_ROUTES = [
   "/api/sign-in",
@@ -137,9 +143,20 @@ function buildCsp(): string {
   const scriptSrc = ENV.isProduction
     ? "'self'"
     : "'self' 'unsafe-inline' 'unsafe-eval'";
+  // img-src is scoped, not an open `https:` — otherwise a stored-XSS could
+  // exfiltrate data via <img src> to any host, defeating the locked-down
+  // connect-src. data:/blob: cover inline cert SVGs; the cloud hosts cover
+  // S3-served uploads and the asset CDN. Extra hosts via ALLOWED_IMG_HOSTS.
+  const imgHosts = (process.env.ALLOWED_IMG_HOSTS ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  const imgSrc = ENV.isProduction
+    ? ["'self'", "data:", "blob:", "https://*.amazonaws.com", "https://*.cloudfront.net", ...imgHosts].join(" ")
+    : "'self' data: blob: https:";
   return [
     "default-src 'self'",
-    "img-src 'self' data: blob: https:",
+    `img-src ${imgSrc}`,
     "font-src 'self' data: https://fonts.gstatic.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     `script-src ${scriptSrc}`,

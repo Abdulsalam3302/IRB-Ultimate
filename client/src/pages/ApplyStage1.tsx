@@ -644,7 +644,7 @@ export default function ApplyStage1() {
                       </Button>
                       <Button
                         variant="destructive"
-                        disabled={proceedDespiteReason.length < 10 || proceedDespite.isPending}
+                        disabled={proceedDespiteReason.trim().length === 0 || proceedDespite.isPending}
                         onClick={async () => {
                           try {
                             await proceedDespite.mutateAsync({ id: appId, reason: proceedDespiteReason });

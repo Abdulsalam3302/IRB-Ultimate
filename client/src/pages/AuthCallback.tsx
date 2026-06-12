@@ -22,7 +22,12 @@ export default function AuthCallback() {
   const { t } = useT();
   const [error, setError] = useState<string | null>(null);
   const params = new URLSearchParams(window.location.search);
-  const next = params.get("next") || "/dashboard";
+  const rawNext = params.get("next") || "/dashboard";
+  // Same-origin path only — block open redirects via //evil.com or /\evil.com
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
+      ? rawNext
+      : "/dashboard";
 
   useEffect(() => {
     if (!isSupabaseAuthEnabled) {

@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+// Raise the open-draft cap before importing the router so accumulated drafts
+// in the persistent local test DB don't trip the production default (25).
+process.env.MAX_OPEN_DRAFTS_PER_USER = "100000";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
@@ -203,12 +206,36 @@ describe("verify.verifyIrb", () => {
 // ─── Support Router Tests ──────────────────────────────────────────────────
 
 describe("support.create", () => {
-  it("accepts empty name (no min length)", async () => {
+  it("rejects empty name and over-long fields (anti-spam caps)", async () => {
     const ctx = createUnauthContext();
     const caller = appRouter.createCaller(ctx);
-    // Min length removed - empty strings pass validation
+    // Empty name now rejected (min length 1).
+    await expect(
+      caller.support.create({
+        name: "",
+        email: "test@test.com",
+        subject: "Test",
+        category: "issue",
+        message: "This is a test message",
+      })
+    ).rejects.toThrow();
+    // Over-long message rejected (max 5000) to stop large-payload spam.
+    await expect(
+      caller.support.create({
+        name: "Test User",
+        email: "test@test.com",
+        subject: "Test",
+        category: "issue",
+        message: "x".repeat(5001),
+      })
+    ).rejects.toThrow();
+  });
+
+  it("accepts a well-formed ticket", async () => {
+    const ctx = createUnauthContext();
+    const caller = appRouter.createCaller(ctx);
     const result = await caller.support.create({
-      name: "",
+      name: "Test User",
       email: "test@test.com",
       subject: "Test",
       category: "issue",

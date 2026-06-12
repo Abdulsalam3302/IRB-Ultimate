@@ -39,10 +39,16 @@ const FAILED_WINDOW_MS = 15 * 60_000; // 15 minutes
 const FAILED_MAX = 8; // failed logins per account per window
 const REGISTER_WINDOW_MS = 60 * 60_000; // 1 hour
 const REGISTER_MAX = 20; // new accounts per IP per window
+// Per-IP keys are only as trustworthy as X-Forwarded-For, which a direct
+// caller to the Railway origin can forge to rotate buckets. This global
+// ceiling is IP-independent, so even unlimited IP spoofing cannot create
+// more than GLOBAL_REGISTER_MAX accounts per hour platform-wide.
+const GLOBAL_REGISTER_MAX = parseInt(process.env.REGISTER_GLOBAL_HOURLY_MAX ?? "200", 10);
 
 type Bucket = { count: number; reset: number };
 const failedLogins = new Map<string, Bucket>();
 const registrations = new Map<string, Bucket>();
+const globalRegistrations = new Map<string, Bucket>();
 
 function hit(map: Map<string, Bucket>, key: string, windowMs: number, max: number): boolean {
   const now = Date.now();
@@ -68,6 +74,9 @@ setInterval(() => {
   });
   registrations.forEach((b, k) => {
     if (b.reset <= now) registrations.delete(k);
+  });
+  globalRegistrations.forEach((b, k) => {
+    if (b.reset <= now) globalRegistrations.delete(k);
   });
 }, 5 * 60_000).unref();
 
@@ -111,6 +120,11 @@ export function registerNativeAuthRoutes(app: Express) {
       const ip = clientIpKey(req);
       if (!hit(registrations, ip, REGISTER_WINDOW_MS, REGISTER_MAX)) {
         res.status(429).json({ error: "Too many sign-ups from this network. Try again later.", code: "RATE_LIMITED" });
+        return;
+      }
+      // IP-independent backstop against X-Forwarded-For rotation.
+      if (!hit(globalRegistrations, "global", REGISTER_WINDOW_MS, GLOBAL_REGISTER_MAX)) {
+        res.status(429).json({ error: "Sign-ups are temporarily rate-limited. Please try again shortly.", code: "RATE_LIMITED" });
         return;
       }
 

@@ -423,27 +423,42 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
   return Buffer.from(await Packer.toBuffer(doc));
 }
 
-export async function renderResourcePdf(opts: RenderResourceOptions): Promise<Buffer> {
+// One lazily-launched browser shared across all resource-PDF renders — a
+// fresh chromium.launch() per request (the old behaviour) let an anonymous
+// caller spawn unbounded browser processes via the public export endpoint.
+let _browserPromise: Promise<import("playwright").Browser> | null = null;
+async function getSharedBrowser() {
   const { chromium } = await import("playwright");
-  const html = renderResourceHtml(opts);
-  const browser = await chromium.launch({ headless: true });
-  try {
+  if (!_browserPromise) {
+    _browserPromise = chromium.launch({ headless: true });
+    _browserPromise.catch(() => { _browserPromise = null; });
+  }
+  return _browserPromise;
+}
+
+export async function renderResourcePdf(opts: RenderResourceOptions): Promise<Buffer> {
+  const { pdfSemaphore } = await import("./concurrency");
+  return pdfSemaphore.run(async () => {
+    const html = renderResourceHtml(opts);
+    const browser = await getSharedBrowser();
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await page.route("**/*", route => {
-      if (route.request().url().startsWith("data:")) return route.continue();
-      return route.abort();
-    });
-    await page.setContent(html, { waitUntil: "load", timeout: 15000 });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "15mm", bottom: "15mm", left: "12mm", right: "12mm" },
-    });
-    return Buffer.from(pdf);
-  } finally {
-    await browser.close().catch(() => undefined);
-  }
+    try {
+      await page.route("**/*", route => {
+        if (route.request().url().startsWith("data:")) return route.continue();
+        return route.abort();
+      });
+      await page.setContent(html, { waitUntil: "load", timeout: 15000 });
+      const pdf = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: { top: "15mm", bottom: "15mm", left: "12mm", right: "12mm" },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await ctx.close().catch(() => undefined);
+    }
+  });
 }
 
 export function parseExportLang(raw: unknown): ExportLang {

@@ -44,10 +44,9 @@ export function useAuth(options?: UseAuthOptions) {
   }, [logoutMutation, utils]);
 
   const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
+    // Do not persist the user profile (email/role/openId) to localStorage —
+    // it has no readers and needlessly exposes PII to any same-origin script.
+    // The session lives in an httpOnly cookie; auth.me is the source of truth.
     return {
       user: meQuery.data ?? null,
       loading: meQuery.isLoading || logoutMutation.isPending,

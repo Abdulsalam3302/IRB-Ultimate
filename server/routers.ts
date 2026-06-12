@@ -116,6 +116,19 @@ function sanitizeUploadFileName(input: string): string {
 
 const applicationRouter = router({
   create: protectedProcedure.mutation(async ({ ctx }) => {
+    // Cap open drafts per user so a script can't insert unbounded
+    // applications + audit rows (the general limiter alone allows ~200/min).
+    const MAX_OPEN_DRAFTS = parseInt(process.env.MAX_OPEN_DRAFTS_PER_USER ?? "25", 10);
+    const mine = await db.getApplicationsByApplicant(ctx.user.id);
+    const openDrafts = mine.filter(a =>
+      ["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(a.status),
+    ).length;
+    if (openDrafts >= MAX_OPEN_DRAFTS) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `You have ${openDrafts} unfinished applications. Please submit or delete some before starting a new one.`,
+      });
+    }
     const id = await db.createApplication({
       applicantId: ctx.user.id,
       status: "draft",
@@ -817,7 +830,7 @@ const applicationRouter = router({
   proceedDespiteStage1: protectedProcedure
     .input(z.object({
       id: z.number(),
-      reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
+      reason: z.string().trim().min(1, "Please provide a reason.").max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -850,7 +863,7 @@ const applicationRouter = router({
   proceedDespiteStage2: protectedProcedure
     .input(z.object({
       id: z.number(),
-      reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
+      reason: z.string().trim().min(1, "Please provide a reason.").max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
@@ -1045,7 +1058,7 @@ const authorsRouter = router({
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      await db.removeAuthor(input.id);
+      await db.removeAuthor(input.id, input.applicationId);
       return { success: true };
     }),
 });
@@ -1104,11 +1117,11 @@ const verifyRouter = router({
 const supportRouter = router({
   create: publicProcedure
     .input(z.object({
-      name: z.string(),
-      email: z.string().email(),
-      subject: z.string(),
+      name: z.string().trim().min(1).max(200),
+      email: z.string().email().max(320),
+      subject: z.string().trim().min(1).max(200),
       category: z.enum(["issue", "suggestion", "question", "other"]),
-      message: z.string(),
+      message: z.string().trim().min(1).max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
       const id = await db.createSupportTicket({

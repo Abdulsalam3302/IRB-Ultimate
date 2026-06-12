@@ -407,7 +407,9 @@ export async function runSwarmPanel(app: Application, panelIndex: 0 | 1): Promis
     };
   } catch (error) {
     console.error(`[AI Swarm] ${profile.panelName} failed:`, error);
-    const reason = (error as any)?.message?.includes("timed out")
+    const reason = (error as any)?.message?.includes("not configured")
+      ? "AI is not configured on the server (LLM_API_KEY is missing). Please ask the platform administrator to set it."
+      : (error as any)?.message?.includes("timed out")
       ? "AI provider timed out during swarm deliberation."
       : "AI provider is unavailable — swarm deliberation could not complete.";
     return {

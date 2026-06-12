@@ -293,7 +293,7 @@ export default function ApplyStage1() {
           <CardHeader>
             <CardTitle>{isAr ? "نوع البحث والمعلومات الأساسية" : "Research Type & Basic Information"}</CardTitle>
             <CardDescription>
-              {isAr ? "يستخدم الذكاء الاصطناعي هذه الإجابات لتوجيه ملفك وللفحص المسبق وفق فئات NBCE." : "The AI uses these answers to route your file and pre-screen against NBCE categories."}
+              {isAr ? "يستخدم الذكاء الاصطناعي هذه الإجابات لتوجيه ملفك وللفحص المسبق وفق فئات NCBE." : "The AI uses these answers to route your file and pre-screen against NCBE categories."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">

@@ -86,7 +86,7 @@ const CLUSTERS: ClusterSpec[] = [
     key: "ethics",
     name: "Ethics & Informed Consent",
     charge:
-      "Evaluate compliance with the Declaration of Helsinki (2013), Belmont Report, CIOMS 2016, and NBCE Implementing Regulations: voluntariness, comprehension, disclosure of risks, right to withdraw, vulnerable-population safeguards, and risk–benefit proportionality.",
+      "Evaluate compliance with the Declaration of Helsinki (2024 revision), Belmont Report, CIOMS 2016, and NCBE Implementing Regulations: voluntariness, comprehension, disclosure of risks, right to withdraw, vulnerable-population safeguards, and risk–benefit proportionality.",
     perspectives:
       "bioethicists, IRB chairs, research-ethics consultants, Islamic bioethics scholars, consent-process specialists, and clinical ethicists",
   },
@@ -94,9 +94,9 @@ const CLUSTERS: ClusterSpec[] = [
     key: "regulatory",
     name: "Regulatory & Legal Compliance",
     charge:
-      "Evaluate alignment with NBCE regulations, Saudi FDA clinical-trial requirements where applicable, the Saudi Personal Data Protection Law (PDPL), trial-registration obligations, institutional approvals, and investigator qualification requirements.",
+      "Evaluate alignment with NCBE regulations, Saudi FDA clinical-trial requirements where applicable, the Saudi Personal Data Protection Law (PDPL), trial-registration obligations, institutional approvals, and investigator qualification requirements.",
     perspectives:
-      "regulatory-affairs officers, health lawyers, Saudi FDA reviewers, NBCE compliance auditors, research governance managers, and institutional officials",
+      "regulatory-affairs officers, health lawyers, Saudi FDA reviewers, NCBE compliance auditors, research governance managers, and institutional officials",
   },
   {
     key: "advocacy",
@@ -193,7 +193,7 @@ async function runCluster(
   profile: (typeof PANEL_PROFILES)[number],
   fencedApplication: string,
 ): Promise<SwarmClusterResult> {
-  const prompt = `You are simulating the independent deliberation of ${AGENTS_PER_CLUSTER} expert reviewers — ${spec.perspectives} — convened as the "${spec.name}" cluster of ${profile.panelName}, an institutional deep-audit panel for the National Bioethics Committee of Saudi Arabia (NBCE).
+  const prompt = `You are simulating the independent deliberation of ${AGENTS_PER_CLUSTER} expert reviewers — ${spec.perspectives} — convened as the "${spec.name}" cluster of ${profile.panelName}, an institutional deep-audit panel for the National Committee of BioEthics (NCBE) of Saudi Arabia.
 
 PANEL TEMPERAMENT: ${profile.temperament}
 

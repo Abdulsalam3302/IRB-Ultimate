@@ -87,7 +87,7 @@ function fmtMethodology(app: PrefillApplication): string {
 function fmtEthicsDeclaration(app: PrefillApplication): string {
   const checks = [
     app.declarationHonesty ? "✓ Honesty declaration accepted" : "",
-    app.declarationNbceCertification ? "✓ NBCE certification declared" : "",
+    app.declarationNbceCertification ? "✓ NCBE certification declared" : "",
     app.declarationConsentTruth ? "✓ Consent truth declared" : "",
     app.declarationAcceptPolicy ? "✓ Platform policy accepted" : "",
   ].filter(Boolean);

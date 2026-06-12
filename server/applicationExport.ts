@@ -5,7 +5,7 @@
 //
 // Inspector ZIP — bundles the printable HTML + the certificate (when
 // approved) + the audit log (CSV) + a manifest with SHA-256 hashes
-// into a single ZIP. Used for NBCE inspections.
+// into a single ZIP. Used for NCBE inspections.
 
 import archiver from "archiver";
 import { createHash } from "node:crypto";
@@ -109,7 +109,7 @@ export function renderApplicationHtml(data: ExportData): string {
 <body>
 <header>
   <h1>IRB Research Application</h1>
-  <div class="sub">National Bioethics Committee of Saudi Arabia (NBCE) · Advanced Healthcare Systems Society</div>
+  <div class="sub">National Committee of BioEthics (NCBE) of Saudi Arabia · Advanced Healthcare Systems Society</div>
 </header>
 
 <div class="meta">

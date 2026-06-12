@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { RESEARCH_TYPE_LABELS } from "@shared/types";
 import type { ResearchType } from "@shared/types";
+import { SiteFooter } from "@/components/design/SiteFooter";
 
 export default function VerifyIRB() {
   const { t } = useT();
@@ -253,6 +254,7 @@ export default function VerifyIRB() {
           </>
         )}
       </div>
+      <SiteFooter />
     </div>
   );
 }

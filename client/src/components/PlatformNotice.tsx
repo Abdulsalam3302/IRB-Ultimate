@@ -1,7 +1,7 @@
 import { Info } from "lucide-react";
 import { useT } from "@/contexts/LanguageContext";
 
-/** Always-visible independence & compliance notice — not an official NBCE IRB provider. */
+/** Always-visible independence & compliance notice — not an official NCBE IRB provider. */
 export function PlatformNotice() {
   const { t } = useT();
 

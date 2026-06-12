@@ -6,7 +6,7 @@ import { AUTHOR, PLATFORM } from "@shared/branding";
 import { useLocation } from "wouter";
 
 const LINKEDIN = AUTHOR.linkedin;
-const NBCE_URL = PLATFORM.nbceUrl;
+const NCBE_URL = PLATFORM.nbceUrl;
 const AHSS_URL = PLATFORM.ahssUrl;
 
 const QUICK_LINKS = [
@@ -83,8 +83,8 @@ export function SiteFooter() {
             <p className="mt-4 text-[12.5px] text-cream-50/70">{t("footer.feedback")}</p>
             <p className="mt-3 text-[11.5px] text-cream-50/55 leading-relaxed">
               {t("footer.nbceReference")}{" "}
-              <a href={NBCE_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-jade-400">
-                NBCE
+              <a href={NCBE_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-jade-400">
+                NCBE
               </a>
             </p>
           </div>

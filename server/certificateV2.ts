@@ -1,4 +1,4 @@
-// Formal NBCE-style certificate — loads design template from
+// Formal NCBE-style certificate — loads design template from
 // server/templates/certificate.html (white paper, guilloché frame).
 //
 //   renderCertificateHtml(data)  — HTML for PDF generator & preview

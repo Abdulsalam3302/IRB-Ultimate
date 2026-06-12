@@ -127,7 +127,7 @@ const en: Record<string, string> = {
   // Features
   "features.title": "Platform Features",
   "features.ai.title": "AI Pre-Screening",
-  "features.ai.desc": "Automated compliance checks against NBCE ethical guidelines, the Declaration of Helsinki, and ICH-GCP standards before human review.",
+  "features.ai.desc": "Automated compliance checks against NCBE ethical guidelines, the Declaration of Helsinki, and ICH-GCP standards before human review.",
   "features.fast.title": "Rapid Processing",
   "features.fast.desc": "24-48 hour target turnaround with automated committee assignment and real-time status tracking.",
   "features.secure.title": "Secure & Compliant",
@@ -137,7 +137,7 @@ const en: Record<string, string> = {
   "features.analytics.title": "Real-time Analytics",
   "features.analytics.desc": "Administrators can track metrics, response times, approval rates, and committee performance in real time.",
   "features.vision.title": "Standards Compliant",
-  "features.vision.desc": "Designed to support NBCE ethical guidelines, PDPL, Helsinki, ICH-GCP, and Saudi Vision 2030 — as an independent AHSS platform.",
+  "features.vision.desc": "Designed to support NCBE ethical guidelines, PDPL, Helsinki, ICH-GCP, and Saudi Vision 2030 — as an independent AHSS platform.",
 
   // Footer
   "footer.brand": "IRB Review Platform",
@@ -152,12 +152,12 @@ const en: Record<string, string> = {
   "footer.org": "Advanced Healthcare Systems Society",
   "footer.stamp.ahss": "AHSS Independent",
   "footer.stamp.pdpl": "PDPL compliant",
-  "footer.stamp.nbceGuidelines": "NBCE guidelines",
+  "footer.stamp.nbceGuidelines": "NCBE guidelines",
   "footer.stamp.helsinki": "Helsinki",
   "footer.stamp.vision2030": "Vision 2030",
-  "footer.nbceReference": "For official NBCE regulations and guidance, visit",
+  "footer.nbceReference": "For official NCBE regulations and guidance, visit",
   "footer.founded": "Founded by Dr. Abdulsalam Aleid",
-  "footer.nbceLink": "National Bioethics Committee (NBCE)",
+  "footer.nbceLink": "National Committee of BioEthics (NCBE)",
   "footer.vision2030": "Saudi Vision 2030",
   "footer.feedback": "Suggestions & complaints",
   "footer.feedbackCta": "Reach Dr. Aleid on LinkedIn",
@@ -343,7 +343,7 @@ const en: Record<string, string> = {
 
   // Policy
   "policy.title": "Usage Policy & Terms of Service",
-  "policy.subtitle": "IRB Saudi Arabia — Independent platform by AHSS · PDPL · NBCE guidelines · Helsinki · Vision 2030",
+  "policy.subtitle": "IRB Saudi Arabia — Independent platform by AHSS · PDPL · NCBE guidelines · Helsinki · Vision 2030",
 
   // Admin
   "admin.title": "Admin Dashboard",
@@ -449,13 +449,13 @@ const en: Record<string, string> = {
 
   // Declaration Phase 0
   "decl.title": "Declaration of Honesty & Consent",
-  "decl.desc": "Before proceeding with your IRB application, you must read and accept the following declarations. These reflect ethical standards aligned with NBCE guidelines, Helsinki, and ICH-GCP.",
+  "decl.desc": "Before proceeding with your IRB application, you must read and accept the following declarations. These reflect ethical standards aligned with NCBE guidelines, Helsinki, and ICH-GCP.",
   "decl.honesty": "I declare that all information provided in this application is truthful, accurate, and complete to the best of my knowledge.",
-  "decl.nbce": "I confirm that I hold a valid NBCE certification or equivalent bioethics training certification.",
+  "decl.nbce": "I confirm that I hold a valid NCBE certification or equivalent bioethics training certification.",
   "decl.consent": "I confirm that all participants will be provided with clear, understandable informed consent documents and that their participation will be voluntary.",
   "decl.policy": "I have read and accept the IRB Review Platform Usage Policy and Terms of Service, and I agree to comply with all applicable regulations.",
-  "decl.uploadCert": "Upload NBCE Certificate (Optional)",
-  "decl.uploadCertDesc": "Upload your NBCE certification or equivalent bioethics training certificate for verification.",
+  "decl.uploadCert": "Upload NCBE Certificate (Optional)",
+  "decl.uploadCertDesc": "Upload your NCBE certification or equivalent bioethics training certificate for verification.",
   "decl.allRequired": "All declarations must be accepted to proceed.",
   "decl.proceed": "Accept & Proceed to Stage 1",
   "decl.phase": "Phase 0 of 3",
@@ -492,22 +492,22 @@ const ar: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة العربية السعودية، تُشغّلها AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
+    "منصة مستقلة للمراجعة الأخلاقية للبحوث في المملكة العربية السعودية، تشغّلها AHSS بإجراءات عمل مدعومة بالذكاء الاصطناعي وشهادات رقمية، وفق الأنظمة السعودية المعمول بها والمعايير الأخلاقية الدولية.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
-    "بيئة تجريبية — لا تُقدّم بيانات مشاركين حقيقية أو معلومات صحية محمية. هذا النشر مخصص للتقييم والملاحظات فقط.",
+    "بيئة تجريبية — لا تُدخل بيانات مشاركين حقيقية أو معلومات صحية محمية. هذه النسخة مخصصة للتقييم وجمع الملاحظات فقط.",
 
   // Hero
   "hero.badge": "منصة مراجعة IRB الرقمية",
-  "hero.title": "مجلس المراجعة المؤسسية",
-  "hero.subtitle": "منصة الموافقة على الأبحاث الأخلاقية",
-  "hero.desc": "منصة حديثة مدعومة بالذكاء الاصطناعي لمراجعة IRB سريعة وشفافة ومتوافقة — تقليل وقت الموافقة من أسابيع إلى 24-48 ساعة مع زيادة جودة وكمية الخدمة.",
+  "hero.title": "لجنة أخلاقيات البحث العلمي",
+  "hero.subtitle": "منصة الموافقات الأخلاقية للبحوث العلمية",
+  "hero.desc": "منصة حديثة مدعومة بالذكاء الاصطناعي تتيح مراجعة أخلاقية سريعة وشفافة ومتوافقة مع المعايير — تختصر مدة الموافقة من أسابيع إلى 24-48 ساعة مع رفع جودة الخدمة وتوسيع نطاقها.",
   "hero.apply": "تقديم طلب موافقة IRB",
   "hero.verify": "التحقق من شهادة IRB",
   "hero.learnMore": "اعرف المزيد",
   "hero.cta.title": "هل أنت مستعد لتقديم بحثك؟",
-  "hero.cta.desc": "انضم إلى الباحثين في جميع أنحاء المملكة العربية السعودية الذين يسرعون موافقات IRB من خلال منصتنا.",
+  "hero.cta.desc": "انضم إلى باحثين من مختلف مناطق المملكة العربية السعودية يحصلون على موافقات IRB بوتيرة أسرع عبر منصتنا.",
 
   // Stats
   "stats.target": "24-48 ساعة",
@@ -521,57 +521,57 @@ const ar: Record<string, string> = {
 
   // Vision/Mission
   "vision.title": "رؤيتنا",
-  "vision.text": "أن نكون المنصة الرقمية الرائدة لمجلس المراجعة المؤسسية في المملكة العربية السعودية، ونضع المعيار للرقابة الأخلاقية على الأبحاث من خلال الابتكار والشفافية والكفاءة — بما يتوافق تمامًا مع رؤية المملكة 2030.",
-  "mission.title": "مهمتنا",
-  "mission.text": "تسريع عملية المراجعة الأخلاقية من خلال الاستفادة من الذكاء الاصطناعي والتكنولوجيا الحديثة، لضمان حصول كل مشروع بحثي على تقييم شامل وعادل وفي الوقت المناسب مع الحفاظ على أعلى معايير الامتثال لأخلاقيات البحث.",
+  "vision.text": "أن نكون المنصة الرقمية الرائدة للمراجعة الأخلاقية للبحوث في المملكة العربية السعودية، وأن نرسي معيار الرقابة الأخلاقية على البحوث عبر الابتكار والشفافية والكفاءة — بما يتوافق مع رؤية المملكة 2030.",
+  "mission.title": "رسالتنا",
+  "mission.text": "تسريع المراجعة الأخلاقية بالاستفادة من الذكاء الاصطناعي والتقنيات الحديثة، بما يضمن حصول كل مشروع بحثي على تقييم شامل وعادل في وقته، مع الالتزام بأعلى معايير أخلاقيات البحث العلمي.",
   "aim.title": "هدفنا",
-  "aim.text": "تقليل وقت موافقة IRB إلى 24-48 ساعة من خلال الفحص المسبق المدعوم بالذكاء الاصطناعي، والتعيين التلقائي للجان، والشهادات الرقمية — تقليل التكلفة والجهد والتأخيرات البيروقراطية مع تعظيم نتائج البحث.",
+  "aim.text": "خفض مدة الحصول على موافقة IRB إلى 24-48 ساعة عبر الفحص المسبق بالذكاء الاصطناعي والإسناد التلقائي للجان والشهادات الرقمية، بما يقلّل التكلفة والجهد والتأخير الإجرائي ويعزّز مخرجات البحث.",
 
   // How It Works
-  "how.title": "كيف يعمل",
+  "how.title": "كيف تعمل المنصة",
   "how.step1.title": "تقديم الطلب",
-  "how.step1.desc": "أكمل نموذج طلب من مرحلتين مع فحوصات امتثال مدعومة بالذكاء الاصطناعي في كل مرحلة.",
+  "how.step1.desc": "أكمل نموذج الطلب على مرحلتين، مع فحص امتثال بالذكاء الاصطناعي في كل مرحلة.",
   "how.step2.title": "مراجعة اللجنة",
-  "how.step2.desc": "يتم تعيين طلبك عشوائيًا إلى 5 أعضاء لجنة لديهم 24 ساعة للمراجعة.",
+  "how.step2.desc": "يُسند طلبك عشوائيًا إلى خمسة من أعضاء اللجنة، ولكل منهم 24 ساعة لإتمام المراجعة.",
   "how.step3.title": "موافقة الإدارة",
-  "how.step3.desc": "بمجرد موافقة 3 أعضاء، ينتقل الطلب إلى المسؤول للقرار النهائي.",
+  "how.step3.desc": "عند موافقة ثلاثة أعضاء، يُحال الطلب إلى الإدارة لاتخاذ القرار النهائي.",
   "how.step4.title": "شهادة IRB",
-  "how.step4.desc": "عند الموافقة، تحصل على شهادة IRB برقم تسلسلي فريد فورًا.",
+  "how.step4.desc": "بعد اعتماد الطلب، تحصل فورًا على شهادة IRB برقم تسلسلي فريد.",
 
   // Features
   "features.title": "مميزات المنصة",
   "features.ai.title": "فحص مسبق بالذكاء الاصطناعي",
-  "features.ai.desc": "فحوصات امتثال تلقائية وفقًا لإرشادات NBCE وإعلان هلسنكي ومعايير ICH-GCP قبل المراجعة البشرية.",
+  "features.ai.desc": "فحوصات امتثال تلقائية وفقًا لإرشادات NCBE وإعلان هلسنكي ومعايير ICH-GCP قبل المراجعة البشرية.",
   "features.fast.title": "معالجة سريعة",
-  "features.fast.desc": "هدف إنجاز 24-48 ساعة مع تعيين تلقائي للجان وتتبع حالة في الوقت الفعلي.",
-  "features.secure.title": "آمن ومتوافق",
-  "features.secure.desc": "تشفير شامل ومسارات تدقيق وامتثال كامل مع لوائح حماية البيانات السعودية.",
+  "features.fast.desc": "إنجاز مستهدف خلال 24-48 ساعة، مع إسناد تلقائي للجان وتتبّع حالة الطلب لحظة بلحظة.",
+  "features.secure.title": "آمنة ومتوافقة",
+  "features.secure.desc": "تشفير شامل وسجلات تدقيق، وامتثال كامل لأنظمة حماية البيانات في المملكة.",
   "features.digital.title": "شهادات رقمية",
-  "features.digital.desc": "شهادات PDF يتم إنشاؤها فوريًا بأرقام IRB فريدة، قابلة للتحقق عبر بوابتنا العامة.",
-  "features.analytics.title": "تحليلات في الوقت الفعلي",
-  "features.analytics.desc": "يمكن للمسؤولين تتبع المقاييس وأوقات الاستجابة ومعدلات الموافقة وأداء اللجان في الوقت الفعلي.",
-  "features.vision.title": "متوافق مع المعايير",
-  "features.vision.desc": "مصممة لدعم إرشادات NBCE الأخلاقية وPDPL وهلسنكي وICH-GCP ورؤية 2030 — كمنصة مستقلة من AHSS.",
+  "features.digital.desc": "شهادات PDF تصدر فورًا بأرقام IRB فريدة، ويمكن التحقق منها عبر البوابة العامة للمنصة.",
+  "features.analytics.title": "تحليلات لحظية",
+  "features.analytics.desc": "تتيح للمشرفين متابعة المؤشرات وأوقات الاستجابة ومعدلات الموافقة وأداء اللجان لحظة بلحظة.",
+  "features.vision.title": "متوافقة مع المعايير",
+  "features.vision.desc": "منصة مستقلة من AHSS صُممت بما يدعم إرشادات NCBE الأخلاقية ونظام حماية البيانات الشخصية (PDPL) وإعلان هلسنكي ومعايير ICH-GCP ورؤية 2030.",
 
   // Footer
   "footer.brand": "منصة مراجعة IRB",
-  "footer.desc": "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة — سير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية من AHSS.",
+  "footer.desc": "منصة مستقلة للمراجعة الأخلاقية للبحوث في المملكة — إجراءات مدعومة بالذكاء الاصطناعي وشهادات رقمية من AHSS.",
   "footer.independence": "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة العربية السعودية، تُشغّلها AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
   "footer.quickLinks": "روابط سريعة",
   "footer.legal": "قانوني",
   "footer.contact": "اتصل بنا",
   "footer.privacy": "سياسة الخصوصية",
   "footer.terms": "شروط الخدمة",
-  "footer.madeWith": "صنع بحب في المملكة العربية السعودية",
+  "footer.madeWith": "صُنعت بحب في المملكة العربية السعودية",
   "footer.org": "جمعية أنظمة الرعاية الصحية المتقدمة",
-  "footer.stamp.ahss": "AHSS مستقلة",
-  "footer.stamp.pdpl": "متوافق PDPL",
-  "footer.stamp.nbceGuidelines": "إرشادات NBCE",
+  "footer.stamp.ahss": "مستقلة من AHSS",
+  "footer.stamp.pdpl": "متوافقة مع PDPL",
+  "footer.stamp.nbceGuidelines": "إرشادات NCBE",
   "footer.stamp.helsinki": "هلسنكي",
   "footer.stamp.vision2030": "رؤية 2030",
-  "footer.nbceReference": "للاطلاع على لوائح NBCE الرسمية، زُر",
+  "footer.nbceReference": "للاطلاع على لوائح NCBE الرسمية وإرشاداتها، تفضل بزيارة",
   "footer.founded": "أسسها د. عبدالسلام العيد",
-  "footer.nbceLink": "اللجنة الوطنية للأخلاقيات (NBCE)",
+  "footer.nbceLink": "اللجنة الوطنية للأخلاقيات الحيوية (NCBE)",
   "footer.vision2030": "رؤية السعودية 2030",
   "footer.feedback": "اقتراحات وشكاوى",
   "footer.feedbackCta": "تواصل مع د. العيد على لينكدإن",
@@ -581,25 +581,25 @@ const ar: Record<string, string> = {
 
   // Format wizard
   "format.button": "تنسيق",
-  "format.chooseTemplate": "اختر النموذج — أجب على الأسئلة ثم أنشئ الملف",
+  "format.chooseTemplate": "اختر النموذج — أجب عن الأسئلة ثم أنشئ المستند",
   "format.wizardBadge": "معالج التنسيق الموجّه",
-  "format.prefilledHint": "تم تعبئة الحقول مسبقاً من طلبك المحفوظ — راجعها وعدّلها قبل الإنشاء.",
+  "format.prefilledHint": "عُبّئت الحقول مسبقًا من طلبك المحفوظ — راجعها وعدّلها قبل إنشاء المستند.",
   "format.generateTitle": "إنشاء مستندك",
   "format.generatePdf": "إنشاء PDF",
   "format.generateDocx": "إنشاء DOCX",
-  "format.missingFields": "لا يزال {n} حقل/حقول فارغة — يمكنك الإنشاء الآن أو إكمالها أولاً.",
-  "format.readyToGenerate": "اكتملت جميع الحقول. جاهز لإنشاء مستندك المختوم.",
-  "format.stampNote": "كل مستند مُنشأ يتضمن توقيع د. عبدالسلام العيد المعتمد وختم المنصة.",
+  "format.missingFields": "لا تزال {n} من الحقول فارغة — يمكنك إنشاء المستند الآن أو إكمالها أولًا.",
+  "format.readyToGenerate": "اكتملت جميع الحقول، ويمكنك الآن إنشاء مستندك المختوم.",
+  "format.stampNote": "يتضمن كل مستند صادر عن المنصة التوقيع المعتمد للدكتور عبدالسلام العيد وختم المنصة.",
   "format.enterHint": "أدخل:",
   "format.showExample": "عرض مثال مثالي",
   "format.answerPlaceholder": "اكتب إجابتك هنا…",
-  "format.filledSection": "تنسيق معبّأ (أسئلة وأجوبة)",
+  "format.filledSection": "نموذج معبّأ مسبقًا (أسئلة وأجوبة)",
   "format.blankSection": "نموذج فارغ (تنزيل يدوي)",
   "format.languageNotice":
-    "ستكون الأسئلة والملف المُصدَّر بالعربية. استخدم مبدّل اللغة في الشريط العلوي للتبديل إلى English — الأسئلة وملف PDF/DOCX يتبعان اختيارك.",
+    "ستظهر الأسئلة ويصدر الملف باللغة العربية. للتبديل إلى English استخدم مبدّل اللغة في الشريط العلوي — وستتبع الأسئلة وملف PDF/DOCX اللغة التي تختارها.",
   "format.exportLanguage": "لغة التصدير: العربية",
   "format.generateSuccess": "تم إنشاء الملف بنجاح",
-  "format.generateError": "فشل إنشاء الملف",
+  "format.generateError": "تعذّر إنشاء الملف",
 
   // Theme
   "theme.light": "الوضع الفاتح",
@@ -613,7 +613,7 @@ const ar: Record<string, string> = {
   "dash.welcome": "مرحبًا بعودتك",
   "dash.newApp": "طلب جديد",
   "dash.noApps": "لا توجد طلبات بعد",
-  "dash.noAppsDesc": "ابدأ أول طلب IRB لبدء عملية المراجعة الأخلاقية.",
+  "dash.noAppsDesc": "قدّم طلبك الأول لتبدأ عملية المراجعة الأخلاقية.",
   "dash.startApp": "بدء طلب جديد",
   "dash.status": "الحالة",
   "dash.created": "تاريخ الإنشاء",
@@ -628,9 +628,9 @@ const ar: Record<string, string> = {
 
   // Application Form
   "form.stage1.title": "المرحلة 1: نوع البحث والمعلومات الأساسية",
-  "form.stage1.desc": "حدد نوع بحثك وقدم معلومات المشروع الأساسية. سيتم تقييم كل حقل بواسطة نظام الذكاء الاصطناعي.",
+  "form.stage1.desc": "حدّد نوع البحث وأدخل المعلومات الأساسية للمشروع. يقيّم نظام الذكاء الاصطناعي كل حقل من الحقول.",
   "form.stage2.title": "المرحلة 2: تفاصيل البحث والأخلاقيات",
-  "form.stage2.desc": "قدم المنهجية التفصيلية واعتبارات الأخلاقيات والوثائق الداعمة.",
+  "form.stage2.desc": "قدّم المنهجية التفصيلية والاعتبارات الأخلاقية والمستندات الداعمة.",
   "form.researchType": "نوع البحث",
   "form.irbCategory": "فئة المراجعة",
   "form.researchTitle": "عنوان البحث",
@@ -757,7 +757,7 @@ const ar: Record<string, string> = {
 
   // Policy
   "policy.title": "سياسة الاستخدام وشروط الخدمة",
-  "policy.subtitle": "IRB السعودية — منصة مستقلة من AHSS · PDPL · إرشادات NBCE · هلسنكي · رؤية 2030",
+  "policy.subtitle": "IRB السعودية — منصة مستقلة من AHSS · PDPL · إرشادات NCBE · هلسنكي · رؤية 2030",
 
   // Admin
   "admin.title": "لوحة الإدارة",
@@ -863,13 +863,13 @@ const ar: Record<string, string> = {
 
   // Declaration Phase 0
   "decl.title": "إقرار الصدق والموافقة",
-  "decl.desc": "قبل المتابعة في طلب IRB، يجب قراءة وقبول الإقرارات التالية. تعكس معايير أخلاقية متوافقة مع إرشادات NBCE وهلسنكي وICH-GCP.",
+  "decl.desc": "قبل المتابعة في طلب IRB، يجب قراءة وقبول الإقرارات التالية. تعكس معايير أخلاقية متوافقة مع إرشادات NCBE وهلسنكي وICH-GCP.",
   "decl.honesty": "أقر بأن جميع المعلومات المقدمة في هذا الطلب صادقة ودقيقة وكاملة على حد علمي.",
-  "decl.nbce": "أؤكد أنني أحمل شهادة NBCE سارية أو شهادة تدريب أخلاقيات حيوية معادلة.",
+  "decl.nbce": "أؤكد أنني أحمل شهادة NCBE سارية أو شهادة تدريب أخلاقيات حيوية معادلة.",
   "decl.consent": "أؤكد أن جميع المشاركين سيتم تزويدهم بوثائق موافقة مستنيرة واضحة ومفهومة وأن مشاركتهم ستكون طوعية.",
   "decl.policy": "لقد قرأت وأقبل سياسة استخدام منصة مراجعة IRB وشروط الخدمة، وأوافق على الامتثال لجميع اللوائح المعمول بها.",
-  "decl.uploadCert": "رفع شهادة NBCE (اختياري)",
-  "decl.uploadCertDesc": "ارفع شهادة NBCE أو شهادة تدريب أخلاقيات حيوية معادلة للتحقق.",
+  "decl.uploadCert": "رفع شهادة NCBE (اختياري)",
+  "decl.uploadCertDesc": "ارفع شهادة NCBE أو شهادة تدريب أخلاقيات حيوية معادلة للتحقق.",
   "decl.allRequired": "يجب قبول جميع الإقرارات للمتابعة.",
   "decl.proceed": "قبول والمتابعة إلى المرحلة 1",
   "decl.phase": "المرحلة 0 من 3",

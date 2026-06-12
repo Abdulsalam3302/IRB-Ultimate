@@ -13,7 +13,7 @@ import {
 } from "docx";
 import type { ResourceItem } from "@shared/resources";
 import { getTemplateSections, type TemplateField, type TemplateSection } from "@shared/templateFields";
-import { BRAND, STAMPED_TICK_SVG, AUTHOR, PLATFORM } from "@shared/branding";
+import { BRAND, STAMPED_TICK_SVG, AUTHOR, PLATFORM, PLATFORM_DISCLAIMER } from "@shared/branding";
 
 export type ExportLang = "en" | "ar";
 export type ExportMode = "blank" | "filled" | "generated";
@@ -83,17 +83,23 @@ function renderSectionHtml(
   return `<section class="doc-section" ${dir}><h2>${escapeHtml(heading)}</h2>${fields}</section>`;
 }
 
+// Issuance stamp for templates. Deliberately NOT a signature block: a
+// fillable form that ships pre-"signed" by an "Approving Authority" could be
+// mistaken for — or passed off as — an approved document, e.g. shown to study
+// participants on a consent form. Real signature blocks belong only on
+// certificates of actual review decisions.
 function authorStampHtml(lang: ExportLang): string {
   const isAr = lang === "ar";
   const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
   return `<div class="author-stamp" ${dir}>
     ${STAMPED_TICK_SVG}
     <div>
-      <div class="name">${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}</div>
-      <div class="role">${isAr ? AUTHOR.titleAr : AUTHOR.titleEn}</div>
+      <div class="name">${isAr ? PLATFORM.nameAr : PLATFORM.nameEn}</div>
       <div class="role">${isAr ? AUTHOR.orgAr : AUTHOR.orgEn}</div>
       <div class="role" style="margin-top:8px;font-style:italic">
-        ${isAr ? "توقيع معتمد · ختم المنصة" : "Authorized signature · Platform seal"}
+        ${isAr
+          ? "قالب صادر عن المنصة للاستخدام البحثي · لا يُعدّ موافقة أخلاقية أو وثيقة معتمدة"
+          : "Template issued by the platform for research use · Not an ethics approval or certified document"}
       </div>
     </div>
   </div>`;
@@ -102,8 +108,9 @@ function authorStampHtml(lang: ExportLang): string {
 function footerHtml(lang: ExportLang, dateStr: string): string {
   const isAr = lang === "ar";
   return `<footer>
-    ${isAr ? `${PLATFORM.nameAr} — منصة AHSS مستقلة · PDPL · إرشادات NBCE` : `${PLATFORM.nameEn} — Independent AHSS platform · PDPL · NBCE guidelines`} · ${dateStr}<br/>
-    © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · AHSS · ${isAr ? "المملكة العربية السعودية" : "Kingdom of Saudi Arabia"}
+    ${isAr ? `${PLATFORM.nameAr} — منصة AHSS مستقلة · PDPL · إرشادات NCBE` : `${PLATFORM.nameEn} — Independent AHSS platform · PDPL · NCBE guidelines`} · ${dateStr}<br/>
+    © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · AHSS · ${isAr ? "المملكة العربية السعودية" : "Kingdom of Saudi Arabia"}<br/>
+    <span style="font-size:8pt">${isAr ? PLATFORM_DISCLAIMER.ar : PLATFORM_DISCLAIMER.en}</span>
   </footer>`;
 }
 
@@ -355,13 +362,14 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
     }
   }
 
+  // Issuance note, not a signature block — see authorStampHtml for rationale.
   children.push(
     new Paragraph({ children: [new TextRun({ text: "" })] }),
     new Paragraph({
       bidirectional: isAr,
       children: [
         new TextRun({
-          text: isAr ? AUTHOR.nameAr : AUTHOR.nameEn,
+          text: isAr ? PLATFORM.nameAr : PLATFORM.nameEn,
           bold: true,
           font,
           color: "064e3b",
@@ -372,7 +380,9 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
       bidirectional: isAr,
       children: [
         new TextRun({
-          text: isAr ? `${AUTHOR.titleAr} · توقيع معتمد` : `${AUTHOR.titleEn} · Authorized signature`,
+          text: isAr
+            ? "قالب صادر عن المنصة للاستخدام البحثي · لا يُعدّ موافقة أخلاقية أو وثيقة معتمدة"
+            : "Template issued by the platform for research use · Not an ethics approval or certified document",
           italics: true,
           font,
           size: 20,
@@ -383,10 +393,22 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
       bidirectional: isAr,
       children: [
         new TextRun({
-          text: `${PLATFORM.nameEn} — Independent AHSS · PDPL · NBCE guidelines · ${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
+          text: `${PLATFORM.nameEn} — Independent AHSS · PDPL · NCBE guidelines · ${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
           italics: true,
           color: "888888",
           size: 18,
+          font,
+        }),
+      ],
+    }),
+    new Paragraph({
+      bidirectional: isAr,
+      children: [
+        new TextRun({
+          text: isAr ? PLATFORM_DISCLAIMER.ar : PLATFORM_DISCLAIMER.en,
+          italics: true,
+          color: "888888",
+          size: 16,
           font,
         }),
       ],

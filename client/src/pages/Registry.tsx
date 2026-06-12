@@ -12,6 +12,7 @@ import {
   ExternalLink, Download, Loader2, Filter, BookOpen,
 } from "lucide-react";
 import { Link } from "wouter";
+import { SiteFooter } from "@/components/design/SiteFooter";
 
 const RESEARCH_TYPES = [
   "clinical_trial", "observational", "retrospective", "survey_questionnaire",
@@ -211,6 +212,7 @@ export default function Registry() {
           </div>
         )}
       </div>
+      <SiteFooter />
     </div>
   );
 }

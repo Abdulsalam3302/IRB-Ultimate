@@ -9,4 +9,16 @@ PILOT_LOGIN_ENABLED=1
 PILOT_LOGIN_TOKEN=<same value as GitHub secret PILOT_LOGIN_TOKEN>
 VITE_PUBLIC_DEMO_BANNER=1
 DATABASE_URL=${{MySQL.MYSQL_URL}}
-ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://${{IRB-Ultimate.RAILWAY_PUBLIC_DOMAIN}}
+# Entries may use * wildcards (one hostname label per *). The Vercel preview
+# pattern keeps per-deployment URLs (irb-saudi-arabia-<hash>-<team>.vercel.app)
+# working. Proxied same-origin requests are accepted automatically via
+# X-Forwarded-Host, so this list only matters for true cross-origin callers.
+ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://irb-saudi-arabia-*-researcher-os.vercel.app,https://${{IRB-Ultimate.RAILWAY_PUBLIC_DOMAIN}}
+
+# AI review (MiniMax) — without these every AI feature degrades to
+# "AI unavailable".
+LLM_API_URL=https://api.minimax.io
+LLM_API_KEY=<MiniMax API key>
+LLM_MODEL=MiniMax-M2
+LLM_MAX_TOKENS=24576
+LLM_PROVIDER=openai

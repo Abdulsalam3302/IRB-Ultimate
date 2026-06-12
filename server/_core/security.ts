@@ -28,10 +28,33 @@ const STRICT_ROUTES = [
 const AUTH_ROUTES = [
   "/api/sign-in",
   "/api/dev/login",
+  "/api/auth/register",
+  "/api/auth/login",
   "/api/auth/supabase/session",
   "/api/oauth/callback",
   "/api/oauth/start",
 ];
+
+/**
+ * Best-effort real client IP for rate-limit bucket keys.
+ *
+ * Behind the split deploy (browser → Vercel rewrite → Railway edge → app),
+ * `req.ip` with trust proxy=1 resolves to Vercel's egress IP — shared by
+ * every visitor — so one busy hour of legitimate users would exhaust a
+ * single bucket and 429 everyone at once. The leftmost X-Forwarded-For
+ * entry is the browser's IP as recorded by the first proxy.
+ *
+ * A direct (non-proxied) caller can forge X-Forwarded-For to rotate
+ * buckets, which weakens per-IP limiting to roughly what an IP-rotating
+ * client could do anyway; account-scoped throttles in nativeAuth remain
+ * the backstop for credential attacks. Never use this value for authz.
+ */
+export function clientIpKey(req: Request): string {
+  const xff = req.headers["x-forwarded-for"];
+  const first = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim();
+  if (first && first.length <= 64 && /^[0-9a-fA-F.:]+$/.test(first)) return first;
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
 
 type Bucket = { count: number; reset: number };
 const buckets = new Map<string, Bucket>();
@@ -40,9 +63,7 @@ function rateLimit(req: Request, res: Response, next: NextFunction) {
   if (!req.path.startsWith("/api/")) return next();
   // Health-check exempted so external monitors don't get 429s.
   if (req.path === "/api/health") return next();
-  // Express's `req.ip` honours `trust proxy=1` set in registerSecurity().
-  // Don't manually splice X-Forwarded-For — an attacker could pin it.
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const ip = clientIpKey(req);
   const now = Date.now();
   // Three independent buckets per IP (g / s / a) so a strict-route burst
   // doesn't drain the general budget, and an auth-route brute-force
@@ -166,7 +187,26 @@ function securityHeaders(_req: Request, res: Response, next: NextFunction) {
  * Vercel, API on Railway) requires ENV.allowedOrigins to be set to the SPA
  * domain in prod.
  */
-function isOriginAllowed(req: Request): boolean {
+/** Compile an ALLOWED_ORIGINS entry. Entries may contain `*` wildcards
+ *  (e.g. https://myapp-*-team.vercel.app) — each * matches one DNS label's
+ *  worth of [A-Za-z0-9-] characters, never a dot, so a wildcard scoped to
+ *  a project prefix can't be widened to a sibling domain. */
+const wildcardCache = new Map<string, RegExp>();
+function originMatches(entry: string, origin: string): boolean {
+  if (!entry.includes("*")) return entry === origin;
+  let re = wildcardCache.get(entry);
+  if (!re) {
+    const pattern = entry
+      .split("*")
+      .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("[A-Za-z0-9-]+");
+    re = new RegExp(`^${pattern}$`);
+    wildcardCache.set(entry, re);
+  }
+  return re.test(origin);
+}
+
+export function isOriginAllowed(req: Request): boolean {
   const method = req.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
 
@@ -181,9 +221,6 @@ function isOriginAllowed(req: Request): boolean {
     return /^(127\.|::1|::ffff:127\.)/.test(ip);
   }
 
-  const ownHost = `${req.protocol}://${req.get("host") ?? ""}`;
-  const allowlist = new Set<string>([ownHost, ...ENV.allowedOrigins]);
-
   // Compare on origin only, not full URL — strip path/query.
   let claimedOrigin: string;
   try {
@@ -192,7 +229,30 @@ function isOriginAllowed(req: Request): boolean {
   } catch {
     return false;
   }
-  return allowlist.has(claimedOrigin);
+
+  // Hosts this request was addressed to. Behind the Vercel→Railway split
+  // deploy the browser talks to the Vercel domain (any deployment URL) and
+  // the rewrite proxies to Railway: Host becomes the Railway domain while
+  // X-Forwarded-Host carries the domain the browser actually used. A
+  // request whose Origin matches the host it was sent to is same-origin
+  // from the browser's point of view — exactly what this guard exists to
+  // verify. Browsers cannot forge X-Forwarded-Host, and a non-browser
+  // caller that sets it could just as easily set Origin, so this adds no
+  // new surface while making every Vercel preview/alias domain work.
+  const protoHeader = (req.headers["x-forwarded-proto"] as string | undefined)
+    ?.split(",")[0]
+    ?.trim();
+  const proto = protoHeader || req.protocol;
+  const ownHosts = [req.get("host") ?? ""];
+  const xfh = req.headers["x-forwarded-host"];
+  for (const h of (Array.isArray(xfh) ? xfh.join(",") : xfh ?? "").split(",")) {
+    if (h.trim()) ownHosts.push(h.trim());
+  }
+  for (const host of ownHosts) {
+    if (host && claimedOrigin === `${proto}://${host}`) return true;
+  }
+
+  return ENV.allowedOrigins.some(entry => originMatches(entry, claimedOrigin));
 }
 
 function originGuard(req: Request, res: Response, next: NextFunction) {
@@ -208,7 +268,7 @@ function originGuard(req: Request, res: Response, next: NextFunction) {
  */
 function corsForApi(req: Request, res: Response, next: NextFunction) {
   const origin = req.headers.origin as string | undefined;
-  if (origin && ENV.allowedOrigins.includes(origin)) {
+  if (origin && ENV.allowedOrigins.some(entry => originMatches(entry, origin))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");

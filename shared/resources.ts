@@ -72,9 +72,9 @@ export const RESOURCES: ResourceItem[] = [
         headingEn: "5. Ethics Declaration",
         headingAr: "٥. إعلان الأخلاقيات",
         bodyEn:
-          "I declare that the information submitted is truthful and complete to the best of my knowledge, and that I will conduct the research in accordance with NBCE guidelines, the Declaration of Helsinki, and applicable Saudi laws.",
+          "I declare that the information submitted is truthful and complete to the best of my knowledge, and that I will conduct the research in accordance with NCBE guidelines, the Declaration of Helsinki, and applicable Saudi laws.",
         bodyAr:
-          "أُقرّ أن المعلومات المقدمة صحيحة وكاملة على حد علمي، وأن البحث سيُجرى وفقًا لإرشادات NBCE وإعلان هلسنكي والأنظمة السعودية المعمول بها.",
+          "أُقرّ أن المعلومات المقدمة صحيحة وكاملة على حد علمي، وأن البحث سيُجرى وفقًا لإرشادات NCBE وإعلان هلسنكي والأنظمة السعودية المعمول بها.",
       },
     ],
   },
@@ -84,9 +84,9 @@ export const RESOURCES: ResourceItem[] = [
     titleEn: "Informed Consent Form Template",
     titleAr: "نموذج الموافقة المستنيرة",
     descEn:
-      "Template for creating participant informed consent forms compliant with Saudi regulations and NBCE guidelines.",
+      "Template for creating participant informed consent forms compliant with Saudi regulations and NCBE guidelines.",
     descAr:
-      "نموذج لإنشاء نماذج الموافقة المستنيرة للمشاركين متوافقة مع اللوائح السعودية وإرشادات NBCE.",
+      "نموذج لإنشاء نماذج الموافقة المستنيرة للمشاركين متوافقة مع اللوائح السعودية وإرشادات NCBE.",
     sections: [
       {
         headingEn: "Purpose of the Study",
@@ -209,8 +209,8 @@ export const RESOURCES: ResourceItem[] = [
   {
     slug: "nbce-ethics-summary",
     category: "guideline",
-    titleEn: "NBCE Ethics Guidelines Summary",
-    titleAr: "ملخص إرشادات NBCE الأخلاقية",
+    titleEn: "NCBE Ethics Guidelines Summary",
+    titleAr: "ملخص إرشادات NCBE الأخلاقية",
     descEn:
       "Key principles and requirements for ethical research in Saudi Arabia, including informed consent, privacy, and Vision 2030 alignment.",
     descAr:

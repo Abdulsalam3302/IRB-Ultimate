@@ -1974,7 +1974,7 @@ const publicStatsRouter = router({
 });
 
 // ─── Adverse Events Router ─────────────────────────────────────────────────
-// Required by NBCE for any active human-subjects study. Applicants file
+// Required by NCBE for any active human-subjects study. Applicants file
 // AE reports; admins review and acknowledge or escalate.
 
 const adverseEventsRouter = router({

@@ -5,6 +5,7 @@ import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { hashPassword, verifyPassword } from "./passwords";
+import { clientIpKey } from "./security";
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
@@ -104,7 +105,10 @@ export function registerNativeAuthRoutes(app: Express) {
         return;
       }
 
-      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      // Real client IP — behind the Vercel rewrite every visitor shares the
+      // proxy's egress IP, so keying on req.ip would cap sign-ups for the
+      // whole site at REGISTER_MAX/hour.
+      const ip = clientIpKey(req);
       if (!hit(registrations, ip, REGISTER_WINDOW_MS, REGISTER_MAX)) {
         res.status(429).json({ error: "Too many sign-ups from this network. Try again later.", code: "RATE_LIMITED" });
         return;

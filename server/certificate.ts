@@ -39,7 +39,7 @@ export async function generateCertificatePdf(app: Application, applicantName: st
       <stop offset="100%" style="stop-color:#0d6b4e"/>
     </linearGradient>
     <pattern id="watermark" width="200" height="200" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <text x="100" y="100" text-anchor="middle" fill="#0d6b4e" font-size="14" opacity="0.03" font-weight="700">NBCE IRB</text>
+      <text x="100" y="100" text-anchor="middle" fill="#0d6b4e" font-size="14" opacity="0.03" font-weight="700">NCBE IRB</text>
     </pattern>
   </defs>
   
@@ -63,7 +63,7 @@ export async function generateCertificatePdf(app: Application, applicantName: st
   <!-- Saudi Emblem Area -->
   <text x="400" y="60" text-anchor="middle" fill="#c8a84e" font-size="16" font-weight="700">&#9733; Kingdom of Saudi Arabia &#9733;</text>
   <text x="400" y="85" text-anchor="middle" fill="#ffffff" font-size="32" font-weight="700" letter-spacing="2">IRB APPROVAL CERTIFICATE</text>
-  <text x="400" y="112" text-anchor="middle" fill="#a7f3d0" font-size="13" font-weight="400">National Bioethics Committee of Saudi Arabia (NBCE)</text>
+  <text x="400" y="112" text-anchor="middle" fill="#a7f3d0" font-size="13" font-weight="400">National Committee of BioEthics (NCBE) of Saudi Arabia</text>
   <text x="400" y="132" text-anchor="middle" fill="#a7f3d0" font-size="11" font-weight="400">Institutional Review Board — Local Committee</text>
   <text x="400" y="152" text-anchor="middle" fill="#c8a84e" font-size="11" font-weight="600">Advanced Healthcare Systems Society</text>
   
@@ -74,7 +74,7 @@ export async function generateCertificatePdf(app: Application, applicantName: st
   
   <!-- Certificate Body -->
   <text x="400" y="280" text-anchor="middle" fill="#333333" font-size="14" font-weight="400">This is to certify that the following research protocol has been reviewed and approved</text>
-  <text x="400" y="300" text-anchor="middle" fill="#333333" font-size="14" font-weight="400">by the Institutional Review Board in accordance with NBCE regulations.</text>
+  <text x="400" y="300" text-anchor="middle" fill="#333333" font-size="14" font-weight="400">by the Institutional Review Board in accordance with NCBE regulations.</text>
   
   <!-- Divider -->
   <line x1="100" y1="325" x2="700" y2="325" stroke="#c8a84e" stroke-width="1"/>
@@ -148,7 +148,7 @@ export async function generateCertificatePdf(app: Application, applicantName: st
   <!-- Footer -->
   <line x1="60" y1="1020" x2="740" y2="1020" stroke="#0d6b4e" stroke-width="1"/>
   <text x="400" y="1042" text-anchor="middle" fill="#666666" font-size="9">This certificate is electronically generated and digitally verified. Serial number: ${escapeHtml(app.irbNumber || "")}</text>
-  <text x="400" y="1058" text-anchor="middle" fill="#666666" font-size="9">Issued in compliance with NBCE regulations and Saudi Vision 2030 healthcare standards.</text>
+  <text x="400" y="1058" text-anchor="middle" fill="#666666" font-size="9">Issued in compliance with NCBE regulations and Saudi Vision 2030 healthcare standards.</text>
   <text x="400" y="1074" text-anchor="middle" fill="#0d6b4e" font-size="9" font-weight="600">Hijri Date: ${escapeHtml(hijriDate)}</text>
   <text x="400" y="1092" text-anchor="middle" fill="#999999" font-size="8">Advanced Healthcare Systems Society — Made with Love in Saudi Arabia</text>
 </svg>`;
@@ -309,7 +309,7 @@ export async function generateCertificatePdf(app: Application, applicantName: st
   <rect x="60" y="540" width="680" height="1" fill="#e5e7eb"/>
   
   <text x="80" y="565" fill="#333333" font-size="11">This approval is granted in accordance with:</text>
-  <text x="80" y="590" fill="#333333" font-size="11">• National Bioethics Committee of Saudi Arabia (NBCE) Regulations</text>
+  <text x="80" y="590" fill="#333333" font-size="11">• National Committee of BioEthics (NCBE) of Saudi Arabia Regulations</text>
   <text x="80" y="612" fill="#333333" font-size="11">• Declaration of Helsinki (World Medical Association)</text>
   <text x="80" y="634" fill="#333333" font-size="11">• The Belmont Report — Ethical Principles and Guidelines</text>
   <text x="80" y="656" fill="#333333" font-size="11">• ICH-GCP (International Council for Harmonisation — Good Clinical Practice)</text>

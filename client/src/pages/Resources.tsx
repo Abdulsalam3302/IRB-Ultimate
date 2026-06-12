@@ -10,6 +10,7 @@ import { GUIDELINE_DOCS } from "@shared/guidelineDocs";
 import {
   FileText, BookOpen, ClipboardList, FileCheck, AlertTriangle, Scale, ChevronRight, ArrowLeft,
 } from "lucide-react";
+import { SiteFooter } from "@/components/design/SiteFooter";
 
 const templates: Array<{
   slug: string;
@@ -45,8 +46,8 @@ const templates: Array<{
   },
   {
     slug: "nbce-ethics-summary",
-    titleEn: "NBCE Ethics Summary",
-    titleAr: "ملخص أخلاقيات NBCE",
+    titleEn: "NCBE Ethics Summary",
+    titleAr: "ملخص أخلاقيات NCBE",
     descEn: "Key principles for ethical research in KSA.",
     descAr: "المبادئ الأساسية للبحث الأخلاقي في المملكة.",
     icon: AlertTriangle,
@@ -86,8 +87,8 @@ const faqs = [
   },
   {
     qEn: "What is the AI pre-screening?", qAr: "ما هو الفحص المسبق بالذكاء الاصطناعي؟",
-    aEn: "AI evaluates compliance with NBCE guidelines and ethical standards. A minimum score of 70/100 is required at each stage.",
-    aAr: "يقيّم الذكاء الاصطناعي الامتثال لإرشادات NBCE والمعايير الأخلاقية. يلزم 70/100 في كل مرحلة.",
+    aEn: "AI evaluates compliance with NCBE guidelines and ethical standards. A minimum score of 70/100 is required at each stage.",
+    aAr: "يقيّم الذكاء الاصطناعي الامتثال لإرشادات NCBE والمعايير الأخلاقية. يلزم 70/100 في كل مرحلة.",
   },
   {
     qEn: "How are committee reviewers assigned?", qAr: "كيف يتم تعيين مراجعي اللجنة؟",
@@ -227,6 +228,7 @@ export default function Resources() {
           </div>
         </section>
       </div>
+      <SiteFooter />
     </div>
   );
 }

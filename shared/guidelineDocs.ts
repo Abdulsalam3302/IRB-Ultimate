@@ -17,7 +17,7 @@ export type GuidelineDoc = {
 export const GUIDELINE_DOCS: GuidelineDoc[] = [
   {
     slug: "nbce-ethical-guidelines",
-    titleEn: "NBCE Ethical Guidelines for Research",
+    titleEn: "NCBE Ethical Guidelines for Research",
     titleAr: "الإرشادات الأخلاقية للجنة الوطنية للأخلاقيات الحيوية",
     descEn: "Core principles for ethical human-subjects research in Saudi Arabia.",
     descAr: "المبادئ الأساسية للبحث الأخلاقي على البشر في المملكة العربية السعودية.",
@@ -26,12 +26,12 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         titleEn: "Scope and Authority",
         titleAr: "النطاق والسلطة",
         bodyEn: [
-          "The National Bioethics Committee of Saudi Arabia (NBCE) establishes the national framework for ethical review of research involving humans, their data, or biological materials.",
-          "All institutions conducting research in the Kingdom must ensure IRB review aligns with NBCE regulations before research begins.",
+          "The National Committee of BioEthics (NCBE) of Saudi Arabia establishes the national framework for ethical review of research involving humans, their data, or biological materials.",
+          "All institutions conducting research in the Kingdom must ensure IRB review aligns with NCBE regulations before research begins.",
         ],
         bodyAr: [
-          "تضع اللجنة الوطنية للأخلاقيات الحيوية في المملكة العربية السعودية (NBCE) الإطار الوطني للمراجعة الأخلاقية للبحوث التي تشمل البشر أو بياناتهم أو موادهم البيولوجية.",
-          "يجب على جميع المؤسسات التي تجري بحوثاً في المملكة ضمان توافق مراجعة IRB مع لوائح NBCE قبل بدء البحث.",
+          "تضع اللجنة الوطنية للأخلاقيات الحيوية في المملكة العربية السعودية (NCBE) الإطار الوطني للمراجعة الأخلاقية للبحوث التي تشمل البشر أو بياناتهم أو موادهم البيولوجية.",
+          "يجب على جميع المؤسسات التي تجري بحوثاً في المملكة ضمان توافق مراجعة IRB مع لوائح NCBE قبل بدء البحث.",
         ],
       },
       {
@@ -45,7 +45,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         ],
         bodyAr: [
           "احترام الأشخاص: المشاركة الطوعية، وتوفير معلومات كافية، والقدرة على الموافقة.",
-          "الإ beneficence: تعظيم الفوائد المتوقعة وتقليل الأضرار المتوقعة.",
+          "الإحسان: تعظيم المنافع المتوقعة وتقليل الأضرار المحتملة إلى أدنى حد.",
           "العدالة: اختيار عادل للمشاركين وتوزيع عادل لأعباء وفوائد البحث.",
           "الصلاحية العلمية: يجب أن يكون البحث سليماً منهجياً قبل أن تكون الموافقة الأخلاقية ذات معنى.",
         ],
@@ -61,7 +61,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         bodyAr: [
           "يجب توثيق الموافقة ما لم يُبرر إعفاء أخلاقي ووافقت عليه IRB.",
           "يجب تقديم المعلومات بلغة مفهومة للمشاركين، بما في ذلك الغرض والإجراءات والمخاطر والفوائد والبدائل والسرية وحق الانسحاب دون عقوبة.",
-          "تتطلب الفئات ال vulnerable ضمانات إضافية، بما في ذلك إجراءات الموافقة للقاصرين والموافقة بالنيابة حيث يناسب.",
+          "تتطلب الفئات الأكثر عرضة للخطر ضمانات إضافية، بما في ذلك إجراءات موافقة القاصرين والموافقة بالإنابة حيثما يقتضي الأمر.",
         ],
       },
       {
@@ -145,7 +145,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
       },
       {
         titleEn: "Vulnerable Groups and Publication",
-        titleAr: "الفئات ال vulnerable والنشر",
+        titleAr: "الفئات الأكثر عرضة للخطر والنشر العلمي",
         bodyEn: [
           "Groups that are unable to give consent require additional protections; research should only be conducted when it benefits the group or cannot otherwise be performed.",
           "Every research study involving human subjects must be registered in a publicly accessible database before recruitment.",
@@ -153,7 +153,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         ],
         bodyAr: [
           "تتطلب المجموعات غير القادرة على الموافقة حماية إضافية؛ يجب إجراء البحث فقط عندما يفيد المجموعة أو لا يمكن إجراؤه بطريقة أخرى.",
-          "يجب تسجيل كل دراسة بحثية تشمل البشر في قاعدة بيانات متاحة للجمهور قبل التوظيف.",
+          "يجب تسجيل كل دراسة بحثية تشمل البشر في قاعدة بيانات متاحة للجمهور قبل تسجيل أول مشارك.",
           "للمؤلفين والمحررين والناشرين التزامات أخلاقية بنشر نتائج البحث وتقليل التحيز في النشر.",
         ],
       },
@@ -188,7 +188,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         ],
         bodyAr: [
           "يجب أن يكون الباحثون مؤهلين بالتعليم والتدريب والخبرة ويجب أن يلتزموا بالبروتوكول وGCP واللوائح المعمول بها.",
-          "يجب توفر موارد كافية، بما في ذلك مو staff مؤهل ومرافق، طوال مدة التجربة.",
+          "يجب توفر موارد كافية طوال مدة التجربة، بما في ذلك كوادر مؤهلة ومرافق مناسبة.",
           "الباحثون مسؤولون عن الحصول على الموافقة المستنيرة وتوثيقها والإبلاغ عن الأحداث الضارة وفق البروتوكول.",
         ],
       },
@@ -216,7 +216,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         ],
         bodyAr: [
           "يجب مراقبة التجارب للتحقق من الامتثال للبروتوكول وGCP والمتطلبات التنظيمية.",
-          "قد ت inspect السلطات التنظيمية مواقع التجارب؛ يجب على الباحثين السماح بالوصول إلى البيانات والوثائق المصدر.",
+          "يحق للجهات التنظيمية تفتيش مواقع التجارب؛ وعلى الباحثين إتاحة الوصول إلى البيانات والوثائق المصدرية.",
           "يجب أن تتناول أنظمة إدارة الجودة انحرافات البروتوكول والإجراءات التصحيحية.",
         ],
       },
@@ -268,7 +268,7 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         bodyAr: [
           "حدد فترات الاحتفاظ بما يتوافق مع موافقة IRB والمتطلبات القانونية؛ دمّر البيانات بشكل آمن عندما لم تعد مطلوبة.",
           "أبلغ عن اختراقات البيانات للسلطات المؤسسية، وحيث يلزم، لهيئة البيانات والذكاء الاصطناعي السعودية دون تأخير غير مبرر.",
-          "ضمّن تدابير السرية في الموافقة المستنيرة وتدريب المو staff.",
+          "ضمّن تدابير السرية في نموذج الموافقة المستنيرة وفي تدريب فريق العمل.",
         ],
       },
     ],
@@ -313,11 +313,11 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         titleAr: "حقوقك",
         bodyEn: [
           "Under PDPL, you may request access, correction, or deletion of personal data subject to legal and research retention requirements.",
-          "Contact platform administration for privacy inquiries. Approved IRB records may be retained as required by NBCE regulations.",
+          "Contact platform administration for privacy inquiries. Approved IRB records may be retained as required by NCBE regulations.",
         ],
         bodyAr: [
           "بموجب PDPL، يمكنك طلب الوصول أو التصحيح أو الحذف للبيانات الشخصية وفق متطلبات الاحتفاظ القانونية والبحثية.",
-          "تواصل مع إدارة المنصة لاستفسارات الخصوصية. قد تُحفظ سجلات IRB المعتمدة كما تتطلب لوائح NBCE.",
+          "تواصل مع إدارة المنصة لاستفسارات الخصوصية. قد تُحفظ سجلات IRB المعتمدة كما تتطلب لوائح NCBE.",
         ],
       },
     ],

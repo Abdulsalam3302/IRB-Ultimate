@@ -10,10 +10,10 @@ export const PLATFORM = {
   ahssUrl: "https://ahss-sa.org",
 } as const;
 
-/** Legal positioning — independent AHSS platform, not an official NBCE IRB provider. */
+/** Legal positioning — independent AHSS platform, not an official NCBE IRB provider. */
 export const PLATFORM_DISCLAIMER = {
-  en: "Independent platform operated by Advanced Healthcare Systems Society (AHSS · ahss-sa.org). This is not an official NBCE Institutional Review Board provider. Built in compliance with PDPL, NBCE ethical guidelines, the Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization goals.",
-  ar: "منصة مستقلة تُشغّلها جمعية أنظمة الرعاية الصحية المتقدمة (AHSS · ahss-sa.org). ليست جهة IRB رسمية تابعة للجنة NBCE. مُصمّمة وفق PDPL وإرشادات NBCE الأخلاقية وإعلان هلسنكي وICH-GCP وأهداف رؤية السعودية 2030 للتحول الرقمي.",
+  en: "Independent platform operated by Advanced Healthcare Systems Society (AHSS · ahss-sa.org). This is not an official NCBE Institutional Review Board provider. Built in compliance with PDPL, NCBE ethical guidelines, the Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization goals.",
+  ar: "منصة مستقلة تُشغّلها جمعية أنظمة الرعاية الصحية المتقدمة (AHSS · ahss-sa.org). ليست جهة IRB رسمية تابعة للجنة NCBE. مُصمّمة وفق PDPL وإرشادات NCBE الأخلاقية وإعلان هلسنكي وICH-GCP وأهداف رؤية السعودية 2030 للتحول الرقمي.",
 } as const;
 
 export const BRAND = {

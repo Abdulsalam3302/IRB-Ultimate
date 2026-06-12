@@ -239,3 +239,35 @@ Only after Option B or C residency move:
 
 When all of the above are done, this runbook becomes a 10-minute checklist
 instead of a multi-week process.
+
+## Restoring Google / Apple sign-in (Supabase)
+
+The Supabase project previously used for social login
+(`andqzedqoiduqxynoaeq.supabase.co`) no longer exists — its DNS record is
+gone, so the Auth page automatically hides the Google/Apple buttons (the
+`isSupabaseReachable` probe fails closed). Email/password sign-in is
+first-party and unaffected. To bring the social buttons back:
+
+1. **Create a Supabase project** (any name, region of choice — only auth
+   is used, no research data is stored there).
+2. **Auth → URL Configuration**:
+   - Site URL: `https://irb-saudi-arabia.vercel.app`
+   - Redirect URLs: `https://irb-saudi-arabia.vercel.app/auth/callback`
+     (add `https://irb-saudi-arabia-*-researcher-os.vercel.app/auth/callback`
+     if preview deployments should also support social login).
+3. **Auth → Providers → Google**: create an OAuth client in Google Cloud
+   Console (type: Web), authorized redirect URI =
+   `https://<project-ref>.supabase.co/auth/v1/callback`, paste client ID
+   + secret into Supabase.
+4. **Auth → Providers → Apple**: requires an Apple Developer account —
+   create a Services ID + key, configure per Supabase's Apple guide,
+   same callback URL as above.
+5. **Wire env vars**:
+   - Vercel (build-time): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+   - Railway (server): `SUPABASE_URL=https://<project-ref>.supabase.co`
+   - Redeploy both.
+
+The UI self-heals: the moment the new project is reachable, the
+Google/Apple buttons reappear; the server bridge at
+`POST /api/auth/supabase/session` validates tokens against the project's
+JWKS and issues the same first-party session cookie as email/password.

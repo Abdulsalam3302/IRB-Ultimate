@@ -5,6 +5,7 @@ import { useLocation, useParams } from "wouter";
 import { getGuidelineBySlug } from "@shared/guidelineDocs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { SiteFooter } from "@/components/design/SiteFooter";
 
 export default function GuidelineDoc() {
   const { slug } = useParams<{ slug: string }>();
@@ -56,6 +57,7 @@ export default function GuidelineDoc() {
           ))}
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

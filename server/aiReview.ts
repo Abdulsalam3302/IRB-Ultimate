@@ -212,10 +212,10 @@ const ETHICS_SAFEGUARDS = `
 HARD SAFEGUARDS — REFUSE TO GENERATE
 ═══════════════════════════════════════════════════
 You MUST refuse to generate or enhance content that:
-1. FABRICATION: Invents principal investigators, institutional affiliations, NBCE bioethics certifications, prior IRB approvals, trial registration numbers, or funding sources. If a credential is missing, instruct the applicant to provide it — do not invent one.
+1. FABRICATION: Invents principal investigators, institutional affiliations, NCBE bioethics certifications, prior IRB approvals, trial registration numbers, or funding sources. If a credential is missing, instruct the applicant to provide it — do not invent one.
 2. CONSENT BYPASS: Describes any procedure that obtains consent through coercion, deception (beyond approved minimal-deception protocols), withholding of material risks, or skipping the right-to-withdraw clause.
 3. VULNERABLE-POPULATION MISUSE: Targets minors, prisoners, pregnant women, mentally incapacitated persons, employees of the PI, students of the PI, or other dependent groups WITHOUT explicit additional safeguards (assent procedures, LAR consent, conflict-of-interest disclosure, justification of why this population is necessary).
-4. ILLEGAL OR HIGH-HARM METHODS: Recommends use of unapproved investigational substances outside a Saudi FDA / NBCE-cleared pathway, deliberate harm beyond minimal risk, withholding standard-of-care from a control arm, or any procedure prohibited under Saudi law.
+4. ILLEGAL OR HIGH-HARM METHODS: Recommends use of unapproved investigational substances outside a Saudi FDA / NCBE-cleared pathway, deliberate harm beyond minimal risk, withholding standard-of-care from a control arm, or any procedure prohibited under Saudi law.
 5. DATA PROTECTION VIOLATION: Describes collection of identifiable health data without an explicit secure-storage / de-identification / retention-and-destruction plan; describes secondary use of biospecimens without re-consent or waiver justification.
 6. DISCRIMINATION: Excludes participants on protected characteristics (gender, religion, nationality, disability) without scientific justification.
 7. CONFLICT OF INTEREST CONCEALMENT: Hides or downplays financial / non-financial conflicts.
@@ -260,7 +260,7 @@ export async function runStage1AiReview(data: {
     console.warn("[AI Review] Stage 1 novelty check failed:", err);
   }
 
-  const prompt = `You are a senior IRB (Institutional Review Board) compliance specialist for the National Bioethics Committee of Saudi Arabia (NBCE), with expertise in NBCE Implementing Regulations, Declaration of Helsinki (2013), ICH-GCP E6(R2), Belmont Report, and CIOMS International Ethical Guidelines.
+  const prompt = `You are a senior IRB (Institutional Review Board) compliance specialist for the National Committee of BioEthics (NCBE) of Saudi Arabia, with expertise in NCBE Implementing Regulations, Declaration of Helsinki (2024 revision), ICH-GCP E6(R2), Belmont Report, and CIOMS International Ethical Guidelines.
 
 YOUR ROLE: Evaluate Stage 1 of an IRB application — research classification and basic investigator information. This is the GATEWAY stage. Your assessment determines whether the applicant proceeds to the detailed ethics review (Stage 2).
 
@@ -388,7 +388,7 @@ REMEMBER:
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are a senior NBCE IRB compliance specialist aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate content quality and ethical alignment — never penalize text length. For every field scored below 90, provide a specific, actionable fix with EXAMPLE: and FASTEST FIX: tokens. List every missing element explicitly under recommendations. Score 100 when all checklist items are fully satisfied with no gaps. Respond only with valid JSON." },
+        { role: "system", content: "You are a senior NCBE IRB compliance specialist aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate content quality and ethical alignment — never penalize text length. For every field scored below 90, provide a specific, actionable fix with EXAMPLE: and FASTEST FIX: tokens. List every missing element explicitly under recommendations. Score 100 when all checklist items are fully satisfied with no gaps. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -503,12 +503,12 @@ export async function runStage2AiReview(data: {
     console.warn("[AI Review] Literature search failed:", err);
   }
 
-  const prompt = `You are a senior IRB ethics reviewer and bioethics expert for the National Bioethics Committee of Saudi Arabia (NBCE). You hold deep expertise in:
+  const prompt = `You are a senior IRB ethics reviewer and bioethics expert for the National Committee of BioEthics (NCBE) of Saudi Arabia. You hold deep expertise in:
 - Declaration of Helsinki (2013 revision)
 - ICH-GCP E6(R2) Guidelines
 - Belmont Report (Respect, Beneficence, Justice)
 - CIOMS International Ethical Guidelines (2016)
-- NBCE Implementing Regulations for Research Ethics
+- NCBE Implementing Regulations for Research Ethics
 - Saudi FDA Clinical Trial Regulations (where applicable)
 
 YOUR ROLE: Conduct a comprehensive Stage 2 ethics and protocol review. This is the CRITICAL stage where research methodology, ethical safeguards, and participant protections are evaluated in depth.
@@ -639,7 +639,7 @@ ${literatureContext}${fenceUserData("APPLICATION DATA", data)}`;
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are a senior NBCE IRB ethics reviewer aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate ethical compliance and scientific rigor — never penalize length. For every field below 90, name the exact gap and provide EXAMPLE: and FASTEST FIX:. List all missing elements in recommendations. Award 100 only when every checklist item is fully addressed. Respond only with valid JSON." },
+        { role: "system", content: "You are a senior NCBE IRB ethics reviewer aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate ethical compliance and scientific rigor — never penalize length. For every field below 90, name the exact gap and provide EXAMPLE: and FASTEST FIX:. List all missing elements in recommendations. Award 100 only when every checklist item is fully addressed. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -748,7 +748,7 @@ export async function aiAutoCompleteFields(data: {
   stage?: "stage1" | "stage2";
   /** Stage 1 gateway info — used when stage="stage2" so generated
    *  text references the same PI / institution / funding the applicant
-   *  declared on Stage 1, instead of generic NBCE boilerplate. */
+   *  declared on Stage 1, instead of generic NCBE boilerplate. */
   stage1Context?: Stage1ContextForAutoComplete;
 }): Promise<Record<string, string>> {
   const stage1Fields = {
@@ -771,14 +771,14 @@ export async function aiAutoCompleteFields(data: {
     informedConsentProcess: "Complete consent process: how consent is obtained, language level, right to withdraw, special provisions for vulnerable groups, documentation method",
     riskAssessment: "Comprehensive risk matrix: each risk identified with severity, probability, mitigation strategy, and emergency protocol",
     benefitAssessment: "Direct benefits to participants, indirect benefits to science and society, with realistic expectations",
-    confidentialityMeasures: `Data protection plan that meets NBCE 2024 data-handling standards. The auto-filled value MUST cover EVERY one of these elements explicitly (one short paragraph or numbered list — but every bullet must be present, do not omit any):
+    confidentialityMeasures: `Data protection plan that meets NCBE 2024 data-handling standards. The auto-filled value MUST cover EVERY one of these elements explicitly (one short paragraph or numbered list — but every bullet must be present, do not omit any):
        (a) De-identification or pseudonymisation method (study-specific code key, separately stored from data, access restricted to PI).
        (b) Encryption at rest (AES-256 minimum) AND in transit (TLS 1.2+); name the platform actually used (REDCap, OpenClinica, institutional secure share, etc.).
        (c) Access controls — role-based, named data custodian, audit log of every access.
        (d) Physical / digital storage location and the legal jurisdiction of that storage.
-       (e) Data retention period (years), aligned with NBCE / institutional policy.
+       (e) Data retention period (years), aligned with NCBE / institutional policy.
        (f) Destruction protocol after retention expiry (cryptographic erasure for digital, certified shredding for paper).
-       (g) Breach response plan: notification to PI within 24h, to NBCE within 72h, to affected participants per regulation.
+       (g) Breach response plan: notification to PI within 24h, to NCBE within 72h, to affected participants per regulation.
        (h) For sensitive sub-classes (genetic, mental-health, HIV, minors): the additional layered protections that apply.
        (i) Statement that the platform-of-record audit log is the source of truth and is tamper-evident.
      If the research type is retrospective / chart-review and a consent waiver applies, the confidentiality plan must be STRONGER than for prospective studies (no public-access publication of identifiable rare-event combinations, etc.).`,
@@ -826,7 +826,7 @@ export async function aiAutoCompleteFields(data: {
     }
   }
 
-  const prompt = `You are an expert research protocol writer specializing in IRB applications for the National Bioethics Committee of Saudi Arabia (NBCE).
+  const prompt = `You are an expert research protocol writer specializing in IRB applications for the National Committee of BioEthics (NCBE) of Saudi Arabia.
 
 YOUR MISSION: Generate or enhance ALL fields to achieve a PERFECT 100/100 score on IRB review.
 
@@ -851,7 +851,7 @@ QUALITY STANDARDS
 2. FILL ALL BLANKS: If a field is empty, generate appropriate content that is consistent with the research title and type
 3. CROSS-FIELD CONSISTENCY: All fields must be internally consistent (e.g., methodology matches objectives, sample size matches target population), AND consistent with the STAGE 1 GATEWAY FACTS above when present (do not invent a different PI, institution, funding source, or duration)
 4. PROFESSIONAL LANGUAGE: Use academic, precise language appropriate for an IRB submission
-5. ETHICAL COMPLIANCE: Every field must align with Declaration of Helsinki, ICH-GCP, Belmont Report, and NBCE regulations
+5. ETHICAL COMPLIANCE: Every field must align with Declaration of Helsinki, ICH-GCP, Belmont Report, and NCBE regulations
 6. SPECIFICITY: Avoid generic statements — be specific to THIS research and this Saudi setting
 7. COMPLETENESS: Each field should be comprehensive enough to stand alone without additional explanation
 8. PRIOR-ART AWARENESS: When the LITERATURE & PRIOR-ART CONTEXT block is provided, mention how this study aligns with or differs from existing work in the methodology field
@@ -878,7 +878,7 @@ ${ETHICS_SAFEGUARDS}`;
 
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an expert NBCE research protocol writer. Generate comprehensive, ethically compliant content targeting 100/100 on IRB review. Every field must be specific, internally consistent with Stage 1 facts, and NBCE-aligned. When information is missing, write [MISSING — please provide: <specific item>] — never fabricate. Mark any assumption with [ASSUMPTION — verify]. Respond only with valid JSON whose fields are plain strings." },
+        { role: "system", content: "You are an expert NCBE research protocol writer. Generate comprehensive, ethically compliant content targeting 100/100 on IRB review. Every field must be specific, internally consistent with Stage 1 facts, and NCBE-aligned. When information is missing, write [MISSING — please provide: <specific item>] — never fabricate. Mark any assumption with [ASSUMPTION — verify]. Respond only with valid JSON whose fields are plain strings." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -949,7 +949,7 @@ export async function aiEnhanceStage1Fields(data: {
   };
   stage1FeedbackSummary?: string;
 }): Promise<typeof data.current> {
-  const prompt = `You are an expert NBCE IRB application editor. Your job is to POLISH and EXPAND each gateway field the applicant has already provided, so it meets IRB standards. You are an EDITOR, not a writer-from-scratch.
+  const prompt = `You are an expert NCBE IRB application editor. Your job is to POLISH and EXPAND each gateway field the applicant has already provided, so it meets IRB standards. You are an EDITOR, not a writer-from-scratch.
 
 CONTEXT
 - Research type: ${data.researchType}
@@ -982,7 +982,7 @@ Each value MUST be a plain string. NEVER return nested objects, arrays, or markd
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an NBCE IRB editor. Polish and expand the applicant's existing text to reach 100/100 — preserve all factual claims, never invent credentials or data. Flag gaps as [MISSING — please add: <item>]. Return strict JSON with plain string values." },
+        { role: "system", content: "You are an NCBE IRB editor. Polish and expand the applicant's existing text to reach 100/100 — preserve all factual claims, never invent credentials or data. Flag gaps as [MISSING — please add: <item>]. Return strict JSON with plain string values." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -1044,7 +1044,7 @@ export async function aiResolveField(data: {
   researchTitle: string;
   context: Record<string, string>;
 }): Promise<{ enhancedValue: string; explanation: string }> {
-  const prompt = `You are a specialized IRB field resolution assistant for the National Bioethics Committee of Saudi Arabia (NBCE).
+  const prompt = `You are a specialized IRB field resolution assistant for the National Committee of BioEthics (NCBE) of Saudi Arabia.
 
 YOUR MISSION: Fix this specific field to achieve a PERFECT 100/100 score on IRB review.
 
@@ -1066,7 +1066,7 @@ RESOLUTION RULES
 2. PRESERVE the applicant's original intent and research direction
 3. ENHANCE quality, completeness, and ethical compliance
 4. ENSURE consistency with other fields in the application
-5. Use professional academic language appropriate for NBCE submission
+5. Use professional academic language appropriate for NCBE submission
 6. The enhanced value must score 100/100 on re-review
 7. Explain clearly what was changed and why
 
@@ -1076,7 +1076,7 @@ ${ETHICS_SAFEGUARDS}`;
   try {
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are an NBCE IRB field resolution specialist. Rewrite this field to score 100/100 while preserving applicant intent. State any remaining gap as [STILL MISSING: <item>]. Respond only with valid JSON." },
+        { role: "system", content: "You are an NCBE IRB field resolution specialist. Rewrite this field to score 100/100 while preserving applicant intent. State any remaining gap as [STILL MISSING: <item>]. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {
@@ -1120,7 +1120,7 @@ export async function aiFixAllComments(data: {
     .map(fs => `• ${fs.field} (score: ${fs.score}, color: ${fs.color}): ${fs.feedback}`)
     .join("\n");
 
-  const prompt = `You are a senior IRB application enhancement specialist for the National Bioethics Committee of Saudi Arabia (NBCE).
+  const prompt = `You are a senior IRB application enhancement specialist for the National Committee of BioEthics (NCBE) of Saudi Arabia.
 
 YOUR MISSION: Fix ALL flagged fields in a single pass to achieve 100/100 on every field.
 
@@ -1150,7 +1150,7 @@ FIX RULES
 5. Maintain CROSS-FIELD CONSISTENCY — all fields must work together
 6. Preserve the applicant's original research intent
 7. Use professional academic language
-8. Ensure ethical compliance with Declaration of Helsinki, ICH-GCP, Belmont Report, NBCE regulations
+8. Ensure ethical compliance with Declaration of Helsinki, ICH-GCP, Belmont Report, NCBE regulations
 
 Return ALL fields (both fixed and unchanged) as a complete set.
 ${ETHICS_SAFEGUARDS}`;
@@ -1163,7 +1163,7 @@ ${ETHICS_SAFEGUARDS}`;
 
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: "You are a senior NBCE IRB enhancement specialist. Fix every flagged field to score 100/100 with cross-field consistency. For each fix, ensure ethical and legal compliance under NBCE, Helsinki, and PDPL. List any field that cannot reach 100 without applicant input as [NEEDS APPLICANT: <reason>]. Respond only with valid JSON." },
+        { role: "system", content: "You are a senior NCBE IRB enhancement specialist. Fix every flagged field to score 100/100 with cross-field consistency. For each fix, ensure ethical and legal compliance under NCBE, Helsinki, and PDPL. List any field that cannot reach 100 without applicant input as [NEEDS APPLICANT: <reason>]. Respond only with valid JSON." },
         { role: "user", content: prompt },
       ],
       response_format: {

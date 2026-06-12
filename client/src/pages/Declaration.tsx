@@ -158,7 +158,7 @@ export default function Declaration() {
               {honesty && <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />}
             </div>
 
-            {/* Declaration 2: NBCE Certification */}
+            {/* Declaration 2: NCBE Certification */}
             <div className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
               <Checkbox
                 id="nbce"
@@ -214,7 +214,7 @@ export default function Declaration() {
 
             <Separator />
 
-            {/* NBCE Certificate Upload (Optional) */}
+            {/* NCBE Certificate Upload (Optional) */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <FileCheck className="h-4 w-4 text-primary" />

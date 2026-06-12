@@ -276,7 +276,7 @@ export default function FormatWizard() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-jade-600" />
-                    IRB / NBCE
+                    IRB / NCBE
                   </li>
                 </ul>
               </Card>

@@ -6,7 +6,7 @@ type Props = {
   className?: string;
 };
 
-/** Mono uppercase pill — NBCE badges, section labels */
+/** Mono uppercase pill — NCBE badges, section labels */
 export function Stamp({ children, className }: Props) {
   return (
     <span

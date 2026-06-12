@@ -337,56 +337,76 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   // an LLM call has no business taking longer than 2 minutes — without
   // this, a stuck socket once hung Stage 2 auto-complete for 15 minutes.
   const timeoutMs = parseInt(process.env.LLM_TIMEOUT_MS ?? "120000", 10);
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response: Response;
-  try {
-    response = await fetch(resolveApiUrl(), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${ENV.llmApiKey}`,
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timeoutHandle);
-    if ((err as any)?.name === "AbortError") {
-      throw new Error(`LLM invoke timed out after ${timeoutMs}ms`);
+  const attempt = async (): Promise<InvokeResult> => {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(resolveApiUrl(), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${ENV.llmApiKey}`,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutHandle);
+      if ((err as any)?.name === "AbortError") {
+        throw new Error(`LLM invoke timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutHandle);
     }
-    throw err;
-  } finally {
-    clearTimeout(timeoutHandle);
-  }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-    );
-  }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+      );
+    }
 
-  const result = (await response.json()) as InvokeResult;
-  // Reasoning models (MiniMax M2, DeepSeek R1, …) emit <think>...</think>
-  // blocks before the real answer. Strip them so downstream JSON.parse works.
-  for (const choice of result.choices ?? []) {
-    const msg = choice?.message;
-    if (msg && typeof msg.content === "string") {
-      const before = msg.content;
-      msg.content = stripReasoningTags(msg.content);
-      if (process.env.LLM_DEBUG === "1") {
-        console.log(
-          "[LLM] finish=%s before-len=%d after-len=%d head=%j",
-          choice.finish_reason,
-          before.length,
-          msg.content.length,
-          msg.content.slice(0, 120)
-        );
+    const result = (await response.json()) as InvokeResult;
+    // Reasoning models (MiniMax M2, DeepSeek R1, …) emit <think>...</think>
+    // blocks before the real answer. Strip them so downstream JSON.parse works.
+    for (const choice of result.choices ?? []) {
+      const msg = choice?.message;
+      if (msg && typeof msg.content === "string") {
+        const before = msg.content;
+        msg.content = stripReasoningTags(msg.content);
+        if (process.env.LLM_DEBUG === "1") {
+          console.log(
+            "[LLM] finish=%s before-len=%d after-len=%d head=%j",
+            choice.finish_reason,
+            before.length,
+            msg.content.length,
+            msg.content.slice(0, 120)
+          );
+        }
       }
     }
+    return result;
+  };
+
+  const result = await attempt();
+
+  // Reasoning models occasionally emit a response whose JSON cannot be
+  // salvaged at all (truncated mid-reasoning, prose-wrapped, braces inside
+  // the think block). For schema-bound calls one bad sample would otherwise
+  // surface as a zeroed-out review — retry exactly once before giving up.
+  if (normalizedResponseFormat?.type === "json_schema") {
+    const content = result.choices?.[0]?.message?.content;
+    const parsed = safeJsonParse(typeof content === "string" ? content : "");
+    if (!parsed || typeof parsed !== "object" || Object.keys(parsed).length === 0) {
+      console.warn("[LLM] schema-bound response unparseable — retrying once");
+      return attempt();
+    }
   }
+
   return result;
 }
 

@@ -15,8 +15,8 @@ export const SLUG_META: Record<
   "informed-consent": {
     titleEn: "Informed Consent Form",
     titleAr: "نموذج الموافقة المستنيرة",
-    descEn: "Participant-facing consent aligned with NBCE and Declaration of Helsinki.",
-    descAr: "موافقة موجهة للمشاركين متوافقة مع NBCE وإعلان هلسنكي.",
+    descEn: "Participant-facing consent aligned with NCBE and Declaration of Helsinki.",
+    descAr: "موافقة موجهة للمشاركين متوافقة مع NCBE وإعلان هلسنكي.",
   },
   "research-protocol": {
     titleEn: "Research Protocol",

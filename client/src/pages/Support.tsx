@@ -14,6 +14,7 @@ import {
   Send, CheckCircle, Loader2,
   MessageSquare, HelpCircle, Lightbulb, Bug
 } from "lucide-react";
+import { SiteFooter } from "@/components/design/SiteFooter";
 
 export default function Support() {
   const [, setLocation] = useLocation();
@@ -165,6 +166,7 @@ export default function Support() {
           </CardContent>
         </Card>
       </div>
+      <SiteFooter />
     </div>
   );
 }

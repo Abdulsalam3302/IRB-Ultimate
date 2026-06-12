@@ -238,11 +238,11 @@ export default function Statistics() {
                   </h3>
                   <p className="text-muted-foreground mb-4">
                     {isAr
-                      ? "تعمل منصتنا وفقًا لإرشادات اللجنة الوطنية للأخلاقيات الحيوية في المملكة العربية السعودية (NBCE)، وإعلان هلسنكي، ومعايير ICH-GCP. كل طلب يخضع لمراجعة AI ومراجعة لجنة علمية."
-                      : "Our platform operates under the guidelines of the National Bioethics Committee of Saudi Arabia (NBCE), the Declaration of Helsinki, and ICH-GCP standards. Every application undergoes AI pre-screening and scientific committee review."}
+                      ? "تعمل منصتنا وفقًا لإرشادات اللجنة الوطنية للأخلاقيات الحيوية في المملكة العربية السعودية (NCBE)، وإعلان هلسنكي، ومعايير ICH-GCP. كل طلب يخضع لمراجعة AI ومراجعة لجنة علمية."
+                      : "Our platform operates under the guidelines of the National Committee of BioEthics (NCBE) of Saudi Arabia, the Declaration of Helsinki, and ICH-GCP standards. Every application undergoes AI pre-screening and scientific committee review."}
                   </p>
                   <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <Badge variant="outline" className="px-3 py-1">NBCE</Badge>
+                    <Badge variant="outline" className="px-3 py-1">NCBE</Badge>
                     <Badge variant="outline" className="px-3 py-1">{isAr ? "إعلان هلسنكي" : "Helsinki Declaration"}</Badge>
                     <Badge variant="outline" className="px-3 py-1">ICH-GCP</Badge>
                     <Badge variant="outline" className="px-3 py-1">{isAr ? "رؤية 2030" : "Vision 2030"}</Badge>

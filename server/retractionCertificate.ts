@@ -64,7 +64,7 @@ export async function generateRetractionCertificatePdf(
   
   <text x="400" y="60" text-anchor="middle" fill="#fca5a5" font-size="16" font-weight="700">&#9888; NOTICE OF RETRACTION &#9888;</text>
   <text x="400" y="85" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="2">IRB APPROVAL RETRACTED</text>
-  <text x="400" y="112" text-anchor="middle" fill="#fecaca" font-size="13" font-weight="400">National Bioethics Committee of Saudi Arabia (NBCE)</text>
+  <text x="400" y="112" text-anchor="middle" fill="#fecaca" font-size="13" font-weight="400">National Committee of BioEthics (NCBE) of Saudi Arabia</text>
   <text x="400" y="132" text-anchor="middle" fill="#fecaca" font-size="11" font-weight="400">Institutional Review Board — Local Committee</text>
   <text x="400" y="152" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="600">Advanced Healthcare Systems Society</text>
   

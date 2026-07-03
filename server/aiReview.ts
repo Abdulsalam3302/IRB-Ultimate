@@ -193,6 +193,55 @@ export interface AiReviewResult {
 // stage1Passed=true and silently advances the application.
 const PASS_THRESHOLD = 70;
 
+/**
+ * SA-15/16 — deterministic server-side gate that runs AFTER the LLM.
+ *
+ * The LLM's `passed` verdict is advisory: a prompt-injection payload inside
+ * an applicant field could still coax a high score out of a weaker model.
+ * This gate makes the final decision trustworthy regardless of what the
+ * model returned — if any mandatory field is effectively blank, the stage
+ * CANNOT pass. Returns the list of blank mandatory fields (empty = gate ok).
+ */
+function findBlankMandatoryFields(
+  data: Record<string, string>,
+  mandatory: string[],
+  minLen = 3,
+): string[] {
+  return mandatory.filter(f => (data[f] ?? "").trim().length < minLen);
+}
+
+function applyMandatoryFieldGate(
+  result: AiReviewResult,
+  data: Record<string, string>,
+  mandatory: string[],
+): AiReviewResult {
+  const blank = findBlankMandatoryFields(data, mandatory);
+  if (blank.length === 0 || !result.passed) return result;
+  return {
+    ...result,
+    passed: false,
+    hasRedFlags: true,
+    feedback:
+      `Server validation: the following mandatory field(s) are empty and must be completed before this stage can pass: ${blank.join(", ")}.\n\n${result.feedback}`,
+    recommendations: [
+      ...blank.map(f => `Complete the required field "${f}" — it is currently empty.`),
+      ...result.recommendations,
+    ],
+  };
+}
+
+const STAGE1_MANDATORY_FIELDS = [
+  "researchType", "irbCategory", "researchTitle",
+  "principalInvestigator", "piInstitution", "piDepartment",
+];
+
+const STAGE2_MANDATORY_FIELDS = [
+  "researchObjectives", "methodology", "sampleSize", "targetPopulation",
+  "inclusionCriteria", "exclusionCriteria", "dataCollectionMethods",
+  "informedConsentProcess", "riskAssessment", "benefitAssessment",
+  "confidentialityMeasures", "conflictOfInterest",
+];
+
 function getColorFromScore(score: number): FieldColor {
   if (score < 50) return "red";
   if (score < 70) return "yellow";
@@ -433,14 +482,18 @@ REMEMBER:
       color: getColorFromScore(typeof fs.score === "number" ? fs.score : 0),
     }));
 
-    return {
-      score: norm.score,
-      passed: norm.score >= PASS_THRESHOLD && !norm.hasRedFlags,
-      feedback: norm.feedback || "Review completed.",
-      recommendations: norm.recommendations,
-      fieldScores,
-      hasRedFlags: norm.hasRedFlags,
-    };
+    return applyMandatoryFieldGate(
+      {
+        score: norm.score,
+        passed: norm.score >= PASS_THRESHOLD && !norm.hasRedFlags,
+        feedback: norm.feedback || "Review completed.",
+        recommendations: norm.recommendations,
+        fieldScores,
+        hasRedFlags: norm.hasRedFlags,
+      },
+      data as unknown as Record<string, string>,
+      STAGE1_MANDATORY_FIELDS,
+    );
   } catch (error) {
     console.error("[AI Review] Stage 1 error:", error);
     // Pass-through fallback so the applicant isn't blocked by an AI
@@ -705,15 +758,19 @@ ${literatureContext}${fenceUserData("APPLICATION DATA", data)}`;
       color: getColorFromScore(typeof fs.score === "number" ? fs.score : 0),
     }));
 
-    return {
-      score: norm.score,
-      passed: norm.score >= PASS_THRESHOLD && !norm.hasRedFlags,
-      feedback: norm.feedback || "Review completed.",
-      recommendations: norm.recommendations,
-      fieldSuggestions: norm.fieldSuggestions,
-      fieldScores,
-      hasRedFlags: norm.hasRedFlags,
-    };
+    return applyMandatoryFieldGate(
+      {
+        score: norm.score,
+        passed: norm.score >= PASS_THRESHOLD && !norm.hasRedFlags,
+        feedback: norm.feedback || "Review completed.",
+        recommendations: norm.recommendations,
+        fieldSuggestions: norm.fieldSuggestions,
+        fieldScores,
+        hasRedFlags: norm.hasRedFlags,
+      },
+      data as unknown as Record<string, string>,
+      STAGE2_MANDATORY_FIELDS,
+    );
   } catch (error) {
     console.error("[AI Review] Stage 2 error:", error);
     const reason = (error as any)?.message?.includes("not configured")

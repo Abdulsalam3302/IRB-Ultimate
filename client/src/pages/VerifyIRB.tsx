@@ -20,13 +20,15 @@ export default function VerifyIRB() {
   const [searchValue, setSearchValue] = useState("");
   const [searchTriggered, setSearchTriggered] = useState(false);
 
-  // Honour deep links like /verify?n=IRB-2026-001 — clicked from the
-  // Registry page and from outbound notification emails. Without this
-  // the user lands on Verify with an empty input and has to retype.
+  // Honour deep links: /verify?n=IRB-2026-001 (Registry, emails) AND
+  // /verify/IRB-SA-2026-00123 (the QR code printed on certificates).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const prefill = params.get("n") || params.get("irb") || "";
+    const pathMatch = window.location.pathname.match(/^\/verify\/([^/]+)$/);
+    const prefill =
+      params.get("n") || params.get("irb") ||
+      (pathMatch ? decodeURIComponent(pathMatch[1]) : "");
     const cleaned = prefill.trim().toUpperCase();
     if (cleaned && cleaned.length >= 3) {
       setSearchValue(cleaned);

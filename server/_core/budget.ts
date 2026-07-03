@@ -8,18 +8,21 @@
  * before anyone notices.
  *
  * This module enforces TWO budgets:
- *  - per-user, per-day  (env LLM_USER_DAILY_LIMIT, default 60)
- *  - global, per-day    (env LLM_GLOBAL_DAILY_LIMIT, default 2000)
+ *  - per-user, per-day  (env LLM_USER_DAILY_LIMIT, default 200)
+ *  - global, per-day    (env LLM_GLOBAL_DAILY_LIMIT, default 10000)
  *
- * Implementation is in-memory. That's deliberately a Phase-2 compromise:
- * good enough for single-instance Railway/Render deploys, not durable
- * across restarts or horizontal scale. Phase 3 should move this into a
- * Drizzle `llm_usage_daily` table so the counter survives deploys and
- * shares state across replicas.
+ * Counters are persisted in the `llm_usage_daily` MySQL table so they
+ * survive deploys/restarts and are shared across horizontal replicas
+ * (previously in-memory only — a redeploy reset every counter and each
+ * replica kept its own budget, multiplying the real spend ceiling).
+ * When the DB is unavailable (local dev without MySQL) the module falls
+ * back to the old in-memory buckets so AI features still work.
  *
- * The counter rolls over at UTC midnight. We could window per-user, but
- * UTC-day is the simplest mental model for ops dashboards.
+ * The counter rolls over at UTC midnight.
  */
+
+import { sql } from "drizzle-orm";
+import { getDb } from "../db";
 
 const USER_DAILY_LIMIT = clampInt(
   process.env.LLM_USER_DAILY_LIMIT,
@@ -41,6 +44,8 @@ function clampInt(raw: string | undefined, fallback: number, opts: { min: number
 function utcDayKey(d: Date = new Date()): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
+
+// ─── In-memory fallback (dev without a DB) ─────────────────────────────────
 
 type DayBucket = { day: string; count: number };
 const userBuckets = new Map<number, DayBucket>();
@@ -65,6 +70,64 @@ function refreshGlobalBucket(): DayBucket {
   return globalBucket;
 }
 
+// ─── DB-backed counters ─────────────────────────────────────────────────────
+
+/**
+ * Atomically reserve one call for `scope` ("user:<id>" | "global") on `day`,
+ * bounded by `limit`. Returns the post-reservation count, or null when the
+ * limit is already reached. Uses INSERT … ON DUPLICATE KEY UPDATE with a
+ * conditional increment so two replicas can never both take the last slot.
+ */
+async function dbReserve(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  scope: string,
+  day: string,
+  limit: number,
+): Promise<number | null> {
+  // Ensure the row exists (count starts at 0 so the UPDATE below is the
+  // single authoritative increment).
+  await db.execute(sql`
+    INSERT INTO llm_usage_daily (scope, day, count)
+    VALUES (${scope}, ${day}, 0)
+    ON DUPLICATE KEY UPDATE count = count
+  `);
+  const result: any = await db.execute(sql`
+    UPDATE llm_usage_daily
+    SET count = count + 1
+    WHERE scope = ${scope} AND day = ${day} AND count < ${limit}
+  `);
+  const affected = Number(result?.[0]?.affectedRows ?? result?.affectedRows ?? 0);
+  if (affected === 0) return null;
+  const rows: any = await db.execute(sql`
+    SELECT count FROM llm_usage_daily WHERE scope = ${scope} AND day = ${day} LIMIT 1
+  `);
+  const row = rows?.[0]?.[0] ?? rows?.[0];
+  return Number(row?.count ?? limit);
+}
+
+async function dbRefund(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  scope: string,
+  day: string,
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE llm_usage_daily SET count = GREATEST(count - 1, 0)
+    WHERE scope = ${scope} AND day = ${day}
+  `);
+}
+
+async function dbCount(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  scope: string,
+  day: string,
+): Promise<number> {
+  const rows: any = await db.execute(sql`
+    SELECT count FROM llm_usage_daily WHERE scope = ${scope} AND day = ${day} LIMIT 1
+  `);
+  const row = rows?.[0]?.[0] ?? rows?.[0];
+  return Number(row?.count ?? 0);
+}
+
 export type BudgetCheck =
   | { ok: true; userRemaining: number; globalRemaining: number }
   | { ok: false; reason: "user" | "global"; resetAt: string };
@@ -76,7 +139,37 @@ export type BudgetCheck =
  * no refund on LLM failure, because retry pressure is exactly what we're
  * trying to bound.
  */
-export function reserveLlmCall(userId: number): BudgetCheck {
+export async function reserveLlmCall(userId: number): Promise<BudgetCheck> {
+  const day = utcDayKey();
+  let db: Awaited<ReturnType<typeof getDb>> = null;
+  try {
+    db = await getDb();
+  } catch { /* fall through to memory */ }
+
+  if (db) {
+    try {
+      const userCount = await dbReserve(db, `user:${userId}`, day, USER_DAILY_LIMIT);
+      if (userCount === null) {
+        return { ok: false, reason: "user", resetAt: nextMidnightISO() };
+      }
+      const globalCount = await dbReserve(db, "global", day, GLOBAL_DAILY_LIMIT);
+      if (globalCount === null) {
+        // Give the user their slot back — the platform limit blocked the
+        // call, not their own usage.
+        await dbRefund(db, `user:${userId}`, day).catch(() => {});
+        return { ok: false, reason: "global", resetAt: nextMidnightISO() };
+      }
+      return {
+        ok: true,
+        userRemaining: Math.max(0, USER_DAILY_LIMIT - userCount),
+        globalRemaining: Math.max(0, GLOBAL_DAILY_LIMIT - globalCount),
+      };
+    } catch (err) {
+      console.warn("[Budget] DB counter failed; using in-memory fallback:", err);
+    }
+  }
+
+  // In-memory fallback (dev, or transient DB outage).
   const u = getUserBucket(userId);
   const g = refreshGlobalBucket();
   if (u.count >= USER_DAILY_LIMIT) {
@@ -102,9 +195,33 @@ function nextMidnightISO(): string {
 
 /**
  * Inspect remaining budget without consuming. Used by the dashboard to
- * surface "you've used 42/60 AI calls today" hints.
+ * surface "you've used 42/200 AI calls today" hints.
  */
-export function inspectLlmBudget(userId: number) {
+export async function inspectLlmBudget(userId: number) {
+  const day = utcDayKey();
+  let db: Awaited<ReturnType<typeof getDb>> = null;
+  try {
+    db = await getDb();
+  } catch { /* fall through */ }
+
+  if (db) {
+    try {
+      const [userUsed, globalUsed] = await Promise.all([
+        dbCount(db, `user:${userId}`, day),
+        dbCount(db, "global", day),
+      ]);
+      return {
+        userUsed,
+        userLimit: USER_DAILY_LIMIT,
+        globalUsed,
+        globalLimit: GLOBAL_DAILY_LIMIT,
+        resetAt: nextMidnightISO(),
+      };
+    } catch (err) {
+      console.warn("[Budget] DB inspect failed; using in-memory fallback:", err);
+    }
+  }
+
   const u = getUserBucket(userId);
   const g = refreshGlobalBucket();
   return {

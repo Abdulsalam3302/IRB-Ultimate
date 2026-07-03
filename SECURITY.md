@@ -57,10 +57,31 @@ Before exposing a public instance:
 
 1. Set a strong `JWT_SECRET` (`openssl rand -hex 48`)
 2. Disable dev login (`DEV_LOGIN_ENABLED` unset; `NODE_ENV=production`)
-3. Configure OAuth — do not rely on `/api/dev/login`
+3. Configure Supabase Auth, OAuth, or native email/password — the open
+   passwordless sign-in mode has been removed; pilot mode requires a
+   ≥ 32-char `PILOT_LOGIN_TOKEN` distributed out of band
 4. Enable TLS and set `ALLOWED_ORIGINS` for split-domain deploys
 5. Use KSA-resident MySQL + object storage for real research data (see `DEPLOY.md`)
 6. Enable encrypted backups (`BACKUP_PASSPHRASE` or GPG recipient)
 7. Set `ALLOWED_EGRESS_HOSTS` to restrict outbound fetches
+
+## Hardening shipped in the public-use release (2026-07)
+
+- Removed production passwordless sign-in; pilot tokens are never embedded
+  in served pages and must be ≥ 32 chars
+- Certificate downloads are owner/admin-only by application id (public
+  verification uses the redacted stored certificate via `/verify`)
+- Certificate generation fails closed (legacy SVG/HTML fallback removed)
+- Owner-email auto-admin is a one-time bootstrap on every auth path
+- AI budgets persisted in MySQL (`llm_usage_daily`) — survive restarts and
+  horizontal replicas
+- Deterministic server-side gate: Stage 1/2 can never pass with empty
+  mandatory fields regardless of LLM output (prompt-injection hardening)
+- PI email no longer sent to the LLM provider (PII minimization)
+- Typed confirmation on all admin approval/decision mutations
+- Upload magic-byte validation; S3 objects stored with
+  `Content-Disposition: attachment`; co-investigator cap
+- Support-ticket notifications carry a sanitized preview only
+- PDPL self-service: data export (JSON) and account deletion from Profile
 
 See `README.md` and `DEPLOY.md` for the full hardening guide.

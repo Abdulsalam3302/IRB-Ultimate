@@ -55,6 +55,9 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
               <Button variant="ghost" size="sm" onClick={() => setLocation("/verify")} className="hidden sm:inline-flex transition-apple">
                 <Search className="h-3.5 w-3.5 me-1" /> {t("nav.verify")}
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/registry")} className="hidden md:inline-flex transition-apple">
+                {t("nav.registry")}
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => setLocation("/resources")} className="hidden md:inline-flex transition-apple">
                 {t("nav.resources")}
               </Button>

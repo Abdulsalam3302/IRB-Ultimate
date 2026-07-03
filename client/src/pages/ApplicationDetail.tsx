@@ -10,6 +10,7 @@ import { Loader2, Download, Clock, CheckCircle, XCircle, History } from "lucide-
 import { STATUS_LABELS, STATUS_COLORS, RESEARCH_TYPE_LABELS, IRB_CATEGORY_LABELS } from "@shared/types";
 import type { ApplicationStatus, ResearchType, IrbCategory } from "@shared/types";
 import RelatedLiterature from "@/components/RelatedLiterature";
+import { StudyLifecycle } from "@/components/StudyLifecycle";
 
 export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -186,6 +187,17 @@ export default function ApplicationDetail() {
                   ))}
                 </CardContent>
               </Card>
+            )}
+
+            {/* NCBE post-submission lifecycle: adverse events + amendments.
+                Applicant and admins only — the byApplication queries are
+                FORBIDDEN for assigned reviewers, so don't render for them. */}
+            {!["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(app.status) &&
+              (user?.role === "admin" || app.applicantId === user?.id) && (
+              <StudyLifecycle
+                applicationId={app.id}
+                canReport={app.status === "approved" || user?.role === "admin"}
+              />
             )}
           </div>
 

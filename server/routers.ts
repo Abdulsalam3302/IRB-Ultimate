@@ -10,7 +10,6 @@ import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { runStage1AiReview, runStage2AiReview, aiAutoCompleteFields, aiResolveField, aiFixAllComments, calculateSampleSize, aiEnhanceStage1Fields } from "./aiReview";
 import { runSwarmPanel, SWARM_LLM_CALLS_PER_RUN } from "./aiSwarmReview";
-import { generateCertificatePdf } from "./certificate";
 import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
@@ -111,6 +110,51 @@ function sanitizeUploadFileName(input: string): string {
   const sanitized = trimmed.replace(FILENAME_SAFE_RE, "_");
   return sanitized.replace(/^_+|_+$/g, "") || "file";
 }
+
+// SA-27: magic-byte validation — the declared Content-Type is attacker
+// controlled, so verify the actual file signature before storing. Text
+// types have no signature; for those we reject NUL bytes (binary smuggled
+// as text) and leading active-content markers.
+function matchesMagicBytes(buffer: Buffer, contentType: string): boolean {
+  const startsWith = (sig: number[], offset = 0) =>
+    buffer.length >= offset + sig.length &&
+    sig.every((b, i) => buffer[offset + i] === b);
+
+  switch (contentType) {
+    case "application/pdf":
+      return startsWith([0x25, 0x50, 0x44, 0x46]); // %PDF
+    case "image/png":
+      return startsWith([0x89, 0x50, 0x4e, 0x47]);
+    case "image/jpeg":
+      return startsWith([0xff, 0xd8, 0xff]);
+    case "image/gif":
+      return startsWith([0x47, 0x49, 0x46, 0x38]); // GIF8
+    case "image/webp":
+      return startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8); // RIFF….WEBP
+    case "application/msword":
+    case "application/vnd.ms-excel":
+      // Legacy OLE compound file
+      return startsWith([0xd0, 0xcf, 0x11, 0xe0]);
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      // OOXML = ZIP container
+      return startsWith([0x50, 0x4b]);
+    case "text/plain":
+    case "text/csv": {
+      const head = buffer.subarray(0, Math.min(buffer.length, 8192));
+      if (head.includes(0)) return false; // binary payload disguised as text
+      const lead = head.toString("utf8", 0, Math.min(head.length, 256)).trimStart().toLowerCase();
+      return !lead.startsWith("<!doctype") && !lead.startsWith("<html") &&
+        !lead.startsWith("<script") && !lead.startsWith("<svg") && !lead.startsWith("<?xml");
+    }
+    default:
+      return false;
+  }
+}
+
+// Cap co-investigators per application — unbounded rows are a storage /
+// export-bloat vector, and no legitimate study lists more than this.
+const MAX_AUTHORS_PER_APPLICATION = 25;
 
 // ─── Application Router ─────────────────────────────────────────────────────
 
@@ -573,7 +617,7 @@ const applicationRouter = router({
   // Per-user LLM call budget for the dashboard footer. Lets the SPA show
   // "42/60 AI calls remaining today" so users know what's left before
   // the next UTC midnight rollover. Read-only, no budget consumed.
-  aiBudget: protectedProcedure.query(({ ctx }) => {
+  aiBudget: protectedProcedure.query(async ({ ctx }) => {
     return inspectLlmBudget(ctx.user.id);
   }),
   submitAiFeedback: protectedProcedure
@@ -976,6 +1020,14 @@ const applicationRouter = router({
         });
       }
 
+      // SA-27: the declared MIME must match the actual bytes.
+      if (!matchesMagicBytes(buffer, contentType)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "File content does not match the declared file type. Please upload the original, unmodified file.",
+        });
+      }
+
       const safeFileName = sanitizeUploadFileName(input.fileName);
       // Cryptographically random suffix — the local-disk driver serves
       // /uploads/* with only this path as the auth gate when sessions
@@ -1028,17 +1080,25 @@ const authorsRouter = router({
   add: protectedProcedure
     .input(z.object({
       applicationId: z.number(),
-      name: z.string(),
-      email: z.string().email(),
-      phone: z.string().optional(),
-      institution: z.string().optional(),
-      department: z.string().optional(),
-      country: z.string().optional(),
+      name: z.string().trim().min(1).max(255),
+      email: z.string().email().max(320),
+      phone: z.string().max(64).optional(),
+      institution: z.string().max(255).optional(),
+      department: z.string().max(255).optional(),
+      country: z.string().max(128).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const existing = await db.getAuthorsByApplication(input.applicationId);
+      if (existing.length >= MAX_AUTHORS_PER_APPLICATION) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `An application can list at most ${MAX_AUTHORS_PER_APPLICATION} co-investigators.`,
+        });
+      }
 
       const id = await db.addResearchAuthor({
         applicationId: input.applicationId,
@@ -1134,9 +1194,13 @@ const supportRouter = router({
       });
 
       try {
+        // SA-29: the full message stays in the DB ticket; the notification
+        // carries only a short preview so a hostile payload can't abuse the
+        // notification channel. Control chars are stripped downstream too.
+        const preview = input.message.replace(/\s+/g, " ").slice(0, 300);
         await notifyOwner({
-          title: `New Support Ticket: ${input.subject}`,
-          content: `From: ${input.name} (${input.email})\nCategory: ${input.category}\n\n${input.message}`,
+          title: `New Support Ticket: ${input.subject.slice(0, 120)}`,
+          content: `From: ${input.name} (${input.email})\nCategory: ${input.category}\n\nPreview: ${preview}${input.message.length > 300 ? "…" : ""}\n\nOpen the admin panel → Support to read and respond.`,
         });
       } catch (e) { /* best-effort */ }
 
@@ -1348,12 +1412,10 @@ const adminRouter = router({
           applicantEmail: applicant?.email ?? null,
         });
       } catch (e) {
-        console.error("Certificate v2 generation failed; falling back to v1:", e);
-        try {
-          certUrl = await generateCertificatePdf(updatedApp as any, applicant?.name || "", applicant?.email || "");
-        } catch (ee) {
-          console.error("Certificate fallback also failed:", ee);
-        }
+        // SA-14: fail closed — no v1 SVG/HTML fallback (stored-XSS surface
+        // when served from S3). Approval proceeds; the certificate can be
+        // regenerated on demand via /api/export/certificate/:id.
+        console.error("Certificate v2 generation failed; approval proceeds without stored certificate:", e);
       }
 
       await db.updateApplication(input.applicationId, {
@@ -1383,9 +1445,19 @@ const adminRouter = router({
     .input(z.object({
       applicationId: z.number(),
       decision: z.enum(["approved", "rejected"]),
-      notes: z.string().optional(),
+      notes: z.string().max(20000).optional(),
+      // SA-10 (parity with directApproval): the client must echo back
+      // `DECIDE-<applicationId>`. A CSRF-induced auto-submit or a stray
+      // click can't mint an IRB number or reject a study by accident.
+      confirm: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
+      if (input.confirm !== `DECIDE-${input.applicationId}`) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Confirmation token missing or incorrect",
+        });
+      }
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
 
@@ -1402,12 +1474,8 @@ const adminRouter = router({
             applicantEmail: applicant?.email ?? null,
           });
         } catch (e) {
-          console.error("Certificate v2 generation failed; falling back to v1:", e);
-          try {
-            certUrl = await generateCertificatePdf(updatedApp as any, applicant?.name || "", applicant?.email || "");
-          } catch (ee) {
-            console.error("Certificate fallback also failed:", ee);
-          }
+          // SA-14: fail closed — no v1 fallback. See directApproval note.
+          console.error("Certificate v2 generation failed; approval proceeds without stored certificate:", e);
         }
 
         await db.updateApplication(input.applicationId, {
@@ -2306,7 +2374,7 @@ const aiSwarmRouter = router({
       // budget — no refund on failure (deliberate, same policy as
       // aiProcedure) so retry pressure can't amplify spend.
       for (let i = 0; i < SWARM_LLM_CALLS_PER_RUN; i++) {
-        const check = reserveLlmCall(ctx.user.id);
+        const check = await reserveLlmCall(ctx.user.id);
         if (!check.ok) {
           throw new TRPCError({
             code: "TOO_MANY_REQUESTS",
@@ -2411,6 +2479,37 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await db.setUserOrcid(ctx.user.id, input.orcidId, false);
         return { success: true, verified: false };
+      }),
+    // PDPL: right of access — everything we store about the caller, as a
+    // JSON bundle the client downloads. Never includes password hashes.
+    exportMyData: protectedProcedure.query(async ({ ctx }) => {
+      return db.exportUserData(ctx.user.id);
+    }),
+    // PDPL: right to erasure — typed confirmation required. Drafts are
+    // hard-deleted; submitted/approved applications are regulatory records
+    // and are retained (per the platform policy shown in the UI). The
+    // account itself is anonymised and every session stops resolving.
+    deleteMyAccount: protectedProcedure
+      .input(z.object({ confirm: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.confirm !== "DELETE-MY-ACCOUNT") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Confirmation phrase missing or incorrect" });
+        }
+        if (isPlatformOwner(ctx.user)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "The platform owner account cannot self-delete. Transfer ownership first.",
+          });
+        }
+        const result = await db.eraseUserAccount(ctx.user.id);
+        await db.addAuditLog({
+          userId: ctx.user.id,
+          action: "account_self_deleted",
+          details: `Drafts removed: ${result.deletedDraftApplications}; regulatory records retained: ${result.retainedRegulatoryApplications}`,
+        }).catch(() => {});
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        return { success: true, ...result };
       }),
   }),
   application: applicationRouter,

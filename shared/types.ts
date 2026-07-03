@@ -17,7 +17,10 @@ export type ResearchType =
   | "social_behavioral"
   | "other";
 
-export type IrbCategory = "full_board";
+// Mirrors drizzle/schema.ts → applications.irbCategory enum. The UI
+// currently defaults everything to full_board, but the DB (and older
+// records) legitimately carry expedited/exempt — labels must resolve.
+export type IrbCategory = "full_board" | "expedited" | "exempt";
 
 export type ApplicationStatus =
   | "draft"
@@ -52,6 +55,8 @@ export const RESEARCH_TYPE_LABELS: Record<ResearchType, string> = {
 
 export const IRB_CATEGORY_LABELS: Record<IrbCategory, string> = {
   full_board: "Full Board Review",
+  expedited: "Expedited Review",
+  exempt: "Exempt Review",
 };
 
 export const STATUS_LABELS: Record<ApplicationStatus, string> = {

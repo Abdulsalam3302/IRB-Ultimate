@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
@@ -12,22 +15,52 @@ import { Navbar } from "@/components/Navbar";
 import {
   User, Mail, Calendar, Shield, FileText, Award, Download,
   Clock, CheckCircle, XCircle, ArrowRight, Loader2, Eye,
-  TrendingUp, BarChart3, AlertTriangle, ExternalLink
+  TrendingUp, BarChart3, AlertTriangle, ExternalLink, Trash2
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, RESEARCH_TYPE_LABELS } from "@shared/types";
 import type { ApplicationStatus, ResearchType } from "@shared/types";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 export default function Profile() {
   const { user, loading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { lang } = useT();
   const isAr = lang === "ar";
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const { data: applications, isLoading: appsLoading } = trpc.application.myApplications.useQuery(
     undefined,
     { enabled: isAuthenticated }
   );
+
+  const utils = trpc.useUtils();
+  const [exporting, setExporting] = useState(false);
+  const exportMyData = async () => {
+    setExporting(true);
+    try {
+      const bundle = await utils.auth.exportMyData.fetch();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `my-irb-data-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success(isAr ? "تم تنزيل بياناتك." : "Your data export has been downloaded.");
+    } catch {
+      toast.error(isAr ? "فشل تصدير البيانات." : "Data export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const deleteMyAccount = trpc.auth.deleteMyAccount.useMutation({
+    onSuccess: () => {
+      toast.success(isAr ? "تم حذف حسابك." : "Your account has been deleted.");
+      window.location.href = "/";
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   // Hooks MUST run unconditionally on every render — otherwise the
   // hook order shifts between loading/loaded/unauth, which React flags
@@ -336,6 +369,63 @@ export default function Profile() {
                       <p className="text-xs text-muted-foreground mb-1">{isAr ? "آخر تسجيل دخول" : "Last Sign In"}</p>
                       <p className="font-medium">{user?.lastSignedIn ? new Date(user.lastSignedIn).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Privacy & Data (PDPL) */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{isAr ? "الخصوصية والبيانات" : "Privacy & Data"}</CardTitle>
+                  <CardDescription>
+                    {isAr
+                      ? "وفقاً لنظام حماية البيانات الشخصية (PDPL)، يمكنك تنزيل نسخة من بياناتك أو حذف حسابك."
+                      : "In line with the Saudi Personal Data Protection Law (PDPL), you can download a copy of your data or delete your account."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button variant="outline" onClick={exportMyData} disabled={exporting}>
+                      {exporting ? <Loader2 className="h-4 w-4 me-2 animate-spin" /> : <Download className="h-4 w-4 me-2" />}
+                      {isAr ? "تنزيل بياناتي (JSON)" : "Download My Data (JSON)"}
+                    </Button>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+                          <Trash2 className="h-4 w-4 me-2" /> {isAr ? "حذف حسابي" : "Delete My Account"}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle className="text-red-600">{isAr ? "حذف الحساب نهائياً" : "Permanently Delete Account"}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-2">
+                          <p className="text-sm text-muted-foreground">
+                            {isAr
+                              ? "سيتم حذف مسوداتك غير المقدمة نهائياً وإخفاء هوية حسابك. الطلبات المقدمة أو المعتمدة سجلات تنظيمية ويتم الاحتفاظ بها وفق سياسة المنصة. لا يمكن التراجع عن هذا الإجراء."
+                              : "Your unsubmitted drafts will be permanently deleted and your account will be anonymized. Submitted or approved applications are regulatory records and are retained per platform policy. This action cannot be undone."}
+                          </p>
+                          <div className="space-y-2">
+                            <Label>{isAr ? "اكتب DELETE-MY-ACCOUNT للتأكيد" : "Type DELETE-MY-ACCOUNT to confirm"}</Label>
+                            <Input
+                              value={deleteConfirm}
+                              onChange={(e) => setDeleteConfirm(e.target.value)}
+                              placeholder="DELETE-MY-ACCOUNT"
+                              autoComplete="off"
+                            />
+                          </div>
+                          <Button
+                            variant="destructive"
+                            className="w-full"
+                            disabled={deleteConfirm !== "DELETE-MY-ACCOUNT" || deleteMyAccount.isPending}
+                            onClick={() => deleteMyAccount.mutate({ confirm: deleteConfirm })}
+                          >
+                            {deleteMyAccount.isPending ? <Loader2 className="h-4 w-4 me-2 animate-spin" /> : <Trash2 className="h-4 w-4 me-2" />}
+                            {isAr ? "تأكيد الحذف النهائي" : "Confirm Permanent Deletion"}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </CardContent>
               </Card>

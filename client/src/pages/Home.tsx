@@ -89,9 +89,9 @@ export default function Home() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="font-mono text-[10.5px] tracking-[0.18em] uppercase text-ink-muted">
-                    {isRtl ? "شهادة موافقة IRB" : "Certificate of IRB approval"}
+                    {isRtl ? "شهادة موافقة IRB — نموذج توضيحي" : "Certificate of IRB approval — sample"}
                   </div>
-                  <div className="font-display text-xl font-semibold text-forest-900 mt-1 num">SA-2026-04188</div>
+                  <div className="font-display text-xl font-semibold text-forest-900 mt-1 num">IRB-SA-XXXX-00000</div>
                 </div>
                 <Logo size={36} withText={false} />
               </div>

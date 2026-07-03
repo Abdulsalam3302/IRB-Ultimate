@@ -157,34 +157,29 @@ export function registerExportRoutes(app: Express) {
   });
 
   // ─── Certificate download — formal PDF, regenerated on-demand
-  // Public when the application is `approved` (anyone with the IRB number
-  // can download the certificate, mirroring the verify-page behaviour).
-  // Authenticated when not yet approved (preview for owner/admin only).
+  // SA-05: authenticated owner/admin ONLY. The previous behaviour allowed
+  // anonymous downloads of any approved certificate by iterating the
+  // sequential numeric id — a full-registry PII harvest. Public
+  // verification uses the stored (redacted) certificateUrl surfaced by
+  // /verify and the registry, so nothing public breaks by locking this.
+  // Unauthorized and non-existent ids both return 404 so the endpoint is
+  // not an application-id oracle.
   app.get("/api/export/certificate/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (!Number.isFinite(id)) {
         res.status(400).type("text/plain").send("invalid id"); return;
       }
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) {
+        res.status(401).type("text/plain").send("authentication required"); return;
+      }
       const application = await db.getApplicationById(id);
-      if (!application) {
+      if (!application || (application.applicantId !== user.id && user.role !== "admin")) {
         res.status(404).type("text/plain").send("not found"); return;
       }
-      // Public access for approved or retracted certificates. Otherwise require owner/admin.
-      let viewerKind: "public" | "owner-or-admin" = "owner-or-admin";
-      if (application.status === "approved" || application.status === "retracted") {
-        const user = await sdk.authenticateRequest(req).catch(() => null);
-        if (!user) viewerKind = "public";
-        else if (application.applicantId !== user.id && user.role !== "admin") viewerKind = "public";
-      } else {
-        const user = await sdk.authenticateRequest(req).catch(() => null);
-        if (!user) { res.status(401).type("text/plain").send("authentication required"); return; }
-        if (application.applicantId !== user.id && user.role !== "admin") {
-          res.status(403).type("text/plain").send("forbidden"); return;
-        }
-      }
       const applicant = await db.getUserById(application.applicantId);
-      const applicantEmailForRender = viewerKind === "public" ? null : (applicant?.email ?? null);
+      const applicantEmailForRender = applicant?.email ?? null;
       const wantsHtml = req.query.format === "html";
       if (wantsHtml) {
         const html = renderCertificateHtml({
@@ -436,7 +431,7 @@ export function registerExportRoutes(app: Express) {
       // This export runs a large LLM completion — charge it against the same
       // per-user/global daily AI budget as the tRPC AI routes, otherwise it's
       // an unmetered way to burn the LLM bill.
-      const budget = reserveLlmCall(user.id);
+      const budget = await reserveLlmCall(user.id);
       if (!budget.ok) {
         res.status(429).type("text/plain").send(
           budget.reason === "global"

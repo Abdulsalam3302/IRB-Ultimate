@@ -78,10 +78,11 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold mb-6">{isAr ? "لوحة الإدارة" : "Administration Panel"}</h1>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className={`grid w-full grid-cols-4 ${isOwner ? "sm:grid-cols-8" : "sm:grid-cols-7"} max-w-5xl`}>
+          <TabsList className={`grid w-full grid-cols-4 ${isOwner ? "sm:grid-cols-9" : "sm:grid-cols-8"} max-w-6xl`}>
             <TabsTrigger value="overview"><BarChart3 className="h-4 w-4 me-1" /> {isAr ? "نظرة عامة" : "Overview"}</TabsTrigger>
             <TabsTrigger value="applications"><FileText className="h-4 w-4 me-1" /> {isAr ? "الطلبات" : "Applications"}</TabsTrigger>
             <TabsTrigger value="committee"><Users className="h-4 w-4 me-1" /> {isAr ? "اللجنة" : "Committee"}</TabsTrigger>
+            <TabsTrigger value="safety"><AlertTriangle className="h-4 w-4 me-1" /> {isAr ? "السلامة" : "Safety"}</TabsTrigger>
             <TabsTrigger value="tickets"><MessageSquare className="h-4 w-4 me-1" /> {t("admin.tickets")}</TabsTrigger>
             <TabsTrigger value="reports"><Download className="h-4 w-4 me-1" /> {isAr ? "التقارير" : "Reports"}</TabsTrigger>
             <TabsTrigger value="audit"><History className="h-4 w-4 me-1" /> {isAr ? "السجل" : "Audit"}</TabsTrigger>
@@ -94,6 +95,7 @@ export default function AdminDashboard() {
           <TabsContent value="overview"><OverviewTab /></TabsContent>
           <TabsContent value="applications"><ApplicationsTab /></TabsContent>
           <TabsContent value="committee"><CommitteeTab /></TabsContent>
+          <TabsContent value="safety"><SafetyTab /></TabsContent>
           <TabsContent value="tickets"><SupportTicketsTab /></TabsContent>
           <TabsContent value="reports"><ReportsTab /></TabsContent>
           <TabsContent value="audit"><AuditTab /></TabsContent>
@@ -101,6 +103,165 @@ export default function AdminDashboard() {
           {isOwner && <TabsContent value="aiswarm"><AiSwarmConsole /></TabsContent>}
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+// ─── Safety tab — NCBE adverse-event queue + amendment decisions ────────────
+function SafetyTab() {
+  const { lang } = useT();
+  const isAr = lang === "ar";
+  const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
+
+  const { data: aes, isLoading: aesLoading } = trpc.adverseEvents.all.useQuery();
+  const { data: ams, isLoading: amsLoading } = trpc.amendments.all.useQuery();
+  const [aeNotes, setAeNotes] = useState<Record<number, string>>({});
+  const [amNotes, setAmNotes] = useState<Record<number, string>>({});
+
+  const updateAe = trpc.adverseEvents.adminUpdate.useMutation({
+    onSuccess: () => {
+      toast.success(isAr ? "تم تحديث الحدث." : "Adverse event updated.");
+      utils.adverseEvents.all.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const decideAm = trpc.amendments.adminDecide.useMutation({
+    onSuccess: () => {
+      toast.success(isAr ? "تم تسجيل القرار." : "Decision recorded.");
+      utils.amendments.all.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const severityBadge: Record<string, string> = {
+    mild: "bg-emerald-100 text-emerald-700",
+    moderate: "bg-yellow-100 text-yellow-700",
+    serious: "bg-orange-100 text-orange-700",
+    life_threatening: "bg-red-100 text-red-700",
+    fatal: "bg-red-200 text-red-900",
+  };
+
+  return (
+    <div className="space-y-8">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-orange-500" /> {isAr ? "الأحداث السلبية" : "Adverse Events"}
+          </CardTitle>
+          <CardDescription>
+            {isAr ? "جميع الأحداث السلبية المبلغ عنها عبر الدراسات النشطة." : "All adverse events reported across active studies."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {aesLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : !aes || aes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">{isAr ? "لا توجد أحداث سلبية." : "No adverse events reported."}</p>
+          ) : (
+            <div className="space-y-4">
+              {aes.map((ae: any) => (
+                <div key={ae.id} className="p-4 rounded-lg border space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={`text-xs capitalize ${severityBadge[ae.severity] || ""}`}>{String(ae.severity).replace(/_/g, " ")}</Badge>
+                    <Badge variant="outline" className="text-xs capitalize">{String(ae.status).replace(/_/g, " ")}</Badge>
+                    <button className="text-xs text-primary hover:underline" onClick={() => setLocation(`/application/${ae.applicationId}`)}>
+                      {isAr ? "طلب" : "Application"} #{ae.applicationId}
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      {isAr ? "حدث في" : "Occurred"}: {ae.occurredAt ? new Date(ae.occurredAt).toLocaleDateString() : "—"}
+                    </span>
+                  </div>
+                  <p className="text-sm">{ae.description}</p>
+                  {ae.actionTaken && <p className="text-xs text-muted-foreground">{isAr ? "الإجراء:" : "Action taken:"} {ae.actionTaken}</p>}
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <Input
+                      className="text-sm"
+                      placeholder={isAr ? "ملاحظات الإدارة..." : "Admin notes…"}
+                      value={aeNotes[ae.id] ?? ae.adminNotes ?? ""}
+                      onChange={(e) => setAeNotes(prev => ({ ...prev, [ae.id]: e.target.value }))}
+                    />
+                    <Select
+                      value={ae.status}
+                      onValueChange={(status) => updateAe.mutate({ id: ae.id, status: status as any, adminNotes: aeNotes[ae.id] ?? ae.adminNotes ?? undefined })}
+                    >
+                      <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["reported", "under_review", "acknowledged", "escalated", "closed"].map(s => (
+                          <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-blue-500" /> {isAr ? "تعديلات البروتوكول" : "Protocol Amendments"}
+          </CardTitle>
+          <CardDescription>
+            {isAr ? "طلبات التعديل المقدمة على الدراسات — الموافقة أو الرفض." : "Amendment requests against studies — approve or reject."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {amsLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : !ams || ams.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">{isAr ? "لا توجد تعديلات." : "No amendments submitted."}</p>
+          ) : (
+            <div className="space-y-4">
+              {ams.map((am: any) => (
+                <div key={am.id} className="p-4 rounded-lg border space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="text-xs capitalize">{am.type}</Badge>
+                    <Badge variant="outline" className="text-xs capitalize">{String(am.status).replace(/_/g, " ")}</Badge>
+                    <button className="text-xs text-primary hover:underline" onClick={() => setLocation(`/application/${am.applicationId}`)}>
+                      {isAr ? "طلب" : "Application"} #{am.applicationId}
+                    </button>
+                    <span className="text-xs text-muted-foreground">{new Date(am.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-sm font-medium">{am.title}</p>
+                  <p className="text-xs text-muted-foreground">{am.rationale}</p>
+                  {["submitted", "under_review"].includes(am.status) && (
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                      <Input
+                        className="text-sm"
+                        placeholder={isAr ? "ملاحظات القرار..." : "Decision notes…"}
+                        value={amNotes[am.id] ?? ""}
+                        onChange={(e) => setAmNotes(prev => ({ ...prev, [am.id]: e.target.value }))}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={decideAm.isPending}
+                          onClick={() => decideAm.mutate({ id: am.id, decision: "approved", adminNotes: amNotes[am.id] || undefined })}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 me-1" /> {isAr ? "موافقة" : "Approve"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={decideAm.isPending}
+                          onClick={() => decideAm.mutate({ id: am.id, decision: "rejected", adminNotes: amNotes[am.id] || undefined })}
+                        >
+                          <XCircle className="h-3.5 w-3.5 me-1" /> {isAr ? "رفض" : "Reject"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {am.adminNotes && <p className="text-xs text-blue-700">{isAr ? "ملاحظات:" : "Notes:"} {am.adminNotes}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -704,7 +865,9 @@ function ApplicationsTab() {
                         <div className="flex gap-3">
                           <Button
                             className="flex-1"
-                            onClick={() => finalDecision.mutate({ applicationId: app.id, decision: "approved", notes: decisionNotes })}
+                            // SA-10 parity: server requires DECIDE-<id> so a
+                            // CSRF auto-submit can't approve without the id.
+                            onClick={() => finalDecision.mutate({ applicationId: app.id, decision: "approved", notes: decisionNotes, confirm: `DECIDE-${app.id}` })}
                             disabled={finalDecision.isPending}
                           >
                             <CheckCircle className="h-4 w-4 me-2" /> {isAr ? "موافقة" : "Approve"}
@@ -712,7 +875,7 @@ function ApplicationsTab() {
                           <Button
                             variant="destructive"
                             className="flex-1"
-                            onClick={() => finalDecision.mutate({ applicationId: app.id, decision: "rejected", notes: decisionNotes })}
+                            onClick={() => finalDecision.mutate({ applicationId: app.id, decision: "rejected", notes: decisionNotes, confirm: `DECIDE-${app.id}` })}
                             disabled={finalDecision.isPending}
                           >
                             <XCircle className="h-4 w-4 me-2" /> {isAr ? "رفض" : "Reject"}

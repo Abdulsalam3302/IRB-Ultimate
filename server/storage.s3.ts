@@ -53,6 +53,13 @@ export async function s3Put(
       Key: key,
       Body: body,
       ContentType: contentType,
+      // SA-28: force download + defeat MIME sniffing when the object is
+      // fetched via a (pre)signed URL. Certificates open inline; every
+      // user upload is treated as an attachment.
+      ContentDisposition: contentType === "application/pdf" && key.startsWith("certificates/")
+        ? "inline"
+        : "attachment",
+      Metadata: { "x-content-type-options": "nosniff" },
     })
   );
   // 7-day signed URL — long enough for an applicant to download a

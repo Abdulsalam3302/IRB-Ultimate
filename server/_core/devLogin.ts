@@ -40,41 +40,50 @@ function signInPageHtml(title: string, intro: string, tokenField: string): strin
 }
 
 /**
- * Local dev login + production platform sign-in.
+ * Local dev login + token-guarded pilot sign-in.
  *
  * - Dev: loopback-only when DEV_LOGIN_ENABLED=1 and not production.
- * - Production public sign-in: PUBLIC_SIGNIN_ENABLED=1 when OAuth is unset.
- * - Legacy pilot: PILOT_LOGIN_ENABLED=1 with token (deprecated — use OAuth or public sign-in).
+ * - Pilot (demo deploys only): PILOT_LOGIN_ENABLED=1 with a strong token
+ *   (>= 32 chars) distributed OUT OF BAND. The token is never embedded in
+ *   the served page — visitors must type it. Only available when neither
+ *   Supabase nor OAuth is configured.
+ *
+ * SECURITY: the former "public sign-in" mode (PUBLIC_SIGNIN_ENABLED) that
+ * minted a session for any name+email with no proof of identity has been
+ * removed. Production identity comes from Supabase, OAuth, or native
+ * email/password (/api/auth/register + /api/auth/login).
  */
 export function registerDevLoginRoutes(app: Express) {
-  const publicSignIn = ENV.publicSignInEnabled;
-  const pilotMode =
-    ENV.pilotLoginEnabled && ENV.pilotLoginToken.length >= 16 && !publicSignIn;
+  const pilotMode = ENV.pilotLoginEnabled && ENV.pilotLoginToken.length >= 32;
   const devMode =
     !ENV.isProduction &&
     ENV.devLoginEnabled &&
     (!ENV.oAuthServerUrl || ENV.oAuthServerUrl.trim() === "");
 
-  const enabled = publicSignIn || pilotMode || devMode;
-  if (!enabled) return;
+  const enabled = pilotMode || devMode;
+  if (!enabled) {
+    if (ENV.pilotLoginEnabled && ENV.pilotLoginToken.length < 32) {
+      console.warn(
+        "[PilotLogin] PILOT_LOGIN_ENABLED is set but PILOT_LOGIN_TOKEN is shorter than 32 chars — pilot sign-in stays DISABLED. Generate with: openssl rand -hex 24"
+      );
+    }
+    return;
+  }
 
-  if (publicSignIn) {
-    console.log("[SignIn] Public platform sign-in enabled at /api/sign-in");
-  } else if (pilotMode) {
-    console.log("[PilotLogin] Token-guarded sign-in at /api/sign-in (legacy pilot mode).");
+  if (pilotMode) {
+    console.log("[PilotLogin] Token-guarded sign-in at /api/sign-in (token required, never embedded).");
   } else {
     console.log("[DevLogin] Local dev sign-in at /api/sign-in (loopback only).");
   }
 
-  const requireLoopbackUnlessPublic = (req: Request, res: Response): boolean => {
-    if (publicSignIn || pilotMode) return true;
+  const requireLoopbackUnlessPilot = (req: Request, res: Response): boolean => {
+    if (pilotMode) return true;
     return requireLoopback(req, res);
   };
 
   const verifyAccessToken = (req: Request, res: Response): boolean => {
-    if (publicSignIn) return true;
     const required = pilotMode ? ENV.pilotLoginToken : ENV.devLoginToken;
-    if (!required) return true;
+    if (!required) return true; // dev mode without an extra token
     const provided = String(req.body?.token || req.query?.token || "");
     if (provided !== required) {
       res.status(401).json({ error: "login token mismatch" });
@@ -99,18 +108,16 @@ export function registerDevLoginRoutes(app: Express) {
       res.redirect(302, `${base.replace(/\/$/, "")}/auth`);
       return;
     }
-    if (!requireLoopbackUnlessPublic(req, res)) return;
-    const title = publicSignIn ? "Sign In" : pilotMode ? "Secure Sign In" : "Dev Sign In";
-    const intro = publicSignIn
-      ? "Access the IRB review platform with your institutional email. Secure sessions are issued after verification."
-      : pilotMode
-        ? "Authorized access only. Use your institutional credentials."
-        : "Local development only.";
-    const tokenField = pilotMode
-      ? `<input type="hidden" name="token" value="${ENV.pilotLoginToken}">`
-      : ENV.devLoginToken
-        ? `<label>Access token</label><input name="token" value="${ENV.devLoginToken}" required>`
-        : "";
+    if (!requireLoopbackUnlessPilot(req, res)) return;
+    const title = pilotMode ? "Secure Sign In" : "Dev Sign In";
+    const intro = pilotMode
+      ? "Authorized pilot access only. Enter the access token you were given along with your institutional details."
+      : "Local development only.";
+    // The token is NEVER pre-filled — embedding it in a publicly served
+    // page would hand it to every visitor and defeat the guard entirely.
+    const tokenField = pilotMode || ENV.devLoginToken
+      ? `<label>Access token</label><input name="token" type="password" autocomplete="off" required placeholder="Paste the access token you received">`
+      : "";
     res.type("html").send(signInPageHtml(title, intro, tokenField));
   };
 
@@ -118,13 +125,15 @@ export function registerDevLoginRoutes(app: Express) {
   app.get("/api/dev/login", renderSignIn);
 
   const handleSignIn = async (req: Request, res: Response) => {
-    if (!requireLoopbackUnlessPublic(req, res)) return;
+    if (!requireLoopbackUnlessPilot(req, res)) return;
     if (!verifyAccessToken(req, res)) return;
     try {
       const email = String(req.body?.email || "").trim().slice(0, 320);
       const name = String(req.body?.name || "Researcher").trim().slice(0, 255);
-      const openId = publicSignIn
-        ? openIdFromEmail(email || String(req.body?.openId || "anonymous@local.dev"))
+      // Pilot accounts are keyed to the email so two pilot testers never
+      // share one identity. Dev mode keeps the fixed local id.
+      const openId = pilotMode
+        ? openIdFromEmail(email || "anonymous@pilot.local")
         : String(req.body?.openId || "dev-user-001").slice(0, 64);
       const role = roleForOpenId(openId);
 
@@ -132,7 +141,7 @@ export function registerDevLoginRoutes(app: Express) {
         openId,
         name,
         email: email || `${openId}@local.dev`,
-        loginMethod: publicSignIn ? "email" : "dev",
+        loginMethod: pilotMode ? "pilot" : "dev",
         role,
         lastSignedIn: new Date(),
       });

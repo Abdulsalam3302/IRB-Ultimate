@@ -13,6 +13,8 @@ const QUICK_LINKS = [
   ["/dashboard", "nav.dashboard"],
   ["/resources", "nav.resources"],
   ["/verify", "nav.verify"],
+  ["/registry", "nav.registry"],
+  ["/statistics", "nav.statistics"],
   ["/support", "nav.support"],
   ["/policy", "footer.terms"],
   ["/resources/guideline/privacy-policy", "footer.privacy"],

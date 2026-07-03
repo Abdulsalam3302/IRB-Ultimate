@@ -47,6 +47,8 @@ function Router() {
         <Route path={"/"} component={Home} />
         <Route path={"/policy"} component={Policy} />
         <Route path={"/verify"} component={VerifyIRB} />
+        {/* QR codes on certificates deep-link to /verify/<irb-number> */}
+        <Route path={"/verify/:irbNumber"} component={VerifyIRB} />
         <Route path={"/resources"} component={Resources} />
         <Route path={"/support"} component={Support} />
         <Route path={"/dashboard"} component={Dashboard} />

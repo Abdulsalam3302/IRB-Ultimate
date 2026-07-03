@@ -71,7 +71,11 @@ ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://YOUR-SERVICE.up.rail
 4. Dockerfile + `railway.toml` handle build (Playwright included).
 5. Migrations run automatically on boot (`server/migrate.ts`).
 6. Health: `GET /api/health`
-7. Pilot login: `GET /api/dev/login` (token embedded when `PILOT_LOGIN_ENABLED=1`)
+7. Pilot login: `GET /api/dev/login` — visitors must PASTE the pilot token
+   (it is **never** embedded in the page). Distribute `PILOT_LOGIN_TOKEN`
+   out of band; it must be ≥ 32 chars or pilot sign-in stays disabled.
+   For real public use, configure Supabase Auth or native email/password
+   instead — the old open `PUBLIC_SIGNIN_ENABLED` mode has been removed.
 
 ## Vercel (frontend)
 

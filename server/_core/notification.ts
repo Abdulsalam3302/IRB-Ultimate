@@ -9,7 +9,12 @@ export type NotificationPayload = {
 const TITLE_MAX_LENGTH = 1200;
 const CONTENT_MAX_LENGTH = 20000;
 
-const trimValue = (value: string): string => value.trim();
+// SA-29: notification content includes user-supplied text (support
+// tickets, application titles). Strip control characters (keep \n and \t)
+// so a hostile payload can't smuggle terminal escapes or protocol framing
+// into the downstream notification channel.
+const trimValue = (value: string): string =>
+  value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 

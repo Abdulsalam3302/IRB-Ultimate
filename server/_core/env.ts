@@ -58,21 +58,18 @@ export const ENV = {
   // The POST /api/dev/login body must include `token: <this value>` when
   // set; the GET landing page reads it from a hidden field.
   devLoginToken: (process.env.DEV_LOGIN_TOKEN ?? "").trim(),
-  // Public pilot/demo login — token-guarded, works over HTTPS when OAuth
-  // is not configured. Requires PILOT_LOGIN_ENABLED=1 and PILOT_LOGIN_TOKEN.
+  // Token-guarded pilot/demo login for controlled pilots. Requires
+  // PILOT_LOGIN_ENABLED=1 and a strong PILOT_LOGIN_TOKEN (>= 32 chars,
+  // enforced in devLogin.ts). Only active when neither Supabase nor OAuth
+  // is configured. NOTE: the former PUBLIC_SIGNIN_ENABLED mode (open
+  // passwordless sign-in in production) has been removed for security —
+  // use Supabase, OAuth, or native email/password auth instead.
   pilotLoginEnabled:
     isProduction &&
     process.env.PILOT_LOGIN_ENABLED === "1" &&
-    process.env.PUBLIC_SIGNIN_ENABLED !== "1" &&
     !((process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()) &&
     (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
   pilotLoginToken: (process.env.PILOT_LOGIN_TOKEN ?? "").trim(),
-  // Production open sign-in when OAuth is not configured (researchers use name + email).
-  publicSignInEnabled:
-    isProduction &&
-    process.env.PUBLIC_SIGNIN_ENABLED === "1" &&
-    !((process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()) &&
-    (!process.env.OAUTH_SERVER_URL || process.env.OAUTH_SERVER_URL.trim() === ""),
   // Canonical public URL (Vercel) — used for OAuth redirect URIs behind split deploy.
   publicAppUrl: (process.env.PUBLIC_APP_URL ?? process.env.VITE_PUBLIC_SITE_URL ?? "").trim(),
   // Optional explicit allow-list for CORS / origin validation on

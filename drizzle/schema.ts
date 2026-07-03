@@ -378,3 +378,18 @@ export const aiSwarmReviews = mysqlTable("ai_swarm_reviews", {
 
 export type AiSwarmReview = typeof aiSwarmReviews.$inferSelect;
 export type InsertAiSwarmReview = typeof aiSwarmReviews.$inferInsert;
+
+// ─── LLM usage counters (SA-03 phase 3) — durable daily AI budgets.
+//     scope is "user:<id>" or "global"; day is the UTC YYYY-MM-DD key.
+//     Persisted so budgets survive restarts and are shared across
+//     horizontal replicas (previously in-memory only).
+export const llmUsageDaily = mysqlTable("llm_usage_daily", {
+  id: int("id").autoincrement().primaryKey(),
+  scope: varchar("scope", { length: 80 }).notNull(),
+  day: varchar("day", { length: 10 }).notNull(),
+  count: int("count").default(0).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LlmUsageDaily = typeof llmUsageDaily.$inferSelect;
+export type InsertLlmUsageDaily = typeof llmUsageDaily.$inferInsert;

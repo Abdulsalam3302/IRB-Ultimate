@@ -83,8 +83,15 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.role = 'admin';
     }
     else if (BOOT_OWNER_EMAIL && user.email?.toLowerCase() === BOOT_OWNER_EMAIL) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      // Email-based promotion is a ONE-TIME bootstrap, same policy as the
+      // native-register and Supabase paths: once any admin exists, an
+      // unverified email claim on a legacy-OAuth login can never mint a
+      // new admin. The genuine owner keeps admin because the role is
+      // already persisted on their row.
+      if (!(await adminExists())) {
+        values.role = 'admin';
+        updateSet.role = 'admin';
+      }
     }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
@@ -234,6 +241,113 @@ export async function getAllUsers() {
   if (!db) return [];
   const rows = await db.select().from(users).orderBy(desc(users.createdAt));
   return rows.map(withoutPassword);
+}
+
+// ─── PDPL self-service: data export + account erasure ──────────────────────
+
+/**
+ * Everything the platform stores about one user, for the PDPL/GDPR-style
+ * "download my data" right. Password hashes are never included.
+ */
+export async function exportUserData(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [userRows, apps] = await Promise.all([
+    db.select().from(users).where(eq(users.id, userId)).limit(1),
+    db.select().from(applications).where(eq(applications.applicantId, userId)),
+  ]);
+  const user = userRows[0] ? withoutPassword({ ...userRows[0] }) : null;
+  const appIds = apps.map(a => a.id);
+
+  const [authors, versions, aes, ams, files, myNotifications, myAudit, myTickets] = await Promise.all([
+    appIds.length ? db.select().from(researchAuthors).where(inArray(researchAuthors.applicationId, appIds)) : Promise.resolve([]),
+    appIds.length ? db.select().from(applicationVersions).where(inArray(applicationVersions.applicationId, appIds)) : Promise.resolve([]),
+    appIds.length ? db.select().from(adverseEvents).where(inArray(adverseEvents.applicationId, appIds)) : Promise.resolve([]),
+    appIds.length ? db.select().from(amendments).where(inArray(amendments.applicationId, appIds)) : Promise.resolve([]),
+    db.select().from(fileUploads).where(eq(fileUploads.userId, userId)),
+    db.select().from(notifications).where(eq(notifications.userId, userId)),
+    db.select().from(auditLog).where(eq(auditLog.userId, userId)),
+    db.select().from(supportTickets).where(eq(supportTickets.userId, userId)),
+  ]);
+
+  return {
+    exportedAt: new Date().toISOString(),
+    user,
+    applications: apps,
+    coInvestigators: authors,
+    applicationVersions: versions,
+    adverseEvents: aes,
+    amendments: ams,
+    fileUploads: files,
+    notifications: myNotifications,
+    auditTrail: myAudit,
+    supportTickets: myTickets,
+  };
+}
+
+/**
+ * PDPL "right to erasure" — self-service account deletion.
+ *
+ * Policy:
+ *  - Applications that were never submitted (draft / declaration / stage 1-2)
+ *    are hard-deleted together with their child rows.
+ *  - Applications that entered the review pipeline (submitted / approved /
+ *    rejected / retracted) are REGULATORY RECORDS: NCBE-aligned governance
+ *    requires the approval trail to survive, so those rows are retained.
+ *  - The user row itself is irreversibly anonymised: name/email/ORCID wiped,
+ *    password removed, and the openId rotated to a random tombstone so every
+ *    outstanding session cookie stops resolving to an account (this is our
+ *    session revocation for deleted users).
+ *  - Committee membership and notifications are removed. The audit log is
+ *    retained (tamper-evidence) but now points at an anonymised identity.
+ */
+export async function eraseUserAccount(userId: number): Promise<{
+  deletedDraftApplications: number;
+  retainedRegulatoryApplications: number;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const apps = await db.select({ id: applications.id, status: applications.status })
+    .from(applications).where(eq(applications.applicantId, userId));
+  const NEVER_SUBMITTED = new Set([
+    "draft", "declaration_pending",
+    "stage1_pending", "stage1_failed",
+    "stage2_pending", "stage2_failed",
+  ]);
+  const draftIds = apps.filter(a => NEVER_SUBMITTED.has(a.status as string)).map(a => a.id);
+  const retained = apps.length - draftIds.length;
+
+  if (draftIds.length) {
+    await db.delete(researchAuthors).where(inArray(researchAuthors.applicationId, draftIds));
+    await db.delete(reviewAssignments).where(inArray(reviewAssignments.applicationId, draftIds));
+    await db.delete(applicationVersions).where(inArray(applicationVersions.applicationId, draftIds));
+    await db.delete(adverseEvents).where(inArray(adverseEvents.applicationId, draftIds));
+    await db.delete(amendments).where(inArray(amendments.applicationId, draftIds));
+    await db.delete(aiSwarmReviews).where(inArray(aiSwarmReviews.applicationId, draftIds));
+    await db.delete(fileUploads).where(inArray(fileUploads.applicationId, draftIds));
+    await db.delete(notifications).where(inArray(notifications.applicationId, draftIds));
+    await db.delete(auditLog).where(inArray(auditLog.applicationId, draftIds));
+    await db.delete(applications).where(inArray(applications.id, draftIds));
+  }
+
+  await db.delete(committeeMembers).where(eq(committeeMembers.userId, userId));
+  await db.delete(notifications).where(eq(notifications.userId, userId));
+
+  const tombstone = `deleted:${userId}:${Date.now().toString(36)}`.slice(0, 64);
+  await db.update(users).set({
+    openId: tombstone,
+    name: "Deleted account",
+    email: null,
+    loginMethod: "deleted",
+    passwordHash: null,
+    role: "user",
+    orcidId: null,
+    orcidVerified: false,
+  }).where(eq(users.id, userId));
+
+  return { deletedDraftApplications: draftIds.length, retainedRegulatoryApplications: retained };
 }
 
 // ─── Application helpers ────────────────────────────────────────────────────

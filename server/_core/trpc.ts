@@ -115,7 +115,7 @@ const enforceLlmBudget = t.middleware(async opts => {
     // forward `user: User` to downstream procedures instead of `User | null`.
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
-  const check = reserveLlmCall(ctx.user.id);
+  const check = await reserveLlmCall(ctx.user.id);
   if (!check.ok) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",

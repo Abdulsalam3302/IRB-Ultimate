@@ -47,7 +47,8 @@ def main() -> None:
         sys.exit(1)
 
     vars_payload = {
-        "PUBLIC_SIGNIN_ENABLED": "0",
+        # PUBLIC_SIGNIN_ENABLED was removed from the codebase — open
+        # passwordless sign-in in production no longer exists.
         "PUBLIC_APP_URL": VERCEL_URL,
         "OWNER_EMAIL": "kubee3302@gmail.com",
         "DATABASE_POOL_MAX": "30",

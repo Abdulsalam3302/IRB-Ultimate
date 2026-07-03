@@ -483,9 +483,10 @@ describe("AI Review module", () => {
 // ─── Certificate Module Tests ──────────────────────────────────────────────
 
 describe("Certificate module", () => {
-  it("exports generateCertificatePdf function", async () => {
-    const { generateCertificatePdf } = await import("./certificate");
-    expect(typeof generateCertificatePdf).toBe("function");
+  it("exports the v2 certificate renderer", async () => {
+    const { renderCertificateHtml, renderCertificatePdf } = await import("./certificateV2");
+    expect(typeof renderCertificateHtml).toBe("function");
+    expect(typeof renderCertificatePdf).toBe("function");
   });
 });
 
@@ -554,7 +555,8 @@ describe("Shared types", () => {
     expect(Object.keys(RESEARCH_TYPE_LABELS).length).toBe(9);
     
     expect(IRB_CATEGORY_LABELS).toBeDefined();
-    expect(Object.keys(IRB_CATEGORY_LABELS).length).toBe(1); // Only full_board now
+    // Mirrors the DB enum: full_board, expedited, exempt.
+    expect(Object.keys(IRB_CATEGORY_LABELS).length).toBe(3);
     
     expect(STATUS_LABELS).toBeDefined();
     expect(Object.keys(STATUS_LABELS).length).toBe(15);

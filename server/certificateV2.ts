@@ -8,6 +8,7 @@ import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { chromium } from "playwright";
+import QRCode from "qrcode";
 import type { Application } from "../drizzle/schema";
 import { storagePut } from "./storage";
 import { AUTHOR } from "@shared/branding";
@@ -39,12 +40,35 @@ function verifyBaseUrl(): string {
   return base || "https://irb-sa.org";
 }
 
-function qrSvgPlaceholder(code: string): string {
+/**
+ * Real, scannable QR encoding the public verification URL for this IRB
+ * number. Uses the synchronous QRCode.create() (renderCertificateHtml is
+ * sync) and emits a single SVG path. Falls back to a static placeholder
+ * only if generation fails, so certificate rendering never throws here.
+ */
+function qrSvg(verifyUrl: string, code: string): string {
+  try {
+    const qr = QRCode.create(verifyUrl, { errorCorrectionLevel: "M" });
+    const size = qr.modules.size;
+    const data = qr.modules.data;
+    const margin = 2;
+    const total = size + margin * 2;
+    let path = "";
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (data[y * size + x]) {
+          path += `M${x + margin} ${y + margin}h1v1h-1z`;
+        }
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" shape-rendering="crispEdges" style="width:100%;height:100%"><rect width="${total}" height="${total}" fill="#ffffff"/><path d="${path}" fill="#064e3b"/></svg>`;
+  } catch (err) {
+    console.warn("[Certificate] QR generation failed, using placeholder:", err);
+  }
   const short = escapeHtml(code.replace(/^IRB-/, "").slice(-12));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 84" shape-rendering="crispEdges" style="width:100%;height:100%">
     <rect width="84" height="84" fill="#ffffff"/>
     <rect x="4" y="4" width="76" height="76" fill="none" stroke="#064e3b" stroke-width="1.5"/>
-    <rect x="10" y="10" width="18" height="18" fill="#064e3b"/><rect x="56" y="10" width="18" height="18" fill="#064e3b"/><rect x="10" y="56" width="18" height="18" fill="#064e3b"/>
     <text x="42" y="48" text-anchor="middle" font-family="ui-monospace,monospace" font-size="6.5" fill="#064e3b">${short}</text>
   </svg>`;
 }
@@ -137,7 +161,7 @@ export function renderCertificateHtml(data: CertData): string {
     "{{IRB_NUMBER}}": escapeHtml(irbNumber),
     "{{VERIFY_URL}}": escapeHtml(verifyUrl),
     "{{VERIFY_HOST}}": escapeHtml(verifyHost),
-    "{{QR_SVG}}": qrSvgPlaceholder(irbNumber),
+    "{{QR_SVG}}": qrSvg(verifyUrl, irbNumber),
     "IRB-SA-2026-00024": escapeHtml(irbNumber),
     "Dr. Test": escapeHtml(app.principalInvestigator || "—"),
     "University": escapeHtml(app.piInstitution || "—"),

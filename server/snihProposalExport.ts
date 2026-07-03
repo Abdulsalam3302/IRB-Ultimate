@@ -312,7 +312,9 @@ function buildAppContext(app: Application): string {
       researchType: app.researchType,
       irbCategory: app.irbCategory,
       principalInvestigator: app.principalInvestigator,
-      piEmail: app.piEmail,
+      // PII minimization (SA-16): the PI email is rendered into the DOCX
+      // directly from the DB — the LLM never needs it, so it is not sent
+      // to the third-party provider.
       piInstitution: app.piInstitution,
       piDepartment: app.piDepartment,
       fundingSource: app.fundingSource,

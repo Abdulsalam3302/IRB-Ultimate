@@ -475,6 +475,8 @@ const en: Record<string, string> = {
   "auth.invalidCredentials": "Invalid email or password.",
   "auth.rateLimited": "Too many attempts. Please wait a few minutes and try again.",
   "auth.networkError": "Network error. Please check your connection and try again.",
+  "auth.serverUnavailable":
+    "Sign-in is temporarily unavailable (API offline). Please try again shortly, or contact the platform owner.",
 
   // Declaration Phase 0
   "decl.title": "Declaration of Honesty & Consent",
@@ -916,6 +918,8 @@ const ar: Record<string, string> = {
   "auth.invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
   "auth.rateLimited": "محاولات كثيرة جدًا. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.",
   "auth.networkError": "خطأ في الشبكة. تحقق من اتصالك وحاول مرة أخرى.",
+  "auth.serverUnavailable":
+    "تسجيل الدخول غير متاح مؤقتًا (الخادم غير متصل). حاول لاحقًا أو تواصل مع مالك المنصة.",
 
   // Declaration Phase 0
   "decl.title": "إقرار الصدق والموافقة",

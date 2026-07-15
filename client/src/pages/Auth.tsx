@@ -137,8 +137,20 @@ export default function Auth() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-        toast.error(mapError(body.code, body.error ?? ""));
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string | number;
+          message?: string;
+          status?: string;
+        };
+        // Backend down / proxy 404 often returns { status, code:404, message }
+        // without our auth `code`/`error` fields — surface a clear outage hint.
+        const code = typeof body.code === "string" ? body.code : undefined;
+        if (!code && (res.status >= 500 || res.status === 404 || body.status === "error")) {
+          toast.error(t("auth.serverUnavailable"));
+          return;
+        }
+        toast.error(mapError(code, body.error || body.message || ""));
         return;
       }
       window.location.href = next;

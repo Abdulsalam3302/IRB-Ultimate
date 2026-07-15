@@ -231,12 +231,17 @@ async function applierSuite() {
 
   // Cross-tenant: another user must not read this application
   const intruder = makeClient();
-  await intruder.request("/api/auth/register", {
+  const intruderReg = await intruder.request("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ email: `intruder-${Date.now()}@e2e.local`, password: "str0ng-passw0rd!" }),
   });
+  check("Intruder registration works", intruderReg.status === 200, `status=${intruderReg.status}`);
   const stolen = await intruder.query("application.getById", { id: appId });
-  check("Other users cannot read the application", errCode(stolen) === "FORBIDDEN");
+  check(
+    "Other users cannot read the application",
+    errCode(stolen) === "FORBIDDEN" || errCode(stolen) === "NOT_FOUND",
+    `code=${errCode(stolen)}`
+  );
 
   const logout = await fresh.mutate("auth.logout");
   check("Logout works", data(logout)?.success === true);

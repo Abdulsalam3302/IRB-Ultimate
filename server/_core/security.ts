@@ -15,7 +15,8 @@ const STRICT_RATE_LIMIT = 30;
 // Hardest limit for auth surfaces — these need brute-force resistance not
 // throughput. 5/min/IP is generous for legitimate humans but kills code-
 // stuffing scripts (SA-03).
-const AUTH_RATE_LIMIT = 5;
+// Production stays tight; local/e2e needs headroom for multi-role sweeps.
+const AUTH_RATE_LIMIT = ENV.isProduction ? 5 : 60;
 const STRICT_ROUTES = [
   "/api/trpc/application.uploadFile",
   "/api/trpc/application.runStage1Review",

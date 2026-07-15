@@ -1143,10 +1143,17 @@ export async function getObservabilityMetrics() {
     .from(llmUsageDaily)
     .where(eq(llmUsageDaily.day, today));
 
+  // drizzle-orm mysql2 `execute` returns [rows, fields] — same shape as
+  // getPublicStats(). Prefer that tuple form over treating the pair as rows.
   const asRows = (raw: unknown): Record<string, unknown>[] => {
-    const r = raw as { rows?: Record<string, unknown>[]; [k: number]: Record<string, unknown> };
-    if (Array.isArray(r)) return r as unknown as Record<string, unknown>[];
+    if (Array.isArray(raw) && Array.isArray(raw[0])) {
+      return raw[0] as Record<string, unknown>[];
+    }
+    const r = raw as { rows?: Record<string, unknown>[] };
     if (Array.isArray(r?.rows)) return r.rows;
+    if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "object" && raw[0] !== null && !Array.isArray(raw[0])) {
+      return raw as Record<string, unknown>[];
+    }
     return [];
   };
 
@@ -1159,23 +1166,29 @@ export async function getObservabilityMetrics() {
     accounts24h: Number(accounts24hRow?.cnt ?? 0),
     activeUsers7d: Number(activeUsers7dRow?.cnt ?? 0),
     applicationsTotal: Number(appsTotalRow?.cnt ?? 0),
-    applicationsByStatus: asRows(statusRows).map(r => ({
-      status: String(r.status ?? ""),
-      count: Number(r.count ?? 0),
-    })),
-    topPaths: asRows(pathRows).map(r => ({
-      path: String(r.path ?? ""),
-      count: Number(r.count ?? 0),
-    })),
+    applicationsByStatus: asRows(statusRows)
+      .filter(r => r.status != null && String(r.status).length > 0)
+      .map(r => ({
+        status: String(r.status),
+        count: Number(r.count ?? 0),
+      })),
+    topPaths: asRows(pathRows)
+      .filter(r => r.path != null && String(r.path).length > 0)
+      .map(r => ({
+        path: String(r.path),
+        count: Number(r.count ?? 0),
+      })),
     geo: asRows(geoRows).map(r => ({
       country: String(r.country ?? "Unknown"),
       sessions: Number(r.sessions ?? 0),
     })),
-    visitsByDay: asRows(dayRows).map(r => ({
-      day: String(r.day ?? ""),
-      sessions: Number(r.sessions ?? 0),
-      pageviews: Number(r.pageviews ?? 0),
-    })),
+    visitsByDay: asRows(dayRows)
+      .filter(r => r.day != null && String(r.day).length > 0)
+      .map(r => ({
+        day: String(r.day),
+        sessions: Number(r.sessions ?? 0),
+        pageviews: Number(r.pageviews ?? 0),
+      })),
     llmToday: Number(llmRow?.cnt ?? 0),
   };
 }

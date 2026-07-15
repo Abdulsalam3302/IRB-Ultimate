@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://irb-ultimate-production.up.railway.app/api/:path*"
+      "destination": "https://irb-saudi-arabia.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://irb-ultimate-production.up.railway.app/uploads/:path*"
+      "destination": "https://irb-saudi-arabia.onrender.com/uploads/:path*"
     },
     {
       "source": "/((?!assets/).*)",

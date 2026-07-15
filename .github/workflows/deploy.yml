@@ -10,39 +10,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy-railway:
-    name: Railway (trigger redeploy)
+  # Render auto-deploys from Git when Blueprint/service is connected.
+  # Optional: fire Deploy Hook for explicit redeploys.
+  deploy-render:
+    name: Render (deploy hook)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Skip without Railway token
-        id: railway_skip
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
-          if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK not set — Render Git auto-deploy will pick up this push."
+            exit 0
           fi
-
-      - name: Apply Railway production env
-        if: steps.railway_skip.outputs.skip != 'true'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-        run: python3 scripts/railway-production-env.py
-
-      - name: Trigger Railway deploy
-        if: steps.railway_skip.outputs.skip != 'true'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_WEB_SERVICE_ID: ${{ vars.RAILWAY_WEB_SERVICE_ID }}
-          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          curl -sfS -X POST https://backboard.railway.com/graphql/v2 \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"mutation(\$sid: String!, \$env: String!, \$sha: String) { serviceInstanceDeployV2(serviceId: \$sid, environmentId: \$env, commitSha: \$sha) }\",\"variables\":{\"sid\":\"$RAILWAY_WEB_SERVICE_ID\",\"env\":\"$RAILWAY_ENVIRONMENT_ID\",\"sha\":\"$COMMIT_SHA\"}}"
+          curl -sfS -X POST "$RENDER_DEPLOY_HOOK"
+          echo "Render deploy hook triggered."
 
   deploy-vercel:
     name: Vercel (frontend)
@@ -70,7 +53,7 @@ jobs:
         if: steps.vercel_skip.outputs.skip != 'true'
         run: npm install -g vercel@52
 
-      - name: Sync Supabase env on Vercel
+      - name: Sync public build env on Vercel
         if: steps.vercel_skip.outputs.skip != 'true'
         continue-on-error: true
         env:
@@ -81,10 +64,10 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
           if [ -n "$VITE_SUPABASE_URL" ]; then
-            printf '%s' "$VITE_SUPABASE_URL" | vercel env add VITE_SUPABASE_URL production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
+            printf '%s' "$VITE_SUPABASE_URL" | vercel env add VITE_SUPABASE_URL production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" || true
           fi
           if [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
-            printf '%s' "$VITE_SUPABASE_ANON_KEY" | vercel env add VITE_SUPABASE_ANON_KEY production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
+            printf '%s' "$VITE_SUPABASE_ANON_KEY" | vercel env add VITE_SUPABASE_ANON_KEY production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" || true
           fi
 
       - name: Deploy production
@@ -102,4 +85,5 @@ jobs:
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
             --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" \
             --build-env "VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL" \
-            --build-env "VITE_APP_ID=$VITE_APP_ID"
+            --build-env "VITE_APP_ID=$VITE_APP_ID" \
+            --build-env "VITE_PUBLIC_DEMO_BANNER=1"

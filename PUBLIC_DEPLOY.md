@@ -1,101 +1,139 @@
-# Public deployment guide — IRB Saudi Arabia
+# Public deployment — IRB Saudi Arabia (v1.1 open beta)
 
-## Quick auto deploy (recommended)
+## Chosen stack (free + capable)
 
-### Already configured in GitHub
-These secrets are stored on `Abdulsalam3302/IRB-Ultimate`:
-- `JWT_SECRET` — production session signing
-- `PILOT_LOGIN_TOKEN` — pilot login (demo)
-- `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` — Vercel CI
+| Layer | Service | Why |
+|-------|---------|-----|
+| **API + SPA build** | [Render](https://render.com) free Web Service (Node) | Runs the Express monolith; free tier; Git auto-deploy; health checks |
+| **Frontend edge** | [Vercel](https://vercel.com) (existing) | CDN SPA; rewrites `/api/*` → Render |
+| **Database** | [TiDB Cloud](https://tidbcloud.com) Serverless (MySQL-compatible) | Free Developer Tier; TLS; works with Drizzle/MySQL |
+| **Not used** | Railway | Trial expired / paid — replaced |
 
-Add once in GitHub → Settings → Secrets:
-- `RAILWAY_TOKEN` — from [railway.app/account/tokens](https://railway.app/account/tokens)
-- `VERCEL_TOKEN` — from [vercel.com/account/tokens](https://vercel.com/account/tokens)
+> **Vercel alone is not enough** for this app: certificates/Playwright and a long-lived Express server need a real Node process. Render hosts that; Vercel fronts the SPA.
 
-Then push to `main` — `.github/workflows/deploy.yml` deploys automatically.
-
-### One-command local setup
-```bash
-chmod +x scripts/deploy-all.sh
-RAILWAY_TOKEN=xxx ./scripts/deploy-all.sh
-```
-
-### Live URLs
-
-> **Use the correct domain:** `irb-saudi-arabia.vercel.app` — **not** `ifb-saudi-arabia` (typo returns a blank 404 page).
-
-| Service | URL |
-|---------|-----|
-| **Public site (Vercel)** | https://irb-saudi-arabia.vercel.app |
-| **API backend (Railway)** | https://irb-ultimate-production.up.railway.app |
-| **Pilot admin login** | https://irb-saudi-arabia.vercel.app/api/dev/login |
-
-Vercel proxies `/api/*` and `/uploads/*` to Railway via `vercel.json` rewrites — no separate API URL needed in the browser.
+Free-tier notes:
+- Render spins down after ~15 minutes idle → first request can take ~30–60s. GitHub `keep-warm.yml` pings every 12 minutes.
+- Free Render RAM is limited; PDF certificate generation may skip (approval still works). Upgrade to Starter when you need reliable certs.
 
 ---
 
-## Important: independence & data safety
+## One-time setup (≈20 minutes)
 
-- This platform is **not** an official NBCE IRB provider. It is operated independently by **AHSS** (ahss-sa.org).
-- Set `VITE_PUBLIC_DEMO_BANNER=1` on public deploys (already set on Vercel).
-- Do **not** accept real participant PHI on non–KSA-resident hosts without PDPL/NDMO review.
+### 1. TiDB Cloud (MySQL)
 
-## Stack
+1. Create a free Serverless cluster at https://tidbcloud.com  
+2. Create a database named `irb_platform`  
+3. Copy the connection string (include SSL), e.g.  
+   `mysql://user:pass@gateway01….tidbcloud.com:4000/irb_platform?ssl=true`
 
-| Layer | Technology |
-|-------|------------|
-| App | Node.js + Express + tRPC monolith |
-| Frontend | Vite + React → `dist/public` |
-| Database | **MySQL 8** (Drizzle) — use Railway MySQL |
-| PDF | Playwright (Docker image included) |
+### 2. Render Web Service
 
-**Supabase:** You have a Supabase project, but this codebase uses **MySQL/Drizzle**. Postgres migration is a separate project. Use **Railway MySQL** for immediate full functionality.
+**Option A — Blueprint (recommended)**  
+1. https://dashboard.render.com/select-repo?type=blueprint  
+2. Select `Abdulsalam3302/IRB-Ultimate` → apply [`render.yaml`](render.yaml)  
+3. Service name: `irb-saudi-arabia` → URL becomes  
+   `https://irb-saudi-arabia.onrender.com`
 
-## Railway (full stack)
+**Option B — Manual**  
+- New → Web Service → this repo  
+- Runtime: Node  
+- Build: `corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install --frozen-lockfile && pnpm run build`  
+- Start: `node dist/index.js`  
+- Health: `/api/health`  
+- Plan: Free  
 
-1. [railway.app/new](https://railway.app/new) → Deploy from GitHub → `IRB-Ultimate`
-2. Add **MySQL** service → link `DATABASE_URL` to the web service
-3. Set variables on the web service:
+**Environment variables on Render:**
 
 ```
 NODE_ENV=production
-JWT_SECRET=<from GitHub secret JWT_SECRET>
+PORT=10000
+DATABASE_URL=<tidb url with ssl>
+JWT_SECRET=<openssl rand -hex 48>
+OWNER_EMAIL=<your real email — first register becomes admin>
 VITE_APP_ID=irb-sa-prod
-OWNER_OPEN_ID=dev-owner-001
-PILOT_LOGIN_ENABLED=1
-PILOT_LOGIN_TOKEN=<from GitHub secret PILOT_LOGIN_TOKEN>
 VITE_PUBLIC_DEMO_BANNER=1
-ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://YOUR-SERVICE.up.railway.app
+PUBLIC_APP_URL=https://irb-saudi-arabia.vercel.app
+VITE_PUBLIC_SITE_URL=https://irb-saudi-arabia.vercel.app
+ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://irb-saudi-arabia.onrender.com
 ```
 
-4. Dockerfile + `railway.toml` handle build (Playwright included).
-5. Migrations run automatically on boot (`server/migrate.ts`).
-6. Health: `GET /api/health`
-7. Pilot login: `GET /api/dev/login` — visitors must PASTE the pilot token
-   (it is **never** embedded in the page). Distribute `PILOT_LOGIN_TOKEN`
-   out of band; it must be ≥ 32 chars or pilot sign-in stays disabled.
-   For real public use, configure Supabase Auth or native email/password
-   instead — the old open `PUBLIC_SIGNIN_ENABLED` mode has been removed.
+Optional (if using Supabase social login):
+```
+SUPABASE_URL=...
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
 
-## Vercel (frontend)
+Migrations run automatically on boot (`server/migrate.ts`).
 
-- Project: `irb-saudi-arabia` (linked to GitHub)
-- Env vars set: `VITE_PUBLIC_DEMO_BANNER=1`, `VITE_APP_ID`, `VITE_PUBLIC_SITE_URL`
-- Rebuild after env changes: `vercel deploy --prod`
-
-## Security checklist
-
-- [x] `JWT_SECRET` generated (GitHub secret)
-- [x] `PILOT_LOGIN_TOKEN` generated (GitHub secret)
-- [ ] `RAILWAY_TOKEN` added to GitHub
-- [ ] `DEV_LOGIN_ENABLED` unset in production
-- [ ] `ALLOWED_ORIGINS` includes Vercel + Railway URLs
-- [ ] OAuth configured when moving beyond pilot
-
-## Verify
+### 3. Point Vercel at Render
 
 ```bash
-curl -s https://YOUR-RAILWAY-HOST/api/health | jq
+node scripts/update-vercel-rewrites.mjs https://irb-saudi-arabia.onrender.com
+git add vercel.json && git commit -m "Point Vercel API rewrites at Render" && git push
 ```
 
-Open `/` — confirm platform independence notice and demo banner.
+Or set rewrites in the Vercel dashboard to the same destinations.
+
+Fix GitHub secret `VERCEL_TOKEN` if CI deploy fails (current token was invalid).
+
+### 4. Verify
+
+```bash
+curl -sS https://irb-saudi-arabia.onrender.com/api/health
+curl -sS https://irb-saudi-arabia.vercel.app/api/health
+```
+
+Both should return healthy JSON (Vercel proxies to Render).
+
+### 5. Create owner admin
+
+1. Open https://irb-saudi-arabia.vercel.app/disclaimer → acknowledge  
+2. Register at `/auth` with **exactly** `OWNER_EMAIL`  
+3. Password ≥ 12 characters  
+4. Open https://irb-saudi-arabia.vercel.app/admin/observability  
+
+---
+
+## GitHub secrets / vars
+
+| Name | Purpose |
+|------|---------|
+| `RENDER_DEPLOY_HOOK` | Optional — Render → Settings → Deploy Hook |
+| `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | Frontend CI deploy |
+| `JWT_SECRET` | Prefer setting on Render dashboard (not only GitHub) |
+| var `RENDER_URL` | Keep-warm + docs (`https://….onrender.com`) |
+
+Railway secrets/vars can be removed.
+
+---
+
+## Local helper
+
+```bash
+chmod +x scripts/deploy-render.sh
+RENDER_URL=https://irb-saudi-arabia.onrender.com ./scripts/deploy-render.sh
+```
+
+---
+
+## Security checklist (public beta)
+
+- [ ] Strong `JWT_SECRET` (≥ 32 chars) on Render  
+- [ ] `ALLOWED_ORIGINS` lists Vercel + Render URLs only  
+- [ ] `OWNER_EMAIL` is your address; register that account first  
+- [ ] `DEV_LOGIN_ENABLED` unset; `PILOT_LOGIN_ENABLED=0` for real public use  
+- [ ] TiDB TLS enabled (`ssl=true` in URL)  
+- [ ] No real PHI until KSA-resident hosting + PDPL review  
+- [ ] Health green on both Render and Vercel proxy  
+
+---
+
+## URLs
+
+| Surface | URL |
+|---------|-----|
+| Public site | https://irb-saudi-arabia.vercel.app |
+| API (Render) | https://irb-saudi-arabia.onrender.com |
+| Health | `/api/health` |
+| Observability | `/admin/observability` (owner only) |

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Merge API rewrites into vercel.json so Vercel proxies /api/* to Railway.
- * Usage: node scripts/update-vercel-rewrites.mjs https://your-app.up.railway.app
+ * Point Vercel SPA rewrites at the Render API origin.
+ * Usage: node scripts/update-vercel-rewrites.mjs https://irb-saudi-arabia.onrender.com
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,24 +13,36 @@ const vercelPath = path.join(root, "vercel.json");
 
 const rawUrl = process.argv[2];
 if (!rawUrl) {
-  console.error("Usage: node scripts/update-vercel-rewrites.mjs <RAILWAY_API_URL>");
+  console.error("Usage: node scripts/update-vercel-rewrites.mjs <RENDER_API_URL>");
   process.exit(1);
 }
 
 const base = rawUrl.replace(/\/$/, "");
+let existing = {};
+try {
+  existing = JSON.parse(fs.readFileSync(vercelPath, "utf8"));
+} catch {
+  /* fresh */
+}
+
 const config = {
-  experimentalServices: {
-    web: {
-      routePrefix: "/",
-      framework: "vite",
-      buildCommand: "npm run build",
-    },
-  },
+  ...existing,
+  installCommand: existing.installCommand ?? "pnpm install --frozen-lockfile",
+  buildCommand: existing.buildCommand ?? "pnpm run build",
+  outputDirectory: existing.outputDirectory ?? "dist/public",
   rewrites: [
     { source: "/api/:path*", destination: `${base}/api/:path*` },
     { source: "/uploads/:path*", destination: `${base}/uploads/:path*` },
+    {
+      source: "/((?!assets/).*)",
+      destination: "/index.html",
+    },
+  ],
+  redirects: existing.redirects ?? [
+    { source: "/sign-in", destination: "/auth", permanent: false },
+    { source: "/login", destination: "/auth", permanent: false },
   ],
 };
 
 fs.writeFileSync(vercelPath, JSON.stringify(config, null, 2) + "\n");
-console.log(`Updated ${vercelPath} → ${base}`);
+console.log(`Updated ${vercelPath} → API origin ${base}`);

@@ -104,9 +104,11 @@ Before exposing a public instance:
 
 ### Open-beta operator checklist (additions)
 
-1. Run migration `0014_analytics_observability`
-2. Confirm `OWNER_OPEN_ID` / `OWNER_EMAIL` point at your account
-3. Set `ALLOWED_ORIGINS` and `ALLOWED_EGRESS_HOSTS` for production
-4. Remind beta testers: no real PHI until a later production hardening pass
+1. Host API on **Render** (not Railway); SPA on Vercel — see `PUBLIC_DEPLOY.md`
+2. Use TiDB Cloud Serverless (or other TLS MySQL) for `DATABASE_URL`
+3. Confirm migrations apply on boot (`0014_analytics_observability` included)
+4. Confirm `OWNER_EMAIL` / `OWNER_OPEN_ID` point at your account
+5. Set `ALLOWED_ORIGINS` to Vercel + Render URLs only
+6. Remind beta testers: no real PHI until KSA-resident hosting + PDPL review
 
 See `README.md` and `DEPLOY.md` for the full hardening guide.

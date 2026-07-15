@@ -186,6 +186,13 @@ A non-exhaustive checklist before exposing this publicly:
 - Open beta: first-visit disclaimer gate; owner-only observability at
   `/admin/observability`.
 
+### Public hosting (v1.1+)
+
+- **API:** Render free Web Service (`render.yaml`) — replaces Railway  
+- **SPA edge:** Vercel (rewrites `/api/*` → Render)  
+- **DB:** TiDB Cloud Serverless (MySQL-compatible) or any TLS MySQL  
+- Full steps: [`PUBLIC_DEPLOY.md`](PUBLIC_DEPLOY.md)
+
 ---
 
 ## Testing

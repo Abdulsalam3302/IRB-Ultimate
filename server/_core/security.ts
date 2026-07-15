@@ -46,7 +46,7 @@ const AUTH_ROUTES = [
 /**
  * Best-effort real client IP for rate-limit bucket keys.
  *
- * Behind the split deploy (browser → Vercel rewrite → Railway edge → app),
+ * Behind the split deploy (browser → Vercel rewrite → Render → app),
  * `req.ip` with trust proxy=1 resolves to Vercel's egress IP — shared by
  * every visitor — so one busy hour of legitimate users would exhaust a
  * single bucket and 429 everyone at once. The leftmost X-Forwarded-For

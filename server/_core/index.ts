@@ -77,7 +77,12 @@ async function startServer() {
     res.json({
       ok: true,
       ts: Date.now(),
-      version: process.env.RELEASE || process.env.RAILWAY_GIT_COMMIT_SHA || "dev",
+      version:
+        process.env.RELEASE ||
+        process.env.RENDER_GIT_COMMIT ||
+        process.env.RAILWAY_GIT_COMMIT_SHA ||
+        "dev",
+      host: process.env.RENDER ? "render" : process.env.RAILWAY_ENVIRONMENT ? "railway" : "local",
     });
   });
   // CORS + Origin allowlist for state-changing /api/* calls (SA-01, SA-20).

@@ -1,64 +1,16 @@
-name: Finish Railway deploy
+# RETIRED — Railway trial ended. Public hosting is Render + Vercel (see PUBLIC_DEPLOY.md).
+# Kept as manual-only for emergency rollback; do not run on push.
+name: Finish Railway deploy (retired)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/railway-finish.yml"
-      - "scripts/railway-finish.sh"
 
 jobs:
   finish:
     name: Configure Railway + wire Vercel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Skip without Railway token
-        id: skip
+      - name: Retired
         run: |
-          if [ -z "${{ secrets.RAILWAY_TOKEN }}" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "RAILWAY_TOKEN not set — add at https://railway.com/account/tokens"
-          fi
-
-      - name: Finish Railway setup
-        if: steps.skip.outputs.skip != 'true'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          PILOT_LOGIN_TOKEN: ${{ secrets.PILOT_LOGIN_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          chmod +x scripts/railway-finish.sh
-          ./scripts/railway-finish.sh
-
-      - name: Commit vercel.json rewrites
-        if: steps.skip.outputs.skip != 'true'
-        run: |
-          if git diff --quiet vercel.json; then
-            echo "No vercel.json changes"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add vercel.json
-          git commit -m "Wire Vercel rewrites to Railway API."
-          git push
-
-      - name: Deploy Vercel
-        if: steps.skip.outputs.skip != 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "VERCEL_TOKEN not set — skipping Vercel deploy"
-            exit 0
-          fi
-          npx vercel@52 deploy --prod --token="$VERCEL_TOKEN"
+          echo "Railway deploy is retired. Use Render Blueprint (render.yaml) + PUBLIC_DEPLOY.md."
+          exit 1

@@ -1,0 +1,59 @@
+# Render Blueprint — IRB Saudi Arabia (free-tier friendly)
+# https://dashboard.render.com/blueprints
+#
+# Architecture:
+#   - Web service: Node monolith (API + built SPA)
+#   - Database: external MySQL-compatible (TiDB Cloud Serverless free tier)
+#
+# After first deploy, set secrets in the Render dashboard (sync: false below).
+
+services:
+  - type: web
+    name: irb-saudi-arabia
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/health
+    buildCommand: corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install --frozen-lockfile && pnpm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: VITE_APP_ID
+        value: irb-sa-prod
+      - key: VITE_PUBLIC_DEMO_BANNER
+        value: "1"
+      - key: DATABASE_POOL_MAX
+        value: "10"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_OPEN_ID
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: VITE_PUBLIC_SITE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: LLM_API_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: PILOT_LOGIN_ENABLED
+        value: "0"

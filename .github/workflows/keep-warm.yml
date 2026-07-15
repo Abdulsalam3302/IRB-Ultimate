@@ -1,0 +1,30 @@
+# Ping the Render free tier so cold-starts stay rare during open beta.
+name: Keep warm (Render)
+
+on:
+  schedule:
+    - cron: "*/12 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health ping
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL }}
+          PUBLIC_URL: ${{ vars.PUBLIC_SITE_URL }}
+        run: |
+          RENDER_URL="${RENDER_URL:-https://irb-saudi-arabia.onrender.com}"
+          PUBLIC_URL="${PUBLIC_URL:-https://irb-saudi-arabia.vercel.app}"
+          for url in "$RENDER_URL/api/health" "$PUBLIC_URL/api/health"; do
+            echo "GET $url"
+            code=$(curl -sS -o /tmp/health.json -w "%{http_code}" --max-time 90 "$url" || echo "000")
+            echo "status=$code"
+            head -c 400 /tmp/health.json || true
+            echo
+            # Keep-warm should not fail the workflow on cold start blips.
+            if [ "$code" != "200" ]; then
+              echo "::warning::Health check returned $code for $url"
+            fi
+          done

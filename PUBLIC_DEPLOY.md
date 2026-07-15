@@ -161,3 +161,19 @@ RENDER_URL=https://irb-saudi-arabia.onrender.com ./scripts/deploy-render.sh
 | API (Render) | https://irb-saudi-arabia.onrender.com |
 | Health | `/api/health` |
 | Observability | `/admin/observability` (owner only) |
+
+## Live stack (as of 2026-07-15)
+
+| Layer | Status |
+|-------|--------|
+| Render `irb-saudi-arabia` (Frankfurt, free) | Live — auto-deploy from `main` |
+| TiDB Serverless `irb-saudi-arabia` (eu-central-1) | Active — DB `irb_platform`, TLS |
+| Vercel SPA + `/api` rewrite → Render | Live |
+| Keep-warm GitHub Action | Every 12 minutes |
+| Owner bootstrap | Register with `OWNER_EMAIL` (= Render account email) first |
+
+**Ops notes**
+- Migrations use `CREATE INDEX IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` (TiDB cannot run MySQL stored procedures).
+- Render build uses `npm i -g pnpm@10.4.1` (not `corepack enable` — EROFS on free images).
+- Pin Node `20.x` via `engines` + `.node-version`.
+- `DATABASE_POOL_MAX=5` for TiDB Serverless.

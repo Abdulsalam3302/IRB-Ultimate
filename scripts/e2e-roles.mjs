@@ -326,7 +326,10 @@ async function adminSuite(ownerClient, appId) {
 
   // Final decision — approve, mint IRB number + certificate
   const decision = await c.mutate("admin.finalDecision", {
-    applicationId: appId, decision: "approved", notes: "E2E approval.",
+    applicationId: appId,
+    decision: "approved",
+    notes: "E2E approval.",
+    confirm: `DECIDE-${appId}`,
   });
   const irbNumber = data(decision)?.irbNumber;
   check("Admin final approval mints IRB number", typeof irbNumber === "string" && irbNumber.length >= 6, JSON.stringify(data(decision) ?? errCode(decision)));

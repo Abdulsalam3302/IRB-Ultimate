@@ -35,6 +35,11 @@ export default function AdminObservability() {
     enabled: isOwner,
     refetchInterval: 60_000,
   });
+  const { data: aiStatus, refetch: refetchAi } = trpc.system.aiStatus.useQuery(undefined, {
+    enabled: isOwner,
+    staleTime: 30_000,
+    retry: false,
+  });
 
   if (!isAuthenticated || user?.role !== "admin") {
     return (
@@ -118,6 +123,60 @@ export default function AdminObservability() {
             </CardContent>
           </Card>
         )}
+
+        <Card className={aiStatus?.ok ? "border-emerald-500/40" : "border-amber-500/40"}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bot className="h-4 w-4" />
+              {isAr ? "حالة الذكاء الاصطناعي" : "AI generation status"}
+            </CardTitle>
+            <CardDescription>
+              {isAr
+                ? "فحص مباشر لمزوّد النموذج (Stage 1/2، التحسين، السرب)"
+                : "Live probe of the LLM provider (Stage 1/2, enhance, swarm)"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {!aiStatus ? (
+              <p className="text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {isAr ? "جارٍ الفحص…" : "Checking…"}
+              </p>
+            ) : (
+              <>
+                <p className={aiStatus.ok ? "text-emerald-700 dark:text-emerald-400 font-medium" : "text-amber-700 dark:text-amber-400 font-medium"}>
+                  {aiStatus.ok
+                    ? (isAr ? "يعمل — جاهز للتوليد" : "OK — generation ready")
+                    : (isAr ? "غير متاح" : "Unavailable")}
+                </p>
+                <p className="font-mono text-[12px] text-muted-foreground">
+                  {[aiStatus.provider, aiStatus.model, aiStatus.baseUrl].filter(Boolean).join(" · ") || "—"}
+                </p>
+                {"error" in aiStatus && aiStatus.error && (
+                  <p className="text-destructive text-[13px]">{aiStatus.error}</p>
+                )}
+                {"sample" in aiStatus && aiStatus.sample && (
+                  <p className="font-mono text-[11px] text-muted-foreground">sample: {aiStatus.sample}</p>
+                )}
+                {aiStatus.budget && (
+                  <p className="text-muted-foreground text-[12px]">
+                    {isAr ? "ميزانية اليوم:" : "Today's budget:"}{" "}
+                    {aiStatus.budget.userUsed}/{aiStatus.budget.userLimit} (you) ·{" "}
+                    {aiStatus.budget.globalUsed}/{aiStatus.budget.globalLimit} (global)
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-1"
+                  onClick={() => { void refetchAi(); }}
+                >
+                  {isAr ? "إعادة الفحص" : "Re-probe"}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {isLoading || !data ? (
           <div className="flex justify-center py-20">

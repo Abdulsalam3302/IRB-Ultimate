@@ -478,6 +478,15 @@ describe("AI Review module", () => {
     expect(typeof runStage1AiReview).toBe("function");
     expect(typeof runStage2AiReview).toBe("function");
   });
+
+  it("describeAiOutage maps quota, key, timeout, and config failures", async () => {
+    const { describeAiOutage } = await import("./aiReview");
+    expect(describeAiOutage(new Error("LLM_API_KEY is not configured"))).toMatch(/not configured/i);
+    expect(describeAiOutage(new Error("request timed out after 60s"))).toMatch(/timed out/i);
+    expect(describeAiOutage(new Error("429 Token Plan usage limit reached"))).toMatch(/quota|credits/i);
+    expect(describeAiOutage(new Error("401 invalid api key"))).toMatch(/API key/i);
+    expect(describeAiOutage(new Error("ECONNRESET"))).toMatch(/temporarily unavailable/i);
+  });
 });
 
 // ─── Certificate Module Tests ──────────────────────────────────────────────

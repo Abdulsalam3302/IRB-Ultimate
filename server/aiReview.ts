@@ -500,11 +500,7 @@ REMEMBER:
     // outage, but FLAG it as service-unavailable so the UI can show a
     // clear "AI temporarily unavailable" banner rather than a silent
     // 75/passed=true that masks a real failure.
-    const reason = (error as any)?.message?.includes("not configured")
-      ? "AI is not configured on the server (LLM_API_KEY is missing). Please ask the platform administrator to set it."
-      : (error as any)?.message?.includes("timed out")
-      ? "AI review timed out. Please try again in a moment."
-      : "AI review service is temporarily unavailable. You can save your draft and re-run the review later.";
+    const reason = describeAiOutage(error);
     return {
       score: 0,
       passed: false,
@@ -514,6 +510,24 @@ REMEMBER:
       hasRedFlags: false,
     };
   }
+}
+
+/** Map LLM transport failures to applicant-safe, actionable copy. */
+export function describeAiOutage(error: unknown): string {
+  const msg = String((error as { message?: string })?.message ?? error ?? "");
+  if (/not configured|LLM_API_KEY/i.test(msg)) {
+    return "AI is not configured on the server (LLM_API_KEY is missing). Please ask the platform administrator to set it.";
+  }
+  if (/timed out/i.test(msg)) {
+    return "AI review timed out. Please try again in a moment.";
+  }
+  if (/429|rate_limit|usage limit|Token Plan|quota|insufficient.?credit/i.test(msg)) {
+    return "AI provider quota/credits are exhausted. The platform owner must top up the LLM plan (or set a new LLM_API_KEY) before AI generation works again.";
+  }
+  if (/401|403|invalid.?api.?key|unauthorized/i.test(msg)) {
+    return "AI provider rejected the API key. The platform owner must update LLM_API_KEY.";
+  }
+  return "AI review service is temporarily unavailable. You can save your draft and re-run the review later.";
 }
 
 // ─── STAGE 2 AI REVIEW — Detailed Ethics & Protocol Review ────────────────
@@ -773,11 +787,7 @@ ${literatureContext}${fenceUserData("APPLICATION DATA", data)}`;
     );
   } catch (error) {
     console.error("[AI Review] Stage 2 error:", error);
-    const reason = (error as any)?.message?.includes("not configured")
-      ? "AI is not configured on the server (LLM_API_KEY is missing). Please ask the platform administrator to set it."
-      : (error as any)?.message?.includes("timed out")
-      ? "AI review timed out. Please try again in a moment."
-      : "AI review service is temporarily unavailable. You can save your draft and re-run the review later.";
+    const reason = describeAiOutage(error);
     return {
       score: 0,
       passed: false,
@@ -985,12 +995,7 @@ ${ETHICS_SAFEGUARDS}`;
     console.error("[AI AutoComplete] Error:", error);
     // Sentinel marker the UI uses to render an outage banner instead of
     // an empty diff modal that looks like "no changes suggested".
-    const reason = (error as any)?.message?.includes("not configured")
-      ? "AI is not configured on the server (LLM_API_KEY is missing). Please ask the platform administrator to set it."
-      : (error as any)?.message?.includes("timed out")
-      ? "AI auto-complete timed out. The model is busy — please try again in a moment."
-      : "AI auto-complete service is temporarily unavailable.";
-    return { __ai_unavailable: reason };
+    return { __ai_unavailable: describeAiOutage(error) };
   }
 }
 

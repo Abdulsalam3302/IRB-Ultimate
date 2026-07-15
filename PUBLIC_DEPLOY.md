@@ -64,6 +64,30 @@ VITE_SUPABASE_URL=...
 VITE_SUPABASE_ANON_KEY=...
 ```
 
+**AI generation (required for Stage 1/2 review, enhance, auto-complete, swarm):**
+```
+LLM_API_URL=https://api.minimax.io
+LLM_API_KEY=<your key with remaining credits>
+LLM_MODEL=MiniMax-M2
+LLM_PROVIDER=openai
+LLM_MAX_TOKENS=24576
+```
+Or OpenAI-compatible:
+```
+LLM_API_URL=https://api.openai.com
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
+LLM_PROVIDER=openai
+```
+Without a working key/credits, AI endpoints return `[AI_UNAVAILABLE]` (applications can still proceed via proceed-despite).
+
+Verify after login as owner:
+```
+PORT=3010 node scripts/check-ai.mjs
+# or against production once Render is live:
+BASE_URL=https://irb-saudi-arabia.onrender.com OWNER_EMAIL=... OWNER_PASSWORD=... node scripts/check-ai.mjs
+```
+
 Migrations run automatically on boot (`server/migrate.ts`).
 
 ### 3. Point Vercel at Render

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { notifyOwner } from "./notification";
-import { adminProcedure, publicProcedure, router } from "./trpc";
+import { adminProcedure, ownerProcedure, publicProcedure, router } from "./trpc";
+import { ENV } from "./env";
+import { invokeLLM } from "./llm";
+import { describeAiOutage } from "../aiReview";
+import { inspectLlmBudget } from "./budget";
 
 export const systemRouter = router({
   health: publicProcedure
@@ -12,6 +16,50 @@ export const systemRouter = router({
     .query(() => ({
       ok: true,
     })),
+
+  /** Owner-only AI provider probe — does not leak the API key. */
+  aiStatus: ownerProcedure.query(async ({ ctx }) => {
+    const configured = Boolean(ENV.llmApiKey && ENV.llmApiUrl);
+    const budget = await inspectLlmBudget(ctx.user.id).catch(() => null);
+    if (!configured) {
+      return {
+        configured: false,
+        ok: false,
+        provider: ENV.llmProvider,
+        model: ENV.llmModel,
+        baseUrl: ENV.llmApiUrl || null,
+        error: "LLM_API_KEY / LLM_API_URL not set",
+        budget,
+      } as const;
+    }
+    try {
+      const result = await invokeLLM({
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        maxTokens: 16,
+      });
+      const content = result.choices?.[0]?.message?.content;
+      const text = typeof content === "string" ? content : "";
+      return {
+        configured: true,
+        ok: /OK/i.test(text) || text.trim().length > 0,
+        provider: ENV.llmProvider,
+        model: ENV.llmModel,
+        baseUrl: ENV.llmApiUrl,
+        sample: text.slice(0, 80),
+        budget,
+      } as const;
+    } catch (err) {
+      return {
+        configured: true,
+        ok: false,
+        provider: ENV.llmProvider,
+        model: ENV.llmModel,
+        baseUrl: ENV.llmApiUrl,
+        error: describeAiOutage(err),
+        budget,
+      } as const;
+    }
+  }),
 
   notifyOwner: adminProcedure
     .input(

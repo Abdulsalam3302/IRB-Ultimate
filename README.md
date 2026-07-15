@@ -161,9 +161,8 @@ A non-exhaustive checklist before exposing this publicly:
 2. **Replace dev login** — set `OAUTH_SERVER_URL` and `VITE_OAUTH_PORTAL_URL`.
    Dev login auto-disables when `NODE_ENV=production` *or* `OAUTH_SERVER_URL` is
    set, but verify in your deploy.
-3. **TLS only** — terminate HTTPS at your load balancer. With the
-   `SameSite=None; Secure` cookie path enabled, browsers will reject session
-   cookies over plain HTTP.
+3. **TLS only** — terminate HTTPS at your load balancer. Session cookies use
+   `SameSite=Lax` (+ `Secure` when the request is HTTPS).
 4. **DB:** point `DATABASE_URL` at a managed MySQL (RDS, PlanetScale, etc.).
    Run `pnpm db:push` once on deploy.
 5. **AI provider:** configure `BUILT_IN_FORGE_API_URL` + `BUILT_IN_FORGE_API_KEY`.
@@ -178,12 +177,14 @@ A non-exhaustive checklist before exposing this publicly:
 
 - Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
   `Permissions-Policy`, HSTS in prod) — `server/_core/security.ts`.
-- Naive in-memory IP rate-limit on `/api/*` (120 req/min). Swap for Redis-backed
-  middleware once you scale beyond one node.
+- In-memory IP rate-limit on `/api/*` (200 req/min general, 30/min strict,
+  5/min auth). Process-local — use Redis when running multiple nodes.
+- Session JWT/cookie TTL: **14 days** (`SESSION_TTL_MS`).
 - Error handler that hides stack traces in production.
 - Health probe at `GET /api/health` for load balancers.
-- Cookies `httpOnly`, `Secure` over HTTPS, `SameSite=Lax` over HTTP (so local dev
-  works), `SameSite=None` cross-site over HTTPS.
+- Cookies `httpOnly`, `Secure` over HTTPS, `SameSite=Lax`.
+- Open beta: first-visit disclaimer gate; owner-only observability at
+  `/admin/observability`.
 
 ---
 

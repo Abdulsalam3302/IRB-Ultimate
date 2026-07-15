@@ -14,6 +14,7 @@ import {
   amendments, InsertAmendment,
   aiSwarmReviews, InsertAiSwarmReview,
   notifications,
+  analyticsSessions, analyticsEvents, llmUsageDaily,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
@@ -1020,4 +1021,161 @@ export async function getAiSwarmReviewsByApplication(applicationId: number) {
     .where(eq(aiSwarmReviews.applicationId, applicationId))
     .orderBy(desc(aiSwarmReviews.createdAt), aiSwarmReviews.panel)
     .limit(100);
+}
+
+// ─── First-party analytics (owner observability) ─────────────────────────
+
+export async function ingestAnalyticsEvent(input: {
+  sessionId: string;
+  path: string;
+  eventType: "pageview" | "heartbeat" | "leave";
+  dwellMs: number;
+  userId?: number | null;
+  ipHash?: string | null;
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+  uaClass?: string | null;
+}) {
+  const dbi = await getDb();
+  if (!dbi) return { ok: false as const };
+  const now = new Date();
+  const dwell = Math.max(0, Math.min(input.dwellMs || 0, 120_000));
+  const pageInc = input.eventType === "pageview" ? 1 : 0;
+
+  await dbi.insert(analyticsSessions).values({
+    sessionId: input.sessionId,
+    userId: input.userId ?? null,
+    ipHash: input.ipHash ?? null,
+    country: input.country ?? null,
+    region: input.region ?? null,
+    city: input.city ?? null,
+    uaClass: input.uaClass ?? null,
+    startedAt: now,
+    lastSeenAt: now,
+    pageviews: pageInc,
+    dwellMs: dwell,
+  }).onDuplicateKeyUpdate({
+    set: {
+      lastSeenAt: now,
+      pageviews: sql`${analyticsSessions.pageviews} + ${pageInc}`,
+      dwellMs: sql`${analyticsSessions.dwellMs} + ${dwell}`,
+      ...(input.userId != null ? { userId: input.userId } : {}),
+      ...(input.country ? { country: input.country } : {}),
+      ...(input.region ? { region: input.region } : {}),
+      ...(input.city ? { city: input.city } : {}),
+    },
+  });
+
+  await dbi.insert(analyticsEvents).values({
+    sessionId: input.sessionId,
+    path: input.path,
+    eventType: input.eventType,
+    dwellMs: dwell,
+    createdAt: now,
+  });
+
+  return { ok: true as const };
+}
+
+export async function getObservabilityMetrics() {
+  const dbi = await getDb();
+  if (!dbi) {
+    return {
+      sessions: 0,
+      pageviews: 0,
+      avgDwellMs: 0,
+      accountsTotal: 0,
+      accounts7d: 0,
+      accounts24h: 0,
+      activeUsers7d: 0,
+      applicationsTotal: 0,
+      applicationsByStatus: [] as { status: string; count: number }[],
+      topPaths: [] as { path: string; count: number }[],
+      geo: [] as { country: string; sessions: number }[],
+      visitsByDay: [] as { day: string; sessions: number; pageviews: number }[],
+      llmToday: 0,
+    };
+  }
+
+  const [sessionAgg] = await dbi.select({
+    sessions: count(),
+    pageviews: sql<number>`COALESCE(SUM(${analyticsSessions.pageviews}), 0)`,
+    avgDwellMs: sql<number>`COALESCE(AVG(${analyticsSessions.dwellMs}), 0)`,
+  }).from(analyticsSessions);
+
+  const accountsTotal = await getUserCount();
+  const [accounts7dRow] = await dbi.select({ cnt: count() }).from(users)
+    .where(sql`${users.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`);
+  const [accounts24hRow] = await dbi.select({ cnt: count() }).from(users)
+    .where(sql`${users.createdAt} >= DATE_SUB(NOW(), INTERVAL 1 DAY)`);
+  const [activeUsers7dRow] = await dbi.select({ cnt: count() }).from(users)
+    .where(sql`${users.lastSignedIn} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`);
+
+  const [appsTotalRow] = await dbi.select({ cnt: count() }).from(applications)
+    .where(ne(applications.status, "draft"));
+  const statusRows = await dbi.execute(sql`
+    SELECT status, COUNT(*) as count FROM applications
+    WHERE status != 'draft'
+    GROUP BY status ORDER BY count DESC
+  `);
+  const pathRows = await dbi.execute(sql`
+    SELECT path, COUNT(*) as count FROM analytics_events
+    WHERE eventType = 'pageview' AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    GROUP BY path ORDER BY count DESC LIMIT 15
+  `);
+  const geoRows = await dbi.execute(sql`
+    SELECT COALESCE(country, 'Unknown') as country, COUNT(*) as sessions
+    FROM analytics_sessions
+    GROUP BY country ORDER BY sessions DESC LIMIT 20
+  `);
+  const dayRows = await dbi.execute(sql`
+    SELECT DATE_FORMAT(startedAt, '%Y-%m-%d') as day,
+      COUNT(*) as sessions,
+      COALESCE(SUM(pageviews), 0) as pageviews
+    FROM analytics_sessions
+    WHERE startedAt >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+    GROUP BY day ORDER BY day ASC
+  `);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [llmRow] = await dbi.select({ cnt: sql<number>`COALESCE(SUM(${llmUsageDaily.count}), 0)` })
+    .from(llmUsageDaily)
+    .where(eq(llmUsageDaily.day, today));
+
+  const asRows = (raw: unknown): Record<string, unknown>[] => {
+    const r = raw as { rows?: Record<string, unknown>[]; [k: number]: Record<string, unknown> };
+    if (Array.isArray(r)) return r as unknown as Record<string, unknown>[];
+    if (Array.isArray(r?.rows)) return r.rows;
+    return [];
+  };
+
+  return {
+    sessions: Number(sessionAgg?.sessions ?? 0),
+    pageviews: Number(sessionAgg?.pageviews ?? 0),
+    avgDwellMs: Math.round(Number(sessionAgg?.avgDwellMs ?? 0)),
+    accountsTotal,
+    accounts7d: Number(accounts7dRow?.cnt ?? 0),
+    accounts24h: Number(accounts24hRow?.cnt ?? 0),
+    activeUsers7d: Number(activeUsers7dRow?.cnt ?? 0),
+    applicationsTotal: Number(appsTotalRow?.cnt ?? 0),
+    applicationsByStatus: asRows(statusRows).map(r => ({
+      status: String(r.status ?? ""),
+      count: Number(r.count ?? 0),
+    })),
+    topPaths: asRows(pathRows).map(r => ({
+      path: String(r.path ?? ""),
+      count: Number(r.count ?? 0),
+    })),
+    geo: asRows(geoRows).map(r => ({
+      country: String(r.country ?? "Unknown"),
+      sessions: Number(r.sessions ?? 0),
+    })),
+    visitsByDay: asRows(dayRows).map(r => ({
+      day: String(r.day ?? ""),
+      sessions: Number(r.sessions ?? 0),
+      pageviews: Number(r.pageviews ?? 0),
+    })),
+    llmToday: Number(llmRow?.cnt ?? 0),
+  };
 }

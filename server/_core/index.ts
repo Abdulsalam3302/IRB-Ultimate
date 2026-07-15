@@ -120,6 +120,17 @@ async function startServer() {
         if (RENDERABLE_BLOCKLIST.test(req.path)) {
           res.status(415).type("text/plain").send("unsupported"); return;
         }
+        const segs = req.path.replace(/^\/+/, "").split("/");
+        // Public redacted IRB certificates are stored under certificates/ —
+        // allow short-lived anonymous download after verify.certificateDownload.
+        if (segs[0] === "certificates") {
+          res.setHeader("Content-Disposition", segs.join("/").endsWith(".pdf") ? "inline" : "attachment");
+          res.setHeader("X-Content-Type-Options", "nosniff");
+          res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+          res.setHeader("Cache-Control", "private, max-age=300");
+          next();
+          return;
+        }
         const user = await sdk.authenticateRequest(req).catch(() => null);
         if (!user) {
           res.status(401).type("text/plain").send("authentication required"); return;
@@ -128,7 +139,6 @@ async function startServer() {
         // routers.ts uploadFile). Admin can read everything; uploader
         // can read their own. Everyone else must have the file row
         // attached to an application they're permitted to view.
-        const segs = req.path.replace(/^\/+/, "").split("/");
         const uploaderIdRaw = segs[0] ?? "";
         const uploaderId = Number.parseInt(uploaderIdRaw, 10);
         if (user.role === "admin" || (Number.isFinite(uploaderId) && uploaderId === user.id)) {

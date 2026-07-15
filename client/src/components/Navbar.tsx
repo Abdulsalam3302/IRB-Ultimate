@@ -61,7 +61,10 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
               <Button variant="ghost" size="sm" onClick={() => setLocation("/resources")} className="hidden md:inline-flex transition-apple">
                 {t("nav.resources")}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/policy")} className="hidden lg:inline-flex transition-apple">
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/disclaimer")} className="hidden lg:inline-flex transition-apple">
+                {t("nav.disclaimer")}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/policy")} className="hidden xl:inline-flex transition-apple">
                 {t("nav.policy")}
               </Button>
               {isAuthenticated ? (

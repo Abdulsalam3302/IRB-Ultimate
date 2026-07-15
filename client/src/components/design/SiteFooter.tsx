@@ -16,6 +16,7 @@ const QUICK_LINKS = [
   ["/registry", "nav.registry"],
   ["/statistics", "nav.statistics"],
   ["/support", "nav.support"],
+  ["/disclaimer", "nav.disclaimer"],
   ["/policy", "footer.terms"],
   ["/resources/guideline/privacy-policy", "footer.privacy"],
 ] as const;
@@ -134,6 +135,9 @@ export function SiteFooter() {
             <p className="flex items-center justify-center gap-1.5 text-cream-50/70">
               {t("footer.madeWith")}
               <Heart className="h-3.5 w-3.5 text-jade-400 fill-jade-400/30" aria-hidden="true" />
+            </p>
+            <p className="font-mono uppercase tracking-[0.14em] text-[10.5px] text-cream-50/45">
+              {t("footer.version")}
             </p>
           </div>
         </div>

@@ -70,6 +70,7 @@ const en: Record<string, string> = {
   "nav.resources": "Resources",
   "nav.support": "Support",
   "nav.policy": "Policy",
+  "nav.disclaimer": "Disclaimer",
   "nav.dashboard": "Dashboard",
   "nav.admin": "Admin Panel",
   "nav.reviews": "My Reviews",
@@ -84,6 +85,32 @@ const en: Record<string, string> = {
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
     "Demo environment — do not submit real participant data or PHI. This deployment is for evaluation and feedback only.",
+
+  // Open beta (always on for v1.1.0)
+  "beta.banner": "Open beta · v1.1.0 — features may change; feedback welcome.",
+  "beta.learnMore": "About & disclaimer",
+
+  // Disclaimer / about (first-visit gate)
+  "disclaimer.badge": "Open beta · IRB Saudi Arabia",
+  "disclaimer.title": "Disclaimer & About",
+  "disclaimer.subtitle": "Please read before using the platform",
+  "disclaimer.aboutFounder": "About the founder",
+  "disclaimer.founderBody":
+    "Dr. Abdulsalam Aleid is a physician and health-systems leader building tools that give researchers clear structure, honest guidance, and faster ethical review — without replacing human judgment.",
+  "disclaimer.aboutProject": "About this project",
+  "disclaimer.projectBody":
+    "IRB Saudi Arabia is an independent AI-assisted ethical review platform operated by the Advanced Healthcare Systems Society (AHSS). It helps researchers prepare and submit IRB-style applications with transparent workflows and verifiable digital certificates.",
+  "disclaimer.operatedBy": "Operated by",
+  "disclaimer.openBeta": "Open beta",
+  "disclaimer.openBetaBody":
+    "This platform is in open beta. Workflows, AI guidance, and interfaces may change. Do not treat outputs as final medical, legal, ethical, or regulatory advice. Report issues via Support so we can improve the service for the research community.",
+  "disclaimer.legal": "Important notice",
+  "disclaimer.legalBody":
+    "IRB Saudi Arabia is an independent academic-productivity and ethical-review facilitation platform. It does not provide medical, legal, ethical, or clinical advice, and it is not an official NCBE Institutional Review Board provider. Researchers remain responsible for compliance with applicable Saudi regulations and institutional requirements.",
+  "disclaimer.acknowledge": "I understand — continue",
+  "disclaimer.linkedinCta": "Visit LinkedIn profile",
+
+  "footer.version": "v1.1.0 · open beta",
 
   // Hero
   "hero.badge": "Digital IRB Review Platform",
@@ -429,7 +456,7 @@ const en: Record<string, string> = {
   "auth.orEmail": "or email",
   "auth.fullName": "Full name",
   "auth.email": "Work email",
-  "auth.password": "Password (min. 8 characters)",
+  "auth.password": "Password (min. 12 characters)",
   "auth.signInButton": "Sign in",
   "auth.signUpButton": "Create account",
   "auth.noAccount": "Don't have an account?",
@@ -443,7 +470,7 @@ const en: Record<string, string> = {
   "auth.tryAgain": "Try again",
   "auth.notConfigured": "Sign-in is being updated. Please try again in a few minutes or contact support.",
   "auth.invalidEmail": "Please enter a valid email address.",
-  "auth.weakPassword": "Password must be at least 8 characters.",
+  "auth.weakPassword": "Password must be at least 12 characters.",
   "auth.emailExists": "An account with this email already exists. Please sign in.",
   "auth.invalidCredentials": "Invalid email or password.",
   "auth.rateLimited": "Too many attempts. Please wait a few minutes and try again.",
@@ -486,6 +513,7 @@ const ar: Record<string, string> = {
   "nav.resources": "الموارد",
   "nav.support": "الدعم",
   "nav.policy": "السياسة",
+  "nav.disclaimer": "إخلاء المسؤولية",
   "nav.dashboard": "لوحة التحكم",
   "nav.admin": "لوحة الإدارة",
   "nav.reviews": "مراجعاتي",
@@ -500,6 +528,30 @@ const ar: Record<string, string> = {
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
     "بيئة تجريبية — لا تُدخل بيانات مشاركين حقيقية أو معلومات صحية محمية. هذه النسخة مخصصة للتقييم وجمع الملاحظات فقط.",
+
+  "beta.banner": "نسخة تجريبية مفتوحة · v1.1.0 — قد تتغير الميزات؛ نرحب بملاحظاتكم.",
+  "beta.learnMore": "عن المنصة وإخلاء المسؤولية",
+
+  "disclaimer.badge": "نسخة تجريبية مفتوحة · IRB السعودية",
+  "disclaimer.title": "إخلاء المسؤولية وعن المنصة",
+  "disclaimer.subtitle": "يرجى القراءة قبل استخدام المنصة",
+  "disclaimer.aboutFounder": "عن المؤسس",
+  "disclaimer.founderBody":
+    "د. عبدالسلام العيد طبيب وقائد في أنظمة الرعاية الصحية يبني أدوات تمنح الباحثين هيكلاً واضحاً وإرشاداً صادقاً ومراجعة أخلاقية أسرع — دون أن تحل محل الحكم البشري.",
+  "disclaimer.aboutProject": "عن المشروع",
+  "disclaimer.projectBody":
+    "IRB السعودية منصة مستقلة للمراجعة الأخلاقية بمساعدة الذكاء الاصطناعي تشغّلها جمعية أنظمة الرعاية الصحية المتقدمة (AHSS). تساعد الباحثين على إعداد وتقديم طلبات بأسلوب IRB عبر مسارات شفافة وشهادات رقمية قابلة للتحقق.",
+  "disclaimer.operatedBy": "تُشغّلها",
+  "disclaimer.openBeta": "نسخة تجريبية مفتوحة",
+  "disclaimer.openBetaBody":
+    "المنصة في مرحلة تجريبية مفتوحة. قد تتغير المسارات وإرشادات الذكاء الاصطناعي والواجهات. لا تُعامل المخرجات كنصيحة طبية أو قانونية أو أخلاقية أو تنظيمية نهائية. أبلغ عن المشكلات عبر الدعم لنحسّن الخدمة للمجتمع البحثي.",
+  "disclaimer.legal": "تنويه مهم",
+  "disclaimer.legalBody":
+    "IRB السعودية منصة مستقلة لتسهيل الإنتاجية الأكاديمية والمراجعة الأخلاقية. لا تقدّم مشورة طبية أو قانونية أو أخلاقية أو سريرية، وليست جهة IRB رسمية تابعة لـ NCBE. يبقى الباحثون مسؤولين عن الامتثال للأنظمة السعودية المعمول بها ومتطلبات مؤسساتهم.",
+  "disclaimer.acknowledge": "أفهم — متابعة",
+  "disclaimer.linkedinCta": "زيارة ملف LinkedIn",
+
+  "footer.version": "v1.1.0 · نسخة تجريبية مفتوحة",
 
   // Hero
   "hero.badge": "منصة مراجعة IRB الرقمية",
@@ -845,7 +897,7 @@ const ar: Record<string, string> = {
   "auth.orEmail": "أو البريد الإلكتروني",
   "auth.fullName": "الاسم الكامل",
   "auth.email": "البريد المؤسسي",
-  "auth.password": "كلمة المرور (8 أحرف على الأقل)",
+  "auth.password": "كلمة المرور (12 حرفًا على الأقل)",
   "auth.signInButton": "تسجيل الدخول",
   "auth.signUpButton": "إنشاء حساب",
   "auth.noAccount": "ليس لديك حساب؟",
@@ -859,7 +911,7 @@ const ar: Record<string, string> = {
   "auth.tryAgain": "حاول مرة أخرى",
   "auth.notConfigured": "جاري تحديث تسجيل الدخول. حاول بعد دقائق أو تواصل مع الدعم.",
   "auth.invalidEmail": "يرجى إدخال بريد إلكتروني صالح.",
-  "auth.weakPassword": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.",
+  "auth.weakPassword": "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل.",
   "auth.emailExists": "يوجد حساب بهذا البريد الإلكتروني بالفعل. يرجى تسجيل الدخول.",
   "auth.invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
   "auth.rateLimited": "محاولات كثيرة جدًا. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.",

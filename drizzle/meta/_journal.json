@@ -99,6 +99,13 @@
       "when": 1782000000000,
       "tag": "0013_llm_usage_daily",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1783000000000,
+      "tag": "0014_analytics_observability",
+      "breakpoints": true
     }
   ]
 }

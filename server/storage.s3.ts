@@ -74,13 +74,14 @@ export async function s3Put(
 }
 
 export async function s3GetUrl(
-  relKey: string
+  relKey: string,
+  expiresInSec = 7 * 24 * 60 * 60
 ): Promise<{ key: string; url: string }> {
   const key = sanitiseKey(relKey);
   const url = await getSignedUrl(
     client(),
     new GetObjectCommand({ Bucket: bucket(), Key: key }),
-    { expiresIn: 7 * 24 * 60 * 60 }
+    { expiresIn: Math.max(60, Math.min(expiresInSec, 7 * 24 * 60 * 60)) }
   );
   return { key, url };
 }

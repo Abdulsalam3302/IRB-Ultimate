@@ -1,4 +1,4 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME, SESSION_TTL_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import { nanoid } from "nanoid";
 import * as db from "../db";
@@ -13,7 +13,7 @@ import { clientIpKey } from "./security";
 // RFC 5322. Anything with a local part, an @, and a dotted domain passes; the
 // 320-char cap matches the DB column.
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
-const MIN_PASSWORD = 8;
+const MIN_PASSWORD = 12;
 const MAX_PASSWORD = 200;
 const MAX_NAME = 255;
 
@@ -87,9 +87,9 @@ const DUMMY_HASH =
   "scrypt$32768$8$1$00000000000000000000000000000000$" + "0".repeat(128);
 
 async function issueSession(req: Request, res: Response, openId: string, name: string) {
-  const sessionToken = await sdk.createSessionToken(openId, { name, expiresInMs: ONE_YEAR_MS });
+  const sessionToken = await sdk.createSessionToken(openId, { name, expiresInMs: SESSION_TTL_MS });
   const cookieOptions = getSessionCookieOptions(req);
-  res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+  res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_TTL_MS });
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ especially before any deployment that accepts real participant information.
 
 | Version | Supported |
 | ------- | --------- |
+| `1.1.x` (open beta) | Yes |
 | `main`  | Yes       |
 
 ## Reporting a vulnerability
@@ -15,7 +16,7 @@ especially before any deployment that accepts real participant information.
 
 Instead, report privately to:
 
-- **Dr. Abdulsalam Aleid** — [LinkedIn](https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142)
+- **Dr. Abdulsalam Aleid** — [LinkedIn](https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-mhqs-911446142/)
 - **AHSS** — [ahss.sa](https://www.ahss-sa.org/)
 
 Include:
@@ -83,5 +84,29 @@ Before exposing a public instance:
   `Content-Disposition: attachment`; co-investigator cap
 - Support-ticket notifications carry a sanitized preview only
 - PDPL self-service: data export (JSON) and account deletion from Profile
+
+## Open beta v1.1.0 hardening (2026-07)
+
+- Session JWT/cookie TTL shortened to **14 days** (was 1 year). Logout clears
+  the cookie; tokens remain stateless until expiry (no server denylist yet).
+- Public `verify.verifyIrb` no longer returns long-lived signed certificate
+  URLs. Clients call `verify.certificateDownload` for a **5-minute** URL.
+- Literature fetch paths enforce `assertSafeEgress` (SSRF guard).
+- Supabase owner-email admin promotion is one-time via `adminExists()` (aligned
+  with native auth); existing admins are not demoted on login.
+- Native password minimum raised to **12** characters.
+- Rate limits (in-memory, per process): 200/min general `/api/*`, 30/min strict
+  (upload/AI/literature/support/analytics), 5/min auth. Cookies are
+  `httpOnly` + `SameSite=Lax` (+ `Secure` on HTTPS).
+- First-party analytics store **HMAC-hashed IP** and coarse geo only; owner-only
+  observability dashboard at `/admin/observability`.
+- Mandatory first-visit disclaimer acknowledgment before using the app.
+
+### Open-beta operator checklist (additions)
+
+1. Run migration `0014_analytics_observability`
+2. Confirm `OWNER_OPEN_ID` / `OWNER_EMAIL` point at your account
+3. Set `ALLOWED_ORIGINS` and `ALLOWED_EGRESS_HOSTS` for production
+4. Remind beta testers: no real PHI until a later production hardening pass
 
 See `README.md` and `DEPLOY.md` for the full hardening guide.

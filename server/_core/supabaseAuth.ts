@@ -1,4 +1,4 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME, SESSION_TTL_MS } from "@shared/const";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
@@ -41,13 +41,23 @@ async function verifySupabaseAccessToken(token: string) {
   return payload as Record<string, unknown> & { sub: string };
 }
 
-function roleForUser(openId: string, email: string | null, emailVerified: boolean): "admin" | "user" {
+/**
+ * Returns admin only for OWNER_OPEN_ID, or one-time owner-email bootstrap
+ * when no admin exists yet. Returns undefined when we must not touch role
+ * (avoids demoting an existing admin on later logins).
+ */
+async function roleForUser(
+  openId: string,
+  email: string | null,
+  emailVerified: boolean
+): Promise<"admin" | undefined> {
   if (ENV.ownerOpenId && openId === ENV.ownerOpenId) return "admin";
-  // Owner-by-email promotion only when Supabase has actually confirmed the
-  // address — otherwise a provider with email-confirmation disabled would let
-  // anyone sign up as the owner email and inherit admin.
-  if (emailVerified && ENV.ownerEmail && email && email.toLowerCase() === ENV.ownerEmail) return "admin";
-  return "user";
+  // Owner-by-email promotion only when Supabase has confirmed the address
+  // AND no admin exists yet (matches native / upsertUser bootstrap).
+  if (emailVerified && ENV.ownerEmail && email && email.toLowerCase() === ENV.ownerEmail) {
+    if (!(await db.adminExists())) return "admin";
+  }
+  return undefined;
 }
 
 export function registerSupabaseAuthRoutes(app: Express) {
@@ -77,29 +87,29 @@ export function registerSupabaseAuthRoutes(app: Express) {
       const emailVerified =
         payload.email_confirmed_at != null ||
         (payload.user_metadata as Record<string, unknown> | undefined)?.email_verified === true;
-      const role = roleForUser(openId, email, Boolean(emailVerified));
+      const role = await roleForUser(openId, email, Boolean(emailVerified));
 
       await db.upsertUser({
         openId,
         name,
         email,
         loginMethod: loginMethodFromProvider(provider),
-        role,
+        ...(role ? { role } : {}),
         lastSignedIn: new Date(),
       });
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name,
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: SESSION_TTL_MS,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, {
         ...cookieOptions,
-        maxAge: ONE_YEAR_MS,
+        maxAge: SESSION_TTL_MS,
       });
 
-      res.json({ ok: true, openId, role });
+      res.json({ ok: true, openId, role: role ?? "user" });
     } catch (error) {
       console.error("[SupabaseAuth] session bridge failed", error);
       res.status(401).json({ error: "Invalid Supabase session" });

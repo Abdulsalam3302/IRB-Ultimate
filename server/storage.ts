@@ -195,7 +195,8 @@ export async function storagePut(
 }
 
 export async function storageGet(
-  relKey: string
+  relKey: string,
+  expiresInSec?: number
 ): Promise<{ key: string; url: string }> {
   if (hasForgeCredentials()) {
     try {
@@ -207,12 +208,30 @@ export async function storageGet(
   if (hasS3Credentials()) {
     const { s3GetUrl } = await import("./storage.s3");
     try {
-      return await s3GetUrl(relKey);
+      return await s3GetUrl(relKey, expiresInSec);
     } catch (err) {
       console.warn("[storage] S3 get failed, falling back to local:", err);
     }
   }
   return localGet(relKey);
+}
+
+/** Extract a storage key from a stored /uploads path or signed object URL. */
+export function storageKeyFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("/uploads/")) {
+    return url.slice("/uploads/".length).split("?")[0] || null;
+  }
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/^\/+/, "");
+    const certIdx = path.indexOf("certificates/");
+    if (certIdx >= 0) return path.slice(certIdx).split("?")[0] || null;
+  } catch {
+    /* not a URL */
+  }
+  if (url.startsWith("certificates/")) return url.split("?")[0] || null;
+  return null;
 }
 
 export const UPLOADS_DIR_PATH = UPLOADS_DIR;

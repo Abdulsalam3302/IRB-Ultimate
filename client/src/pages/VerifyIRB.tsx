@@ -41,6 +41,12 @@ export default function VerifyIRB() {
     { enabled: searchTriggered && searchValue.length >= 3 }
   );
 
+  const certDownload = trpc.verify.certificateDownload.useMutation({
+    onSuccess: (data) => {
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    },
+  });
+
   const handleSearch = () => {
     if (searchValue.trim().length < 3) return;
     setSearchTriggered(true);
@@ -143,12 +149,27 @@ export default function VerifyIRB() {
                     )}
                   </div>
 
-                  {result.retractionCertificateUrl && (
+                  {result.hasRetractionCertificate && (
                     <>
                       <Separator />
                       <div className="text-center">
-                        <Button size="lg" variant="destructive" onClick={() => window.open(result.retractionCertificateUrl!, "_blank")}>
-                          <Download className="h-5 w-5 me-2" /> {t("retract.downloadCert")}
+                        <Button
+                          size="lg"
+                          variant="destructive"
+                          disabled={certDownload.isPending}
+                          onClick={() =>
+                            certDownload.mutate({
+                              irbNumber: result.irbNumber!,
+                              kind: "retraction",
+                            })
+                          }
+                        >
+                          {certDownload.isPending ? (
+                            <Loader2 className="h-5 w-5 me-2 animate-spin" />
+                          ) : (
+                            <Download className="h-5 w-5 me-2" />
+                          )}
+                          {t("retract.downloadCert")}
                         </Button>
                       </div>
                     </>
@@ -230,12 +251,26 @@ export default function VerifyIRB() {
                     </div>
                   </div>
 
-                  {result.certificateUrl && (
+                  {result.hasCertificate && (
                     <>
                       <Separator />
                       <div className="text-center">
-                        <Button size="lg" onClick={() => window.open(result.certificateUrl!, "_blank")}>
-                          <Download className="h-5 w-5 me-2" /> {t("verify.download")}
+                        <Button
+                          size="lg"
+                          disabled={certDownload.isPending}
+                          onClick={() =>
+                            certDownload.mutate({
+                              irbNumber: result.irbNumber!,
+                              kind: "certificate",
+                            })
+                          }
+                        >
+                          {certDownload.isPending ? (
+                            <Loader2 className="h-5 w-5 me-2 animate-spin" />
+                          ) : (
+                            <Download className="h-5 w-5 me-2" />
+                          )}
+                          {t("verify.download")}
                         </Button>
                       </div>
                     </>

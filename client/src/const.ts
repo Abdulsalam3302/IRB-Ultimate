@@ -1,4 +1,4 @@
-export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+export { COOKIE_NAME, ONE_YEAR_MS, SESSION_TTL_MS } from "@shared/const";
 
 /**
  * Login URL. SA-02: the SPA no longer constructs the OAuth URL itself —

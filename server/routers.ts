@@ -16,6 +16,14 @@ import { notifyOwner } from "./_core/notification";
 import { storagePut } from "./storage";
 import * as emailService from "./emailService";
 import { searchLiterature } from "./literature";
+import {
+  classifyUa,
+  requestIpHash,
+  resolveCoarseGeo,
+  stripPath,
+} from "./_core/analyticsGeo";
+import { CERT_DOWNLOAD_TTL_SEC } from "@shared/const";
+import { storageGet, storageKeyFromUrl } from "./storage";
 
 // ─── Shared access helpers ──────────────────────────────────────────────────
 // Returns the application if the caller may view it (owner, admin, or
@@ -1134,6 +1142,8 @@ const verifyRouter = router({
       // author list, and full duration are PII / business-sensitive and are
       // NOT for unauthenticated callers — they're available to the applicant,
       // admin, and assigned reviewers via authenticated endpoints.
+      // Long-lived signed certificate URLs are NEVER returned here — use
+      // verify.certificateDownload for a short-lived URL on demand.
       const app = await db.getApplicationByIrbNumber(input.irbNumber.trim().toUpperCase());
       if (!app) return { found: false as const };
       if (app.status === "hidden") return { found: false as const };
@@ -1151,7 +1161,7 @@ const verifyRouter = router({
           // Reason is shown — it's the whole point of the public retraction
           // notice — but we cap its length to defeat exfil-via-reason vectors.
           retractionReason: (app.retractionReason || "").slice(0, 2000),
-          retractionCertificateUrl: app.retractionCertificateUrl,
+          hasRetractionCertificate: Boolean(app.retractionCertificateUrl),
         };
       }
 
@@ -1167,8 +1177,35 @@ const verifyRouter = router({
         principalInvestigator: app.principalInvestigator,
         piInstitution: app.piInstitution,
         approvedAt: app.approvedAt,
-        certificateUrl: app.certificateUrl,
+        hasCertificate: Boolean(app.certificateUrl),
       };
+    }),
+
+  /** Mint a short-lived download URL for a publicly verified certificate. */
+  certificateDownload: publicProcedure
+    .input(z.object({
+      irbNumber: z.string().min(6).max(64),
+      kind: z.enum(["certificate", "retraction"]).default("certificate"),
+    }))
+    .mutation(async ({ input }) => {
+      const app = await db.getApplicationByIrbNumber(input.irbNumber.trim().toUpperCase());
+      if (!app || app.status === "hidden") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Certificate not found" });
+      }
+      const stored =
+        input.kind === "retraction"
+          ? app.status === "retracted"
+            ? app.retractionCertificateUrl
+            : null
+          : app.status === "approved"
+            ? app.certificateUrl
+            : null;
+      const key = storageKeyFromUrl(stored);
+      if (!key) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Certificate not available" });
+      }
+      const { url } = await storageGet(key, CERT_DOWNLOAD_TTL_SEC);
+      return { url, expiresInSec: CERT_DOWNLOAD_TTL_SEC };
     }),
 });
 
@@ -2453,6 +2490,42 @@ const aiSwarmRouter = router({
     }),
 });
 
+// ─── Analytics (public ingest + owner metrics) ─────────────────────────────
+
+const analyticsRouter = router({
+  ingest: publicProcedure
+    .input(z.object({
+      sessionId: z.string().uuid(),
+      path: z.string().min(1).max(255),
+      eventType: z.enum(["pageview", "heartbeat", "leave"]),
+      dwellMs: z.number().int().min(0).max(120_000).default(0),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const path = stripPath(input.path);
+      // Skip self-noise from the owner dashboard.
+      if (path.startsWith("/admin/observability")) return { ok: true as const };
+      const geo = await resolveCoarseGeo(ctx.req);
+      const ua = typeof ctx.req.headers["user-agent"] === "string"
+        ? ctx.req.headers["user-agent"]
+        : undefined;
+      await db.ingestAnalyticsEvent({
+        sessionId: input.sessionId,
+        path,
+        eventType: input.eventType,
+        dwellMs: input.dwellMs,
+        userId: ctx.user?.id ?? null,
+        ipHash: requestIpHash(ctx.req),
+        country: geo.country,
+        region: geo.region,
+        city: geo.city,
+        uaClass: classifyUa(ua),
+      });
+      return { ok: true as const };
+    }),
+
+  metrics: ownerProcedure.query(async () => db.getObservabilityMetrics()),
+});
+
 // ─── Main Router ────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -2525,6 +2598,7 @@ export const appRouter = router({
   adverseEvents: adverseEventsRouter,
   amendments: amendmentsRouter,
   aiSwarm: aiSwarmRouter,
+  analytics: analyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;

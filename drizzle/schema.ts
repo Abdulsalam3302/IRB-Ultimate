@@ -393,3 +393,35 @@ export const llmUsageDaily = mysqlTable("llm_usage_daily", {
 
 export type LlmUsageDaily = typeof llmUsageDaily.$inferSelect;
 export type InsertLlmUsageDaily = typeof llmUsageDaily.$inferInsert;
+
+// ─── First-party analytics (open-beta observability) ───────────────────────
+// Privacy: store HMAC-hashed IP only; coarse geo labels; no lat/lng.
+export const analyticsSessions = mysqlTable("analytics_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull().unique(),
+  userId: int("userId"),
+  ipHash: varchar("ipHash", { length: 64 }),
+  country: varchar("country", { length: 64 }),
+  region: varchar("region", { length: 96 }),
+  city: varchar("city", { length: 96 }),
+  uaClass: varchar("uaClass", { length: 32 }),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+  pageviews: int("pageviews").default(0).notNull(),
+  dwellMs: int("dwellMs").default(0).notNull(),
+});
+
+export type AnalyticsSession = typeof analyticsSessions.$inferSelect;
+export type InsertAnalyticsSession = typeof analyticsSessions.$inferInsert;
+
+export const analyticsEvents = mysqlTable("analytics_events", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull(),
+  path: varchar("path", { length: 255 }).notNull(),
+  eventType: mysqlEnum("analyticsEventType", ["pageview", "heartbeat", "leave"]).notNull(),
+  dwellMs: int("dwellMs").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = typeof analyticsEvents.$inferInsert;

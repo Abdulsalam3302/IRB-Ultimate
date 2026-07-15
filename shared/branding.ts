@@ -30,7 +30,9 @@ export const AUTHOR = {
   titleAr: "مدير المنصة والجهة المعتمدة",
   orgEn: "Advanced Healthcare Systems Society (AHSS)",
   orgAr: "جمعية أنظمة الرعاية الصحية المتقدمة (AHSS)",
-  linkedin: "https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142",
+  linkedin: "https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-mhqs-911446142/",
+  founderTitleEn: "Founder",
+  founderTitleAr: "المؤسس",
 } as const;
 
 /** Stamped Tick — inline SVG for certificates, exports, and UI. */

@@ -518,6 +518,8 @@ const applicationRouter = router({
       });
 
       // 3) Re-run Stage 1 review against the enhanced data.
+      // Skip literature on the post-enhance re-review — we already paid that
+      // cost (or raced it) on the applicant's prior review; shaves seconds.
       const review = await runStage1AiReview({
         researchType: app.researchType || "",
         irbCategory: app.irbCategory || "",
@@ -527,6 +529,7 @@ const applicationRouter = router({
         piDepartment: merged.piDepartment,
         fundingSource: merged.fundingSource,
         estimatedDuration: merged.estimatedDuration,
+        skipLiterature: true,
       });
 
       // 4) Persist the new review (skip if AI was unavailable).

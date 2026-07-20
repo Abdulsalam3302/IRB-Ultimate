@@ -168,6 +168,19 @@ export default function ApplyStage2() {
   const aiAutoComplete = trpc.application.aiAutoComplete.useMutation();
   const aiResolveField = trpc.application.aiResolveField.useMutation();
   const [resolvingField, setResolvingField] = useState<string | null>(null);
+  const [aiElapsedSec, setAiElapsedSec] = useState(0);
+  const aiBusy = runAiReview.isPending || aiAutoComplete.isPending || saveStage2.isPending;
+  useEffect(() => {
+    if (!aiBusy) {
+      setAiElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      setAiElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [aiBusy]);
 
   const handleResolveField = async (fieldKey: string) => {
     setResolvingField(fieldKey);
@@ -753,7 +766,7 @@ export default function ApplyStage2() {
               </Button>
               <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage2.isPending || runAiReview.isPending}>
                 {(saveStage2.isPending || runAiReview.isPending) ? (
-                  <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري المراجعة..." : "Reviewing..."}</>
+                  <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? `جاري المراجعة… ${aiElapsedSec}ث` : `Reviewing… ${aiElapsedSec}s`}</>
                 ) : (
                   <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
                 )}

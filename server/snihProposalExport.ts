@@ -365,6 +365,8 @@ const SCHEMA_HINT = `{
 
 async function generateProposalContent(app: Application): Promise<ProposalAiContent> {
   const response = await invokeLLM({
+    profile: "deep",
+    thinking: "adaptive",
     messages: [
       {
         role: "system",

@@ -114,6 +114,20 @@ export default function ApplyStage1() {
   const [aiEditedFields, setAiEditedFields] = useState<Set<string>>(new Set());
   const preEnhanceSnapshot = useRef<typeof form | null>(null);
   const [undoExpiresAt, setUndoExpiresAt] = useState<number | null>(null);
+  // Live elapsed seconds while AI work is in flight (smoother perceived wait).
+  const [aiElapsedSec, setAiElapsedSec] = useState(0);
+  const aiBusy = runAiReview.isPending || aiEnhanceStage1.isPending || saveStage1.isPending;
+  useEffect(() => {
+    if (!aiBusy) {
+      setAiElapsedSec(0);
+      return;
+    }
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      setAiElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [aiBusy]);
 
   const handleAiEnhance = async () => {
     // Snapshot pre-enhance state for the 60s undo pill.
@@ -673,15 +687,15 @@ export default function ApplyStage1() {
               <div className="flex gap-3 flex-wrap">
                 <Button variant="outline" onClick={handleSaveAndReview} disabled={saveStage1.isPending || runAiReview.isPending || aiEnhanceStage1.isPending}>
                   {(saveStage1.isPending || runAiReview.isPending) ? (
-                    <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? "جاري المراجعة..." : "Reviewing..."}</>
+                    <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {isAr ? `جاري المراجعة… ${aiElapsedSec}ث` : `Reviewing… ${aiElapsedSec}s`}</>
                   ) : (
                     <><Brain className="h-4 w-4 me-2" /> {isAr ? "حفظ ومراجعة AI" : "Save & AI Review"}</>
                   )}
                 </Button>
                 {showAiResult && aiResult && typeof aiResult.score === "number" && aiResult.score < 90 && (
-                  <Button variant="default" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={handleAiEnhance} disabled={aiEnhanceStage1.isPending}>
+                  <Button variant="default" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={handleAiEnhance} disabled={aiEnhanceStage1.isPending || runAiReview.isPending}>
                     {aiEnhanceStage1.isPending ? (
-                      <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {enhanceProgress || (isAr ? "جاري التحسين..." : "Enhancing…")}</>
+                      <><Loader2 className="h-4 w-4 me-2 animate-spin" /> {(enhanceProgress || (isAr ? "جاري التحسين..." : "Enhancing…"))}{aiElapsedSec > 0 ? ` ${aiElapsedSec}s` : ""}</>
                     ) : (
                       <><Sparkles className="h-4 w-4 me-1" /> {isAr ? "تحسين AI" : "AI Enhance"}</>
                     )}

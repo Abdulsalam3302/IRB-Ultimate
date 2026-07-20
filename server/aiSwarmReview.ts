@@ -210,6 +210,8 @@ ${fencedApplication}
 Respond with strict JSON only.`;
 
   const response = await invokeLLM({
+    profile: "deep",
+    thinking: "adaptive",
     messages: [
       {
         role: "system",
@@ -307,6 +309,8 @@ ${clusterDigest}
 Respond with strict JSON only.`;
 
   const response = await invokeLLM({
+    profile: "deep",
+    thinking: "adaptive",
     messages: [
       {
         role: "system",

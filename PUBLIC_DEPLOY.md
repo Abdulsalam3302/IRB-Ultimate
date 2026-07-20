@@ -70,7 +70,10 @@ LLM_API_URL=https://api.minimax.io
 LLM_API_KEY=<MiniMax coding-plan or API key — set only on Render / local .env>
 LLM_MODEL=MiniMax-M3
 LLM_PROVIDER=openai
-LLM_MAX_TOKENS=24576
+LLM_MAX_TOKENS=8192
+LLM_FAST_MAX_TOKENS=4096
+LLM_THINKING=disabled
+LLM_TIMEOUT_MS=90000
 ```
 Or OpenAI-compatible:
 ```

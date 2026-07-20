@@ -55,6 +55,8 @@ export type ToolChoice =
   | ToolChoiceByName
   | ToolChoiceExplicit;
 
+export type LlmProfile = "fast" | "deep";
+
 export type InvokeParams = {
   messages: Message[];
   tools?: Tool[];
@@ -62,6 +64,16 @@ export type InvokeParams = {
   tool_choice?: ToolChoice;
   maxTokens?: number;
   max_tokens?: number;
+  /** Override model for this call (defaults to ENV.llmModel). */
+  model?: string;
+  /**
+   * `fast` (default for interactive IRB AI): disable MiniMax-M3 thinking,
+   * cap completion tokens, shorter timeout — much snappier UX.
+   * `deep`: allow thinking / larger budgets (swarm, long proposals).
+   */
+  profile?: LlmProfile;
+  /** MiniMax-M3 only. Overrides ENV.llmThinking when set. */
+  thinking?: "disabled" | "adaptive";
   outputSchema?: OutputSchema;
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
@@ -269,6 +281,24 @@ const normalizeResponseFormat = ({
   };
 };
 
+function resolveThinking(
+  profile: LlmProfile,
+  explicit?: "disabled" | "adaptive"
+): "disabled" | "adaptive" | null {
+  if (explicit) return explicit;
+  if (profile === "deep") return "adaptive";
+  const envMode = ENV.llmThinking;
+  if (envMode === "adaptive" || envMode === "enabled" || envMode === "on") {
+    return "adaptive";
+  }
+  // Default interactive path: skip thinking (big latency win on MiniMax-M3).
+  return "disabled";
+}
+
+function isMinimaxModel(model: string): boolean {
+  return /minimax/i.test(model) || /api\.minimax\.io/i.test(ENV.llmApiUrl);
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
 
@@ -283,9 +313,22 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
+  const profile: LlmProfile = params.profile ?? "fast";
+  const model = (params.model ?? ENV.llmModel).trim() || ENV.llmModel;
+  const requestedMax =
+    params.maxTokens ?? params.max_tokens ?? (profile === "fast" ? ENV.llmFastMaxTokens : ENV.llmMaxTokens);
+  // Interactive calls must stay bounded — 24k completion budgets force long waits.
+  const maxTokens =
+    profile === "fast"
+      ? Math.min(requestedMax, Math.max(512, ENV.llmFastMaxTokens))
+      : requestedMax;
+
   const payload: Record<string, unknown> = {
-    model: ENV.llmModel,
+    model,
     messages: messages.map(normalizeMessage),
+    max_tokens: maxTokens,
+    // MiniMax prefers max_completion_tokens on newer APIs; harmless elsewhere.
+    max_completion_tokens: maxTokens,
   };
 
   if (tools && tools.length > 0) {
@@ -300,15 +343,15 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  // Per-call override wins, else the env default. Reasoning models (MiniMax
-  // M3/M2) burn a large hidden reasoning budget BEFORE the answer, so callers
-  // that ask for big structured output (e.g. the proposal generator) need
-  // more headroom or the JSON truncates inside the <think> block.
-  payload.max_tokens = params.maxTokens ?? params.max_tokens ?? ENV.llmMaxTokens;
-  // `thinking` is Anthropic-specific. Only emit it for providers that
-  // accept it; MiniMax / OpenAI / generic gateways will 400 on this field.
+  // Anthropic-native thinking budget (Forge / Claude).
   if (ENV.llmProvider === "anthropic" || ENV.llmProvider === "claude") {
-    payload.thinking = { budget_tokens: 128 };
+    payload.thinking = { budget_tokens: profile === "fast" ? 128 : 1024 };
+  }
+
+  // MiniMax-M3: disable thinking on the fast path (measured ~2–3× faster).
+  const thinking = resolveThinking(profile, params.thinking);
+  if (thinking && isMinimaxModel(model) && /m3/i.test(model)) {
+    payload.thinking = { type: thinking };
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -337,11 +380,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     }
   }
 
-  // Hard timeout. Reasoning models (M2 / R1) can take a while, but
-  // an LLM call has no business taking longer than 2 minutes — without
-  // this, a stuck socket once hung Stage 2 auto-complete for 15 minutes.
-  const timeoutMs = parseInt(process.env.LLM_TIMEOUT_MS ?? "120000", 10);
+  const timeoutMs =
+    profile === "fast"
+      ? Math.min(ENV.llmTimeoutMs || 90_000, 90_000)
+      : Math.max(ENV.llmTimeoutMs || 120_000, 120_000);
 
+  const started = Date.now();
   const attempt = async (): Promise<InvokeResult> => {
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
@@ -398,17 +442,25 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   const result = await attempt();
 
-  // Reasoning models occasionally emit a response whose JSON cannot be
-  // salvaged at all (truncated mid-reasoning, prose-wrapped, braces inside
-  // the think block). For schema-bound calls one bad sample would otherwise
-  // surface as a zeroed-out review — retry exactly once before giving up.
-  if (normalizedResponseFormat?.type === "json_schema") {
+  // Deep / thinking-enabled calls can emit unparseable first samples — retry once.
+  // Fast path skips the expensive double-call (thinking is off; JSON is usually clean).
+  if (profile === "deep" && normalizedResponseFormat?.type === "json_schema") {
     const content = result.choices?.[0]?.message?.content;
     const parsed = safeJsonParse(typeof content === "string" ? content : "");
     if (!parsed || typeof parsed !== "object" || Object.keys(parsed).length === 0) {
       console.warn("[LLM] schema-bound response unparseable — retrying once");
       return attempt();
     }
+  }
+
+  if (process.env.LLM_DEBUG === "1") {
+    console.log(
+      "[LLM] profile=%s model=%s max_tokens=%d elapsed=%dms",
+      profile,
+      model,
+      maxTokens,
+      Date.now() - started
+    );
   }
 
   return result;

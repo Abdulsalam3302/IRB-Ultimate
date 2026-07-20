@@ -1,5 +1,29 @@
 import { invokeLLM, safeJsonParse } from "./_core/llm";
 import { searchLiterature, formatLiteratureForPrompt, buildLiteratureQuery } from "./literature";
+import type { LiteratureBundle } from "./literature";
+
+/** Race an async task against a deadline — never block interactive AI on slow literature. */
+async function withDeadline<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+const EMPTY_LIT: LiteratureBundle = {
+  query: "",
+  fetchedAt: new Date(0).toISOString(),
+  totals: {},
+  items: [],
+  errors: {},
+};
 
 // Color codes: red = flag/stop, yellow = AI resolved needs review, green = OK, darkGreen = perfect
 export type FieldColor = "red" | "yellow" | "green" | "darkGreen";
@@ -284,6 +308,8 @@ export async function runStage1AiReview(data: {
   piDepartment: string;
   fundingSource: string;
   estimatedDuration: string;
+  /** Skip literature novelty check (used after enhance to avoid a second wait). */
+  skipLiterature?: boolean;
 }): Promise<AiReviewResult> {
   // Lightweight novelty check — title-only, 2 sources, 3 hits each.
   // Picks up obvious duplication of registered trials and recent papers
@@ -291,17 +317,22 @@ export async function runStage1AiReview(data: {
   // gateway never depends on an external API to function.
   let noveltyContext = "";
   try {
-    if (data.researchTitle && data.researchTitle.trim().length > 8) {
+    if (!data.skipLiterature && data.researchTitle && data.researchTitle.trim().length > 8) {
       // Use the smart query builder which strips boilerplate filler
       // ("a study of", "investigation into", trailing date paren) so
       // the upstream search engines weight on real content tokens.
+      // Hard 1.5s budget — never let literature slow the gateway review.
       const q = buildLiteratureQuery(data.researchTitle);
-      const bundle = await searchLiterature(q, {
-        perSource: 5,           // over-fetch for relevance filter
-        perSourceCap: 3,        // final cap per source in the prompt
-        minRelevance: 0.1,      // novelty check is stricter than full review
-        sources: ["pubmed", "clinicaltrials"],
-      });
+      const bundle = await withDeadline(
+        searchLiterature(q, {
+          perSource: 3,
+          perSourceCap: 2,
+          minRelevance: 0.1,
+          sources: ["pubmed", "clinicaltrials"],
+        }),
+        1500,
+        EMPTY_LIT,
+      );
       const formatted = formatLiteratureForPrompt(bundle);
       if (formatted) noveltyContext = `${formatted}\n\n`;
     }
@@ -436,6 +467,9 @@ REMEMBER:
 
   try {
     const response = await invokeLLM({
+      profile: "fast",
+      maxTokens: 4096,
+      thinking: "disabled",
       messages: [
         { role: "system", content: "You are a senior NCBE IRB compliance specialist aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate content quality and ethical alignment — never penalize text length. For every field scored below 90, provide a specific, actionable fix with EXAMPLE: and FASTEST FIX: tokens. List every missing element explicitly under recommendations. Score 100 when all checklist items are fully satisfied with no gaps. Respond only with valid JSON." },
         { role: "user", content: prompt },
@@ -561,11 +595,17 @@ export async function runStage2AiReview(data: {
     const literatureQuery =
       buildLiteratureQuery(data.researchTitle, data.researchObjectives) ||
       data.researchType;
-    const bundle = await searchLiterature(literatureQuery, {
-      perSource: 6,         // over-fetch
-      perSourceCap: 4,      // final cap per source after relevance filter
-      minRelevance: 0.08,
-    });
+    // Cap wait so Stage 2 never stalls on slow PubMed / S2 / OpenAlex.
+    const bundle = await withDeadline(
+      searchLiterature(literatureQuery, {
+        perSource: 4,
+        perSourceCap: 3,
+        minRelevance: 0.08,
+        sources: ["pubmed", "clinicaltrials", "semanticscholar", "openalex"],
+      }),
+      2500,
+      EMPTY_LIT,
+    );
     const formatted = formatLiteratureForPrompt(bundle);
     if (formatted) literatureContext = `${formatted}\n\n`;
   } catch (err) {
@@ -707,6 +747,9 @@ ${literatureContext}${fenceUserData("APPLICATION DATA", data)}`;
 
   try {
     const response = await invokeLLM({
+      profile: "fast",
+      maxTokens: 6144,
+      thinking: "disabled",
       messages: [
         { role: "system", content: "You are a senior NCBE IRB ethics reviewer aligned with Declaration of Helsinki, ICH-GCP, Belmont Report, and CIOMS. Evaluate ethical compliance and scientific rigor — never penalize length. For every field below 90, name the exact gap and provide EXAMPLE: and FASTEST FIX:. List all missing elements in recommendations. Award 100 only when every checklist item is fully addressed. Respond only with valid JSON." },
         { role: "user", content: prompt },
@@ -885,11 +928,16 @@ export async function aiAutoCompleteFields(data: {
   if (data.stage !== "stage1" && data.researchTitle && data.researchTitle.length > 8) {
     try {
       const litQuery = buildLiteratureQuery(data.researchTitle);
-      const bundle = await searchLiterature(litQuery, {
-        perSource: 5,
-        perSourceCap: 3,
-        minRelevance: 0.1,
-      });
+      const bundle = await withDeadline(
+        searchLiterature(litQuery, {
+          perSource: 3,
+          perSourceCap: 2,
+          minRelevance: 0.1,
+          sources: ["pubmed", "clinicaltrials"],
+        }),
+        2000,
+        EMPTY_LIT,
+      );
       const formatted = formatLiteratureForPrompt(bundle);
       if (formatted) literatureBlock = `\n${formatted}\n`;
     } catch (err) {
@@ -949,6 +997,9 @@ ${ETHICS_SAFEGUARDS}`;
     }
 
     const response = await invokeLLM({
+      profile: "fast",
+      maxTokens: 6144,
+      thinking: "disabled",
       messages: [
         { role: "system", content: "You are an expert NCBE research protocol writer. Generate comprehensive, ethically compliant content targeting 100/100 on IRB review. Every field must be specific, internally consistent with Stage 1 facts, and NCBE-aligned. When information is missing, write [MISSING — please provide: <specific item>] — never fabricate. Mark any assumption with [ASSUMPTION — verify]. Respond only with valid JSON whose fields are plain strings." },
         { role: "user", content: prompt },
@@ -1050,6 +1101,9 @@ Each value MUST be a plain string. NEVER return nested objects, arrays, or markd
 
   try {
     const response = await invokeLLM({
+      profile: "fast",
+      maxTokens: 2048,
+      thinking: "disabled",
       messages: [
         { role: "system", content: "You are an NCBE IRB editor. Polish and expand the applicant's existing text to reach 100/100 — preserve all factual claims, never invent credentials or data. Flag gaps as [MISSING — please add: <item>]. Return strict JSON with plain string values." },
         { role: "user", content: prompt },
@@ -1144,6 +1198,9 @@ ${ETHICS_SAFEGUARDS}`;
 
   try {
     const response = await invokeLLM({
+      profile: "fast",
+      maxTokens: 1536,
+      thinking: "disabled",
       messages: [
         { role: "system", content: "You are an NCBE IRB field resolution specialist. Rewrite this field to score 100/100 while preserving applicant intent. State any remaining gap as [STILL MISSING: <item>]. Respond only with valid JSON." },
         { role: "user", content: prompt },
@@ -1231,6 +1288,9 @@ ${ETHICS_SAFEGUARDS}`;
     }
 
     const response = await invokeLLM({
+      profile: "fast",
+      maxTokens: 6144,
+      thinking: "disabled",
       messages: [
         { role: "system", content: "You are a senior NCBE IRB enhancement specialist. Fix every flagged field to score 100/100 with cross-field consistency. For each fix, ensure ethical and legal compliance under NCBE, Helsinki, and PDPL. List any field that cannot reach 100 without applicant input as [NEEDS APPLICANT: <reason>]. Respond only with valid JSON." },
         { role: "user", content: prompt },

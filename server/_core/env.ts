@@ -91,9 +91,18 @@ export const ENV = {
     process.env.LLM_API_URL?.trim() || process.env.BUILT_IN_FORGE_API_URL || "",
   llmApiKey:
     process.env.LLM_API_KEY?.trim() || process.env.BUILT_IN_FORGE_API_KEY || "",
-  llmModel: process.env.LLM_MODEL ?? "MiniMax-M2",
+  llmModel: process.env.LLM_MODEL ?? "MiniMax-M3",
   llmMaxTokens: parseInt(process.env.LLM_MAX_TOKENS ?? "8192", 10),
+  /** Cap for interactive AI (review / enhance / autocomplete). Keeps latency down. */
+  llmFastMaxTokens: parseInt(process.env.LLM_FAST_MAX_TOKENS ?? "4096", 10),
+  /**
+   * MiniMax-M3 thinking control for interactive calls.
+   * `disabled` is ~2–3× faster and is the default for public UX.
+   * Swarm / deep jobs can still opt into adaptive thinking per-call.
+   */
+  llmThinking: (process.env.LLM_THINKING ?? "disabled").toLowerCase(),
   llmProvider: (process.env.LLM_PROVIDER ?? "openai").toLowerCase(),
+  llmTimeoutMs: parseInt(process.env.LLM_TIMEOUT_MS ?? "90000", 10),
 
   // Literature & evidence sources — used to cross-check submitted
   // protocols against existing trials and prior art. All optional;

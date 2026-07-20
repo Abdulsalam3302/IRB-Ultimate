@@ -9,12 +9,16 @@ concurrency:
   group: deploy-irb-sa
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   # Render auto-deploys from Git when Blueprint/service is connected.
   # Optional: fire Deploy Hook for explicit redeploys.
   deploy-render:
     name: Render (deploy hook)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Trigger Render deploy hook
         env:

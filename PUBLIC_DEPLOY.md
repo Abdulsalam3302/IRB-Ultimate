@@ -67,8 +67,8 @@ VITE_SUPABASE_ANON_KEY=...
 **AI generation (required for Stage 1/2 review, enhance, auto-complete, swarm):**
 ```
 LLM_API_URL=https://api.minimax.io
-LLM_API_KEY=<your key with remaining credits>
-LLM_MODEL=MiniMax-M2
+LLM_API_KEY=<MiniMax coding-plan or API key — set only on Render / local .env>
+LLM_MODEL=MiniMax-M3
 LLM_PROVIDER=openai
 LLM_MAX_TOKENS=24576
 ```
@@ -80,6 +80,7 @@ LLM_MODEL=gpt-4o-mini
 LLM_PROVIDER=openai
 ```
 Without a working key/credits, AI endpoints return `[AI_UNAVAILABLE]` (applications can still proceed via proceed-despite).
+Never commit API keys to git. Rotate any key that was pasted into chat or tickets.
 
 Verify after login as owner:
 ```

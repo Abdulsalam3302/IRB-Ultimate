@@ -301,7 +301,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   // Per-call override wins, else the env default. Reasoning models (MiniMax
-  // M2) burn a large hidden reasoning budget BEFORE the answer, so callers
+  // M3/M2) burn a large hidden reasoning budget BEFORE the answer, so callers
   // that ask for big structured output (e.g. the proposal generator) need
   // more headroom or the JSON truncates inside the <think> block.
   payload.max_tokens = params.maxTokens ?? params.max_tokens ?? ENV.llmMaxTokens;
@@ -422,7 +422,8 @@ const MARKDOWN_FENCE_RE = /^\s*```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```\s*$/;
  * output in `<think>...</think>` blocks AND markdown code fences. Strip
  * both so JSON.parse downstream works.
  */
-function stripReasoningTags(s: string): string {
+/** Exported for unit tests — keep MiniMax M2/M3 / R1 reasoning wrappers out of JSON. */
+export function stripReasoningTags(s: string): string {
   let out = s.replace(REASONING_TAG_RE, "").trim();
   const fenced = out.match(MARKDOWN_FENCE_RE);
   if (fenced) out = fenced[1].trim();

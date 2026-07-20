@@ -113,7 +113,7 @@ export default function AdminObservability() {
               ? "زيارات، مواقع تقريبية، الوقت المستغرق، الحسابات، والطلبات — للمالك فقط."
               : "Visits, approximate locations, time on site, accounts, and applications — owner only."}
           </p>
-          <p className="font-mono text-[11px] text-muted-foreground mt-2">v1.1.1 · open beta</p>
+          <p className="font-mono text-[11px] text-muted-foreground mt-2">v1.1.2 · open beta</p>
         </div>
 
         {error && (

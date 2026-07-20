@@ -87,7 +87,7 @@ const en: Record<string, string> = {
     "Demo environment — do not submit real participant data or PHI. This deployment is for evaluation and feedback only.",
 
   // Open beta (always on for v1.1.0)
-  "beta.banner": "Open beta · v1.1.1 — features may change; feedback welcome.",
+  "beta.banner": "Open beta · v1.1.2 — features may change; feedback welcome.",
   "beta.learnMore": "About & disclaimer",
 
   // Disclaimer / about (first-visit gate)
@@ -110,7 +110,7 @@ const en: Record<string, string> = {
   "disclaimer.acknowledge": "I understand — continue",
   "disclaimer.linkedinCta": "Visit LinkedIn profile",
 
-  "footer.version": "v1.1.1 · open beta",
+  "footer.version": "v1.1.2 · open beta",
 
   // Hero
   "hero.badge": "Digital IRB Review Platform",
@@ -531,7 +531,7 @@ const ar: Record<string, string> = {
   "demo.banner":
     "بيئة تجريبية — لا تُدخل بيانات مشاركين حقيقية أو معلومات صحية محمية. هذه النسخة مخصصة للتقييم وجمع الملاحظات فقط.",
 
-  "beta.banner": "نسخة تجريبية مفتوحة · v1.1.1 — قد تتغير الميزات؛ نرحب بملاحظاتكم.",
+  "beta.banner": "نسخة تجريبية مفتوحة · v1.1.2 — قد تتغير الميزات؛ نرحب بملاحظاتكم.",
   "beta.learnMore": "عن المنصة وإخلاء المسؤولية",
 
   "disclaimer.badge": "نسخة تجريبية مفتوحة · IRB السعودية",
@@ -553,7 +553,7 @@ const ar: Record<string, string> = {
   "disclaimer.acknowledge": "أفهم — متابعة",
   "disclaimer.linkedinCta": "زيارة ملف LinkedIn",
 
-  "footer.version": "v1.1.1 · نسخة تجريبية مفتوحة",
+  "footer.version": "v1.1.2 · نسخة تجريبية مفتوحة",
 
   // Hero
   "hero.badge": "منصة مراجعة IRB الرقمية",

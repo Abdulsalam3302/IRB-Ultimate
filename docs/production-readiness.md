@@ -18,7 +18,7 @@ IRB Saudi Arabia is an Express + tRPC + React (Vite) monolith for NCBE-style IRB
 | Database | TiDB Cloud Serverless MySQL (`irb_platform`, eu-central-1, TLS) |
 | Auth | Native email/password + optional Supabase; JWT cookie sessions |
 | AI | MiniMax OpenAI-compatible API (`MiniMax-M3`) |
-| CI | GitHub Actions `ci.yml` (secret scan → typecheck/tests/build → e2e) |
+| CI | GitHub Actions `ci.yml` (secret scan → MariaDB migrate → typecheck/tests/build → e2e) |
 | Deploy | Render Git auto-deploy + Vercel production deploy workflow |
 
 ## 3. Baseline verification (local, 2026-07-20)

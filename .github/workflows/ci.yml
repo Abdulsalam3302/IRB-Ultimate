@@ -38,14 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
+      # MariaDB supports CREATE INDEX / ADD COLUMN IF NOT EXISTS used for TiDB-safe migrations.
+      # Stock MySQL 8 rejects that syntax (CI was failing on 0008_hot_query_indexes).
       mysql:
-        image: mysql:8
+        image: mariadb:11
         env:
           MYSQL_ROOT_PASSWORD: rootpw
           MYSQL_DATABASE: irb_platform
         ports: ["3306:3306"]
         options: >-
-          --health-cmd="mysqladmin ping -uroot -prootpw"
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s --health-timeout=5s --health-retries=10
 
     steps:
@@ -62,11 +64,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Wait for MySQL
+      - name: Wait for MariaDB
         run: |
-          for i in {1..30}; do
+          for i in {1..40}; do
             if mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpw --silent 2>/dev/null; then
-              echo "MySQL ready"; break
+              echo "MariaDB ready"; break
             fi
             sleep 2
           done
@@ -111,13 +113,13 @@ jobs:
     timeout-minutes: 20
     services:
       mysql:
-        image: mysql:8
+        image: mariadb:11
         env:
           MYSQL_ROOT_PASSWORD: rootpw
           MYSQL_DATABASE: irb_platform
         ports: ["3306:3306"]
         options: >-
-          --health-cmd="mysqladmin ping -uroot -prootpw"
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v4
@@ -127,11 +129,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
 
-      - name: Wait for MySQL & migrate
+      - name: Wait for MariaDB & migrate
         env:
           DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
         run: |
-          for i in {1..30}; do
+          for i in {1..40}; do
             mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpw --silent 2>/dev/null && break
             sleep 2
           done

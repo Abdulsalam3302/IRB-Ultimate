@@ -20,7 +20,7 @@ import {
   Shield, ArrowLeft, Users, FileText, BarChart3, CheckCircle, XCircle,
   Clock, UserPlus, Trash2, Eye, Loader2, Award, Activity,
   TrendingUp, AlertTriangle, History, Download, Calendar, ArrowRight,
-  Ban, EyeOff, RotateCcw, RefreshCw, Filter, MessageSquare
+  Ban, EyeOff, RotateCcw, RefreshCw, Filter, MessageSquare, LogOut
 } from "lucide-react";
 import { Logo } from "@/components/design/Logo";
 import { AiSwarmConsole } from "@/components/AiSwarmConsole";
@@ -29,7 +29,7 @@ import type { ApplicationStatus } from "@shared/types";
 import { Bot } from "lucide-react";
 
 export default function AdminDashboard() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { t, lang } = useT();
   const isAr = lang === "ar";
@@ -49,7 +49,17 @@ export default function AdminDashboard() {
           <Shield className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2">{isAr ? "الوصول مرفوض" : "Access Denied"}</h2>
           <p className="text-muted-foreground mb-4">{isAr ? "يتطلب صلاحية المسؤول." : "Admin access required."}</p>
-          <Button onClick={() => setLocation("/dashboard")}>{isAr ? "الذهاب للوحة التحكم" : "Go to Dashboard"}</Button>
+          <div className="flex items-center justify-center gap-2">
+            <Button onClick={() => setLocation("/dashboard")}>{isAr ? "الذهاب للوحة التحكم" : "Go to Dashboard"}</Button>
+            {isAuthenticated && (
+              <Button
+                variant="outline"
+                onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+              >
+                <LogOut className="h-4 w-4 me-1" /> {t("nav.logout")}
+              </Button>
+            )}
+          </div>
         </CardContent></Card>
       </div>
     );
@@ -75,6 +85,14 @@ export default function AdminDashboard() {
             <Separator orientation="vertical" className="h-6" />
             <NotificationCenter />
             <LanguageToggle />
+            <Button
+              variant="ghost"
+              size="sm"
+              title={t("nav.logout")}
+              onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+            >
+              <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
+            </Button>
           </div>
         </div>
       </nav>

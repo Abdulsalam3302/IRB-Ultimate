@@ -30,6 +30,9 @@ const STRICT_ROUTES = [
   // runs an LLM for proposal DOCX. Prefix match below covers all export verbs.
   "/api/trpc/literature.search",
   "/api/trpc/support.create",
+  "/api/trpc/chatApplication.sendMessage",
+  "/api/mcp",
+  "/api/irb",
   "/api/trpc/analytics.ingest",
   "/api/export",
 ];

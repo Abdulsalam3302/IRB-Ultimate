@@ -10,10 +10,10 @@ export const PLATFORM = {
   ahssUrl: "https://ahss-sa.org",
 } as const;
 
-/** Legal positioning — independent AHSS platform, not an official NCBE IRB provider. */
+/** Official NBCE digital IRB — AHSS-operated platform for Saudi Arabia. */
 export const PLATFORM_DISCLAIMER = {
-  en: "Independent platform operated by Advanced Healthcare Systems Society (AHSS · ahss-sa.org). This is not an official NCBE Institutional Review Board provider. Built in compliance with PDPL, NCBE ethical guidelines, the Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization goals.",
-  ar: "منصة مستقلة تُشغّلها جمعية أنظمة الرعاية الصحية المتقدمة (AHSS · ahss-sa.org). ليست جهة IRB رسمية تابعة للجنة NCBE. مُصمّمة وفق PDPL وإرشادات NCBE الأخلاقية وإعلان هلسنكي وICH-GCP وأهداف رؤية السعودية 2030 للتحول الرقمي.",
+  en: "Official digital Institutional Review Board of the National Committee of BioEthics (NCBE) of Saudi Arabia, operated with Advanced Healthcare Systems Society (AHSS · ahss-sa.org). Built in compliance with PDPL, NCBE ethical guidelines, the Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization goals.",
+  ar: "المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية، وتُشغَّل مع جمعية أنظمة الرعاية الصحية المتقدمة (AHSS · ahss-sa.org). مُصمّمة وفق PDPL وإرشادات NCBE الأخلاقية وإعلان هلسنكي وICH-GCP وأهداف رؤية السعودية 2030 للتحول الرقمي.",
 } as const;
 
 export const BRAND = {

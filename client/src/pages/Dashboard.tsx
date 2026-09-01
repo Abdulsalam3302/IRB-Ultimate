@@ -17,13 +17,13 @@ import {
   Plus, FileText, Clock, CheckCircle, XCircle, ArrowRight,
   Shield, AlertTriangle, Eye, Download, Brain,
   Users, Award, Loader2, Search, BookOpen,
-  MessageSquare, RefreshCw, ArrowLeft, User
+  MessageSquare, RefreshCw, ArrowLeft, User, LogOut, Sparkles
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, RESEARCH_TYPE_LABELS } from "@shared/types";
 import type { ApplicationStatus, ResearchType } from "@shared/types";
 
 export default function Dashboard() {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { t, lang } = useT();
   const isAr = lang === "ar";
@@ -43,7 +43,7 @@ export default function Dashboard() {
   // applicant rarely has more than ~50 applications. Filter chips
   // below let users narrow by lifecycle bucket without scanning.
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterBucket, setFilterBucket] = useState<"all" | "active" | "approved" | "drafts" | "rejected">("all");
+  const [filterBucket, setFilterBucket] = useState<"all" | "active" | "approved" | "drafts" | "rejected" | "retracted">("all");
 
   const filteredApplications = useMemo(() => {
     if (!applications) return [];
@@ -53,7 +53,8 @@ export default function Dashboard() {
       if (filterBucket === "active" && !["under_review", "pending_admin", "submitted"].includes(a.status)) return false;
       if (filterBucket === "approved" && a.status !== "approved") return false;
       if (filterBucket === "drafts" && !["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(a.status)) return false;
-      if (filterBucket === "rejected" && !["rejected", "permanently_rejected", "retracted", "hidden"].includes(a.status)) return false;
+      if (filterBucket === "rejected" && !["rejected", "permanently_rejected"].includes(a.status)) return false;
+      if (filterBucket === "retracted" && a.status !== "retracted") return false;
       // search
       if (!q) return true;
       const haystack = [
@@ -181,11 +182,30 @@ export default function Dashboard() {
         );
       case "rejected":
       case "resubmission_required":
-        return app.submissionCount < 2 ? (
-          <Button size="sm" variant="outline" onClick={() => setLocation(`/apply/${app.id}/stage1`)}>
-            <AlertTriangle className="h-3 w-3 me-1" /> {isAr ? "إعادة التقديم" : "Resubmit"}
-          </Button>
-        ) : null;
+        return (
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank")}>
+              <Download className="h-3 w-3 me-1" /> {isAr ? "شهادة الرفض" : "Rejection certificate"}
+            </Button>
+            {app.submissionCount < 2 ? (
+              <Button size="sm" variant="outline" onClick={() => setLocation(`/apply/${app.id}/stage1`)}>
+                <AlertTriangle className="h-3 w-3 me-1" /> {isAr ? "إعادة التقديم" : "Resubmit"}
+              </Button>
+            ) : null}
+          </div>
+        );
+      case "permanently_rejected":
+      case "retracted":
+        return (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank")}>
+              <Download className="h-3 w-3 me-1" /> {isAr ? "الشهادة" : "Certificate"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setLocation(`/application/${app.id}`)}>
+              <Eye className="h-3 w-3 me-1" /> {isAr ? "عرض" : "View"}
+            </Button>
+          </div>
+        );
       case "approved":
         return (
           <div className="flex gap-2">
@@ -213,6 +233,8 @@ export default function Dashboard() {
     approved: applications?.filter(a => a.status === "approved").length || 0,
     pending: applications?.filter(a => ["under_review", "pending_admin", "submitted"].includes(a.status)).length || 0,
     drafts: applications?.filter(a => ["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(a.status)).length || 0,
+    rejected: applications?.filter(a => a.status === "rejected" || a.status === "permanently_rejected").length || 0,
+    retracted: applications?.filter(a => a.status === "retracted").length || 0,
   };
 
   return (
@@ -241,6 +263,14 @@ export default function Dashboard() {
             <Button variant="ghost" size="sm" onClick={() => setLocation("/profile")} className="text-muted-foreground">
               <User className="h-3.5 w-3.5 me-1" /> {user?.name}
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              title={t("nav.logout")}
+              onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+            >
+              <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
+            </Button>
           </div>
         </div>
       </nav>
@@ -260,12 +290,16 @@ export default function Dashboard() {
               <Plus className="h-4 w-4 me-2" />
               {createApp.isPending ? (isAr ? "جاري الإنشاء..." : "Creating...") : (isAr ? "طلب جديد" : "New Application")}
             </Button>
+            <Button variant="outline" onClick={() => setLocation("/chat-apply")}>
+              <Sparkles className="h-4 w-4 me-2" />
+              {isAr ? "طلب عبر مساعد الذكاء الاصطناعي" : "Chatbot AI Application"}
+            </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
         {applications && applications.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
             <Card>
               <CardContent className="py-4 text-center">
                 <div className="text-2xl font-bold text-primary">{stats.total}</div>
@@ -290,6 +324,18 @@ export default function Dashboard() {
                 <div className="text-xs text-muted-foreground">{isAr ? "قيد التقدم" : "In Progress"}</div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="py-4 text-center">
+                <div className="text-2xl font-bold text-red-600">{stats.rejected}</div>
+                <div className="text-xs text-muted-foreground">{isAr ? "مرفوضة" : "Rejected"}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4 text-center">
+                <div className="text-2xl font-bold text-orange-700">{stats.retracted}</div>
+                <div className="text-xs text-muted-foreground">{isAr ? "مسحوبة" : "Retracted"}</div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -312,7 +358,8 @@ export default function Dashboard() {
                 { key: "active", label: isAr ? "نشطة" : "In review", count: applications.filter(a => ["under_review","pending_admin","submitted"].includes(a.status)).length },
                 { key: "approved", label: isAr ? "معتمدة" : "Approved", count: applications.filter(a => a.status === "approved").length },
                 { key: "drafts", label: isAr ? "مسودات" : "Drafts", count: applications.filter(a => ["draft","declaration_pending","stage1_pending","stage1_failed","stage2_pending","stage2_failed"].includes(a.status)).length },
-                { key: "rejected", label: isAr ? "مرفوضة" : "Rejected", count: applications.filter(a => ["rejected","permanently_rejected","retracted","hidden"].includes(a.status)).length },
+                { key: "rejected", label: isAr ? "مرفوضة" : "Rejected", count: applications.filter(a => ["rejected","permanently_rejected"].includes(a.status)).length },
+                { key: "retracted", label: isAr ? "مسحوبة" : "Retracted", count: applications.filter(a => a.status === "retracted").length },
               ].map(b => (
                 <button
                   key={b.key}

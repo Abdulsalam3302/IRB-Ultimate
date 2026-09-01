@@ -80,43 +80,43 @@ const en: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "Independent ethical research review platform for the Kingdom of Saudi Arabia, operated by AHSS with AI-powered workflows and digital certification in alignment with applicable Saudi regulations and international ethical standards.",
+    "Official digital IRB of the National Committee of BioEthics (NCBE) of Saudi Arabia — operated with AHSS. PDPL-compliant digital certification aligned with NCBE guidelines, the Declaration of Helsinki, and Vision 2030.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
     "Demo environment — do not submit real participant data or PHI. This deployment is for evaluation and feedback only.",
 
   // Open beta (always on for v1.1.0)
-  "beta.banner": "Open beta · v1.1.2 — features may change; feedback welcome.",
-  "beta.learnMore": "About & disclaimer",
+  "beta.banner": "Official launch · v2.0.0 — NBCE digital IRB for Saudi Arabia.",
+  "beta.learnMore": "About this platform",
 
-  // Disclaimer / about (first-visit gate)
-  "disclaimer.badge": "Open beta · IRB Saudi Arabia",
-  "disclaimer.title": "Disclaimer & About",
-  "disclaimer.subtitle": "Please read before using the platform",
+  // Disclaimer / about
+  "disclaimer.badge": "Official · IRB Saudi Arabia v2.0.0",
+  "disclaimer.title": "About this platform",
+  "disclaimer.subtitle": "Official digital IRB of the National Committee of BioEthics (NCBE)",
   "disclaimer.aboutFounder": "About the founder",
   "disclaimer.founderBody":
     "Dr. Abdulsalam Aleid is a physician and health-systems leader building tools that give researchers clear structure, honest guidance, and faster ethical review — without replacing human judgment.",
   "disclaimer.aboutProject": "About this project",
   "disclaimer.projectBody":
-    "IRB Saudi Arabia is an independent AI-assisted ethical review platform operated by the Advanced Healthcare Systems Society (AHSS). It helps researchers prepare and submit IRB-style applications with transparent workflows and verifiable digital certificates.",
-  "disclaimer.operatedBy": "Operated by",
-  "disclaimer.openBeta": "Open beta",
+    "IRB Saudi Arabia is the official digital Institutional Review Board of the National Committee of BioEthics (NCBE), operated with the Advanced Healthcare Systems Society (AHSS). Researchers prepare and submit IRB applications through transparent workflows and receive verifiable digital certificates.",
+  "disclaimer.operatedBy": "Operated with",
+  "disclaimer.openBeta": "Official launch",
   "disclaimer.openBetaBody":
-    "This platform is in open beta. Workflows, AI guidance, and interfaces may change. Do not treat outputs as final medical, legal, ethical, or regulatory advice. Report issues via Support so we can improve the service for the research community.",
-  "disclaimer.legal": "Important notice",
+    "Version 2.0.0 is the official launch of the NBCE digital IRB. Complete protocols that pass the AI Swarm or the four designated digital reviewers (Hanan Al-Dosari, Majed Al-Otaibi, Reem Al-Shammari, Yazeed Al-Ghamdi) receive official approval and an IRB certificate. Report issues via Support.",
+  "disclaimer.legal": "Official standing",
   "disclaimer.legalBody":
-    "IRB Saudi Arabia is an independent academic-productivity and ethical-review facilitation platform. It does not provide medical, legal, ethical, or clinical advice, and it is not an official NCBE Institutional Review Board provider. Researchers remain responsible for compliance with applicable Saudi regulations and institutional requirements.",
-  "disclaimer.acknowledge": "I understand — continue",
+    "IRB Saudi Arabia is the official digital IRB of the National Committee of BioEthics (NCBE) of Saudi Arabia. Researchers remain responsible for the accuracy of their submissions and for following applicable institutional requirements alongside this review.",
+  "disclaimer.acknowledge": "Continue",
   "disclaimer.linkedinCta": "Visit LinkedIn profile",
 
-  "footer.version": "v1.1.2 · open beta",
+  "footer.version": "v2.0.0",
 
   // Hero
-  "hero.badge": "Digital IRB Review Platform",
+  "hero.badge": "Official NBCE Digital IRB · Saudi Arabia",
   "hero.title": "Institutional Review Board",
-  "hero.subtitle": "Ethical Research Approval Platform",
-  "hero.desc": "A modern, AI-powered platform for fast, transparent, and compliant IRB review — reducing approval time from weeks to 24–48 hours with increasing quality and quantity of the service.",
+  "hero.subtitle": "Official digital ethical review for research in the Kingdom",
+  "hero.desc": "The official digital IRB of the National Committee of BioEthics (NCBE) — AI-powered review, four designated digital reviewers, and verifiable certificates that reduce approval time from weeks to 24–48 hours.",
   "hero.apply": "Apply for IRB Approval",
   "hero.verify": "Verify an IRB Certificate",
   "hero.learnMore": "Learn More",
@@ -169,8 +169,8 @@ const en: Record<string, string> = {
 
   // Footer
   "footer.brand": "IRB Review Platform",
-  "footer.desc": "Independent ethical research review platform for the Kingdom of Saudi Arabia — AI-powered workflows and digital certification by AHSS.",
-  "footer.independence": "Independent ethical research review platform for the Kingdom of Saudi Arabia, operated by AHSS with AI-powered workflows and digital certification in alignment with applicable Saudi regulations and international ethical standards.",
+  "footer.desc": "Official digital IRB of the National Committee of BioEthics (NCBE) of Saudi Arabia — AI-powered workflows and digital certification, operated with AHSS.",
+  "footer.independence": "Official digital Institutional Review Board of the National Committee of BioEthics (NCBE) of Saudi Arabia, operated with AHSS, with AI-powered workflows and digital certification in alignment with applicable Saudi regulations and international ethical standards.",
   "footer.quickLinks": "Quick Links",
   "footer.legal": "Legal",
   "footer.contact": "Contact",
@@ -525,41 +525,41 @@ const ar: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "منصة مستقلة للمراجعة الأخلاقية للبحوث في المملكة العربية السعودية، تشغّلها AHSS بإجراءات عمل مدعومة بالذكاء الاصطناعي وشهادات رقمية، وفق الأنظمة السعودية المعمول بها والمعايير الأخلاقية الدولية.",
+    "المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية — تُشغَّل مع AHSS. شهادات رقمية متوافقة مع PDPL وإرشادات NCBE وإعلان هلسنكي ورؤية 2030.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
     "بيئة تجريبية — لا تُدخل بيانات مشاركين حقيقية أو معلومات صحية محمية. هذه النسخة مخصصة للتقييم وجمع الملاحظات فقط.",
 
-  "beta.banner": "نسخة تجريبية مفتوحة · v1.1.2 — قد تتغير الميزات؛ نرحب بملاحظاتكم.",
-  "beta.learnMore": "عن المنصة وإخلاء المسؤولية",
+  "beta.banner": "الإطلاق الرسمي · v2.0.0 — المنصة الرقمية لـ NCBE في المملكة العربية السعودية.",
+  "beta.learnMore": "عن المنصة",
 
-  "disclaimer.badge": "نسخة تجريبية مفتوحة · IRB السعودية",
-  "disclaimer.title": "إخلاء المسؤولية وعن المنصة",
-  "disclaimer.subtitle": "يرجى القراءة قبل استخدام المنصة",
+  "disclaimer.badge": "رسمي · IRB السعودية v2.0.0",
+  "disclaimer.title": "عن المنصة",
+  "disclaimer.subtitle": "المنصة الرقمية الرسمية للجنة الوطنية للأخلاقيات الحيوية (NCBE)",
   "disclaimer.aboutFounder": "عن المؤسس",
   "disclaimer.founderBody":
     "د. عبدالسلام العيد طبيب وقائد في أنظمة الرعاية الصحية يبني أدوات تمنح الباحثين هيكلاً واضحاً وإرشاداً صادقاً ومراجعة أخلاقية أسرع — دون أن تحل محل الحكم البشري.",
   "disclaimer.aboutProject": "عن المشروع",
   "disclaimer.projectBody":
-    "IRB السعودية منصة مستقلة للمراجعة الأخلاقية بمساعدة الذكاء الاصطناعي تشغّلها جمعية أنظمة الرعاية الصحية المتقدمة (AHSS). تساعد الباحثين على إعداد وتقديم طلبات بأسلوب IRB عبر مسارات شفافة وشهادات رقمية قابلة للتحقق.",
-  "disclaimer.operatedBy": "تُشغّلها",
-  "disclaimer.openBeta": "نسخة تجريبية مفتوحة",
+    "IRB السعودية هي المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE)، وتُشغَّل مع جمعية أنظمة الرعاية الصحية المتقدمة (AHSS). يُعدّ الباحثون طلبات IRB عبر مسارات شفافة ويتلقون شهادات رقمية قابلة للتحقق.",
+  "disclaimer.operatedBy": "تُشغَّل مع",
+  "disclaimer.openBeta": "الإطلاق الرسمي",
   "disclaimer.openBetaBody":
-    "المنصة في مرحلة تجريبية مفتوحة. قد تتغير المسارات وإرشادات الذكاء الاصطناعي والواجهات. لا تُعامل المخرجات كنصيحة طبية أو قانونية أو أخلاقية أو تنظيمية نهائية. أبلغ عن المشكلات عبر الدعم لنحسّن الخدمة للمجتمع البحثي.",
-  "disclaimer.legal": "تنويه مهم",
+    "الإصدار 2.0.0 هو الإطلاق الرسمي للمنصة الرقمية لـ NCBE. البروتوكولات المكتملة التي تجتاز سرب الذكاء الاصطناعي أو المراجعين الرقميين الأربعة (حنان الدوسري، ماجد العتيبي، ريم الشمري، يزيد الغامدي) تحصل على الموافقة الرسمية وشهادة IRB. أبلغ عن المشكلات عبر الدعم.",
+  "disclaimer.legal": "الصفة الرسمية",
   "disclaimer.legalBody":
-    "IRB السعودية منصة مستقلة لتسهيل الإنتاجية الأكاديمية والمراجعة الأخلاقية. لا تقدّم مشورة طبية أو قانونية أو أخلاقية أو سريرية، وليست جهة IRB رسمية تابعة لـ NCBE. يبقى الباحثون مسؤولين عن الامتثال للأنظمة السعودية المعمول بها ومتطلبات مؤسساتهم.",
-  "disclaimer.acknowledge": "أفهم — متابعة",
+    "IRB السعودية هي المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE). يبقى الباحثون مسؤولين عن دقة طلباتهم وعن اتباع متطلبات مؤسساتهم إلى جانب هذه المراجعة.",
+  "disclaimer.acknowledge": "متابعة",
   "disclaimer.linkedinCta": "زيارة ملف LinkedIn",
 
-  "footer.version": "v1.1.2 · نسخة تجريبية مفتوحة",
+  "footer.version": "v2.0.0",
 
   // Hero
-  "hero.badge": "منصة مراجعة IRB الرقمية",
+  "hero.badge": "المنصة الرقمية الرسمية لـ NCBE · المملكة العربية السعودية",
   "hero.title": "لجنة أخلاقيات البحث العلمي",
-  "hero.subtitle": "منصة الموافقات الأخلاقية للبحوث العلمية",
-  "hero.desc": "منصة حديثة مدعومة بالذكاء الاصطناعي تتيح مراجعة أخلاقية سريعة وشفافة ومتوافقة مع المعايير — تختصر مدة الموافقة من أسابيع إلى 24-48 ساعة مع رفع جودة الخدمة وتوسيع نطاقها.",
+  "hero.subtitle": "المراجعة الأخلاقية الرقمية الرسمية للبحوث في المملكة",
+  "hero.desc": "المنصة الرقمية الرسمية للجنة الوطنية للأخلاقيات الحيوية (NCBE) — مراجعة بالذكاء الاصطناعي، أربعة مراجعون رقميون معيّنون، وشهادات قابلة للتحقق تختصر مدة الموافقة من أسابيع إلى 24–48 ساعة.",
   "hero.apply": "تقديم طلب موافقة IRB",
   "hero.verify": "التحقق من شهادة IRB",
   "hero.learnMore": "اعرف المزيد",
@@ -612,8 +612,8 @@ const ar: Record<string, string> = {
 
   // Footer
   "footer.brand": "منصة مراجعة IRB",
-  "footer.desc": "منصة مستقلة للمراجعة الأخلاقية للبحوث في المملكة — إجراءات مدعومة بالذكاء الاصطناعي وشهادات رقمية من AHSS.",
-  "footer.independence": "منصة مستقلة لمراجعة الأبحاث الأخلاقية في المملكة العربية السعودية، تُشغّلها AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
+  "footer.desc": "المنصة الرقمية الرسمية للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية — سير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية، تُشغَّل مع AHSS.",
+  "footer.independence": "المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية، تُشغَّل مع AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
   "footer.quickLinks": "روابط سريعة",
   "footer.legal": "قانوني",
   "footer.contact": "اتصل بنا",

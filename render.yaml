@@ -28,8 +28,6 @@ services:
         value: "10000"
       - key: VITE_APP_ID
         value: irb-sa-prod
-      - key: VITE_PUBLIC_DEMO_BANNER
-        value: "1"
       # TiDB Serverless: keep pool small — large idle pools waste connections.
       - key: DATABASE_POOL_MAX
         value: "5"

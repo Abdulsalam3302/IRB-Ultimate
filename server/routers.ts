@@ -13,6 +13,8 @@ import { runSwarmPanel, SWARM_LLM_CALLS_PER_RUN } from "./aiSwarmReview";
 import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
+import { runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
+import { chatApplicationTurn } from "./services/chatApplication.service";
 import { storagePut } from "./storage";
 import * as emailService from "./emailService";
 import { searchLiterature } from "./literature";
@@ -878,7 +880,16 @@ const applicationRouter = router({
         }
       } catch (e) { /* notification is best-effort */ }
 
-      return { success: true, assignedMembers: selected.length };
+      // Official digital pathway: AI Swarm OR unanimous 4-bot pass auto-approves.
+      // Failures must not block the applicant's successful submit.
+      let accelerated: Awaited<ReturnType<typeof runAcceleratedPipeline>> | null = null;
+      try {
+        accelerated = await runAcceleratedPipeline(input.id, ctx.user.id);
+      } catch (e) {
+        console.error("[Accelerated] pipeline failed after submit", e);
+      }
+
+      return { success: true, assignedMembers: selected.length, accelerated };
     }),
 
   // Proceed despite Stage 1 AI score (red flag)
@@ -1540,19 +1551,30 @@ const adminRouter = router({
 
         return { success: true, irbNumber, certificateUrl: certUrl };
       } else {
-        if (app.submissionCount >= 2) {
-          await db.updateApplication(input.applicationId, {
-            status: "permanently_rejected",
-            adminNotes: input.notes || null,
-            rejectionReason: input.notes || "Application rejected by admin",
+        const nextStatus = app.submissionCount >= 2 ? "permanently_rejected" : "rejected";
+        const applicant = await db.getUserById(app.applicantId);
+        const rejectedApp = {
+          ...app,
+          status: nextStatus,
+          rejectionReason: input.notes || "Application rejected by admin",
+        };
+        let certUrl = "";
+        try {
+          certUrl = await generateAndStoreCertificatePdf({
+            app: rejectedApp as typeof app,
+            applicantName: applicant?.name ?? null,
+            applicantEmail: applicant?.email ?? null,
           });
-        } else {
-          await db.updateApplication(input.applicationId, {
-            status: "rejected",
-            adminNotes: input.notes || null,
-            rejectionReason: input.notes || "Application rejected by admin",
-          });
+        } catch (e) {
+          console.error("Rejection certificate generation failed; decision proceeds:", e);
         }
+
+        await db.updateApplication(input.applicationId, {
+          status: nextStatus,
+          adminNotes: input.notes || null,
+          rejectionReason: input.notes || "Application rejected by admin",
+          certificateUrl: certUrl || app.certificateUrl || null,
+        });
 
         await db.addAuditLog({
           applicationId: input.applicationId,
@@ -2529,6 +2551,24 @@ const analyticsRouter = router({
   metrics: ownerProcedure.query(async () => db.getObservabilityMetrics()),
 });
 
+const chatApplicationRouter = router({
+  sendMessage: protectedProcedure
+    .input(z.object({
+      applicationId: z.number().int().positive(),
+      messages: z.array(z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().max(4000),
+      })).max(16),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return chatApplicationTurn({
+        applicationId: input.applicationId,
+        userId: ctx.user.id,
+        messages: input.messages,
+      });
+    }),
+});
+
 // ─── Main Router ────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -2589,6 +2629,7 @@ export const appRouter = router({
       }),
   }),
   application: applicationRouter,
+  chatApplication: chatApplicationRouter,
   authors: authorsRouter,
   review: reviewRouter,
   admin: adminRouter,

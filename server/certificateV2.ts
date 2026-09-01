@@ -93,11 +93,11 @@ function buildAiScoresHtml(app: Application): string {
   </div>`;
 }
 
-const RETRACTED_CSS = `
-  .retracted-stamp { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-  .retracted-stamp .stamp-inner { transform: rotate(-18deg); border: 6px solid #dc2626; border-radius: 8px; padding: 18px 28px; background: rgba(254,242,242,.92); box-shadow: 0 0 0 4px rgba(220,38,38,.15); }
-  .retracted-stamp .stamp-text { font-size: 42px; font-weight: 900; letter-spacing: 4px; color: #dc2626; text-transform: uppercase; text-align: center; line-height: 1; font-family: Inter, system-ui, sans-serif; }
-  .retracted-stamp .stamp-sub { font-size: 11px; font-weight: 600; color: #991b1b; text-align: center; margin-top: 8px; letter-spacing: 1px; font-family: Inter, system-ui, sans-serif; }
+const OVERLAY_STAMP_CSS = `
+  .decision-stamp { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .decision-stamp .stamp-inner { transform: rotate(-18deg); border: 6px solid #dc2626; border-radius: 8px; padding: 18px 28px; background: rgba(254,242,242,.92); box-shadow: 0 0 0 4px rgba(220,38,38,.15); }
+  .decision-stamp .stamp-text { font-size: 42px; font-weight: 900; letter-spacing: 4px; color: #dc2626; text-transform: uppercase; text-align: center; line-height: 1; font-family: Inter, system-ui, sans-serif; }
+  .decision-stamp .stamp-sub { font-size: 11px; font-weight: 600; color: #991b1b; text-align: center; margin-top: 8px; letter-spacing: 1px; font-family: Inter, system-ui, sans-serif; }
 `;
 
 export function renderCertificateHtml(data: CertData): string {
@@ -119,8 +119,9 @@ export function renderCertificateHtml(data: CertData): string {
   const reviewCategory = String(app.irbCategory || "full_board").replace(/_/g, " ");
   const researchType = String(app.researchType || "—").replace(/_/g, " ");
   const isRetracted = app.status === "retracted";
-  const statusLabel = isRetracted ? "RETRACTED" : "APPROVED";
-  const statusColor = isRetracted ? "#dc2626" : "var(--jade)";
+  const isRejected = app.status === "rejected" || app.status === "permanently_rejected";
+  const statusLabel = isRetracted ? "RETRACTED" : isRejected ? "REJECTED" : "APPROVED";
+  const statusColor = isRetracted || isRejected ? "#dc2626" : "var(--jade)";
   const verifyUrl = `${verifyBaseUrl()}/verify/${encodeURIComponent(irbNumber)}`;
   const verifyHost = verifyBaseUrl().replace(/^https?:\/\//, "");
   const submittedBy = applicantName
@@ -128,16 +129,25 @@ export function renderCertificateHtml(data: CertData): string {
     : "—";
   const stampMonth = String(approvedAt.getMonth() + 1).padStart(2, "0");
   const stampYear = approvedAt.getFullYear();
-  const standingLabel = isRetracted ? "Retracted · Inactive" : "Approved · Active";
-  const standingColor = isRetracted ? "#dc2626" : "var(--jade)";
+  const standingLabel = isRetracted
+    ? "Retracted · Inactive"
+    : isRejected
+      ? "Rejected · Inactive"
+      : "Approved · Active";
+  const standingColor = isRetracted || isRejected ? "#dc2626" : "var(--jade)";
 
   let html = loadTemplate();
-  html = html.replace("</style>", `${isRetracted ? RETRACTED_CSS : ""}</style>`);
+  html = html.replace("</style>", `${isRetracted || isRejected ? OVERLAY_STAMP_CSS : ""}</style>`);
 
   if (isRetracted) {
     html = html.replace(
       "<body>",
-      `<body><div class="retracted-stamp"><div class="stamp-inner"><div class="stamp-text">[ Retracted ]</div><div class="stamp-sub">${escapeHtml(app.retractionReason || "Approval withdrawn")}</div></div></div>`,
+      `<body><div class="decision-stamp"><div class="stamp-inner"><div class="stamp-text">[ Retracted ]</div><div class="stamp-sub">${escapeHtml(app.retractionReason || "Approval withdrawn")} · سحب</div></div></div>`,
+    );
+  } else if (isRejected) {
+    html = html.replace(
+      "<body>",
+      `<body><div class="decision-stamp"><div class="stamp-inner"><div class="stamp-text">[ Rejected ]</div><div class="stamp-sub">${escapeHtml(app.rejectionReason || "Application rejected")} · رفض</div></div></div>`,
     );
   }
 
@@ -205,6 +215,9 @@ export function renderCertificateHtml(data: CertData): string {
 
   if (isRetracted) {
     html = html.replace("APPROVED", "RETRACTED");
+    html = html.replace('<div class="stamp-approved">', '<div class="stamp-approved" style="border-color:#dc2626;color:#dc2626;">');
+  } else if (isRejected) {
+    html = html.replace("APPROVED", "REJECTED");
     html = html.replace('<div class="stamp-approved">', '<div class="stamp-approved" style="border-color:#dc2626;color:#dc2626;">');
   }
 

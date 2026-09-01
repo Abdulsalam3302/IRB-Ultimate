@@ -42,7 +42,7 @@ export const ENV = {
   // when not separately set — same value in both is fine.
   oAuthPortalUrl: (process.env.OAUTH_PORTAL_URL ?? process.env.VITE_OAUTH_PORTAL_URL ?? "").trim(),
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-  ownerEmail: (process.env.OWNER_EMAIL ?? "").trim().toLowerCase(),
+  ownerEmail: (process.env.OWNER_EMAIL ?? "kubee3302@gmail.com").trim().toLowerCase(),
   supabaseUrl: (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim(),
   supabaseEnabled: Boolean(
     (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()

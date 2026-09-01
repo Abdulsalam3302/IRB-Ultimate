@@ -8,6 +8,10 @@
       "destination": "https://irb-saudi-arabia.onrender.com/api/:path*"
     },
     {
+      "source": "/mcp",
+      "destination": "https://irb-saudi-arabia.onrender.com/mcp"
+    },
+    {
       "source": "/uploads/:path*",
       "destination": "https://irb-saudi-arabia.onrender.com/uploads/:path*"
     },

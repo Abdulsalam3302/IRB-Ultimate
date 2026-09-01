@@ -8,7 +8,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { AnalyticsBeacon } from "./components/AnalyticsBeacon";
-import { OpenBetaBanner } from "./components/OpenBetaBanner";
 
 // Lazy-loaded route pages — each becomes its own chunk so first paint
 // only ships the home + framework. Pages load on navigation.
@@ -35,6 +34,7 @@ const GuidelineDoc = lazy(() => import("./pages/GuidelineDoc"));
 const FormatWizard = lazy(() => import("./pages/FormatWizard"));
 const Auth = lazy(() => import("./pages/Auth"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const ChatApplication = lazy(() => import("./pages/ChatApplication"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function PageFallback() {
@@ -48,7 +48,6 @@ function PageFallback() {
 function Router() {
   return (
     <DisclaimerGate>
-      <OpenBetaBanner />
       <Suspense fallback={<PageFallback />}>
         <Switch>
           <Route path={"/"} component={Home} />
@@ -60,6 +59,7 @@ function Router() {
           <Route path={"/resources"} component={Resources} />
           <Route path={"/support"} component={Support} />
           <Route path={"/dashboard"} component={Dashboard} />
+          <Route path={"/chat-apply"} component={ChatApplication} />
           <Route path={"/apply/:id/declaration"} component={Declaration} />
           <Route path={"/apply/:id/stage1"} component={ApplyStage1} />
           <Route path={"/apply/:id/stage2"} component={ApplyStage2} />

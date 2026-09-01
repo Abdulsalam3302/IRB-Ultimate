@@ -56,4 +56,28 @@ describe("certificate security", () => {
     expect(html).toContain("applicant@hospital.sa");
     expect(html).toContain("Cardiology");
   });
+
+  it("stamps REJECTED (with Arabic رفض) on rejected certificates", () => {
+    const html = renderCertificateHtml({
+      app: fakeApp({ status: "rejected", rejectionReason: "Insufficient consent" }),
+      applicantName: "Dr. Real PI",
+      applicantEmail: null,
+    });
+    expect(html).toContain("[ Rejected ]");
+    expect(html).toContain("رفض");
+    expect(html).toContain("Insufficient consent");
+    expect(html).toContain("REJECTED");
+    expect(html).not.toContain("<script>");
+  });
+
+  it("stamps RETRACTED (with Arabic سحب) on retracted certificates", () => {
+    const html = renderCertificateHtml({
+      app: fakeApp({ status: "retracted", retractionReason: "Safety signal" }),
+      applicantName: "Dr. Real PI",
+      applicantEmail: null,
+    });
+    expect(html).toContain("[ Retracted ]");
+    expect(html).toContain("سحب");
+    expect(html).toContain("Safety signal");
+  });
 });

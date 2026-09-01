@@ -10,11 +10,11 @@ import { useT } from "@/contexts/LanguageContext";
 import {
   Shield, Brain, FileCheck, Users, ArrowRight,
   Target, Eye, Lightbulb, BarChart3, Globe,
-  ChevronRight, Search, Sparkles, ArrowLeft, Check, Scale, Zap,
+  ChevronRight, Search, Sparkles, ArrowLeft, Check, Scale, Zap, LogOut,
 } from "lucide-react";
 
 export default function Home() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { t, isRtl } = useT();
 
@@ -43,9 +43,19 @@ export default function Home() {
               {t("nav.resources")}
             </Button>
             {isAuthenticated ? (
-              <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50" onClick={() => setLocation("/dashboard")}>
-                {t("nav.dashboard")} <ChevronIcon className="h-4 w-4 ms-1" />
-              </Button>
+              <>
+                <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50" onClick={() => setLocation("/dashboard")}>
+                  {t("nav.dashboard")} <ChevronIcon className="h-4 w-4 ms-1" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title={t("nav.logout")}
+                  onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+                >
+                  <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
+                </Button>
+              </>
             ) : (
               <Button size="sm" className="bg-forest-900 hover:bg-forest-800 text-cream-50" onClick={() => { window.location.href = getLoginUrl(); }}>
                 {t("nav.login")} <ChevronIcon className="h-4 w-4 ms-1" />

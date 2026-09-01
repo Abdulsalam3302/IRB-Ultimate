@@ -15,8 +15,10 @@ import type { Application } from "../drizzle/schema";
  * so the owner can compare them for agreement.
  *
  * Design constraints (deliberate):
- *  - ADVISORY ONLY. The swarm never changes application status, never
- *    notifies the applicant, and is invisible to every non-owner role.
+ *  - OWNER CONSOLE. This expensive LLM swarm never changes application
+ *    status and is invisible to every non-owner role. Official
+ *    auto-approval on submit is `acceleratedReview.pipeline` (heuristic
+ *    6-panel swarm + Hanan/Majed/Reem/Yazeed bots).
  *  - STRICT BY CONSTRUCTION. The pass bar is enforced server-side
  *    (chair score, cluster floors, red flags) — a lenient LLM cannot
  *    soften the verdict below the rubric.

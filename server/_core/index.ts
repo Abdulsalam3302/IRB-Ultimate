@@ -14,7 +14,9 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { UPLOADS_DIR_PATH } from "../storage";
+import { APP_VERSION } from "@shared/const";
 import { sdk } from "./sdk";
+import { registerIrbAgentRoutes, registerMcpJsonRpc } from "../agent/irbApiRoutes";
 import * as db from "../db";
 import * as fsSync from "node:fs";
 
@@ -77,6 +79,8 @@ async function startServer() {
     res.json({
       ok: true,
       ts: Date.now(),
+      appVersion: APP_VERSION,
+      official: true,
       version:
         process.env.RELEASE ||
         process.env.RENDER_GIT_COMMIT ||
@@ -199,6 +203,8 @@ async function startServer() {
   // Application export (HTML for printing, ZIP for inspectors). Streamed
   // binaries — kept off the tRPC adapter which expects JSON.
   registerExportRoutes(app);
+  registerIrbAgentRoutes(app);
+  registerMcpJsonRpc(app);
   // tRPC API
   app.use(
     "/api/trpc",

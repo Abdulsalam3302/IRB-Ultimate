@@ -15,6 +15,7 @@ import {
   aiSwarmReviews, InsertAiSwarmReview,
   notifications,
   analyticsSessions, analyticsEvents, llmUsageDaily,
+  chatApplicationMessages, InsertChatApplicationMessage,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
@@ -224,6 +225,7 @@ export async function purgeExampleTestAccounts(): Promise<{ users: number; appli
     await db.delete(adverseEvents).where(inArray(adverseEvents.applicationId, appIds));
     await db.delete(amendments).where(inArray(amendments.applicationId, appIds));
     await db.delete(aiSwarmReviews).where(inArray(aiSwarmReviews.applicationId, appIds));
+    await db.delete(chatApplicationMessages).where(inArray(chatApplicationMessages.applicationId, appIds));
     await db.delete(fileUploads).where(inArray(fileUploads.applicationId, appIds));
     await db.delete(notifications).where(inArray(notifications.applicationId, appIds));
     await db.delete(auditLog).where(inArray(auditLog.applicationId, appIds));
@@ -261,7 +263,7 @@ export async function exportUserData(userId: number) {
   const user = userRows[0] ? withoutPassword({ ...userRows[0] }) : null;
   const appIds = apps.map(a => a.id);
 
-  const [authors, versions, aes, ams, files, myNotifications, myAudit, myTickets] = await Promise.all([
+  const [authors, versions, aes, ams, files, myNotifications, myAudit, myTickets, chatTurns] = await Promise.all([
     appIds.length ? db.select().from(researchAuthors).where(inArray(researchAuthors.applicationId, appIds)) : Promise.resolve([]),
     appIds.length ? db.select().from(applicationVersions).where(inArray(applicationVersions.applicationId, appIds)) : Promise.resolve([]),
     appIds.length ? db.select().from(adverseEvents).where(inArray(adverseEvents.applicationId, appIds)) : Promise.resolve([]),
@@ -270,6 +272,7 @@ export async function exportUserData(userId: number) {
     db.select().from(notifications).where(eq(notifications.userId, userId)),
     db.select().from(auditLog).where(eq(auditLog.userId, userId)),
     db.select().from(supportTickets).where(eq(supportTickets.userId, userId)),
+    appIds.length ? db.select().from(chatApplicationMessages).where(inArray(chatApplicationMessages.applicationId, appIds)) : Promise.resolve([]),
   ]);
 
   return {
@@ -284,6 +287,7 @@ export async function exportUserData(userId: number) {
     notifications: myNotifications,
     auditTrail: myAudit,
     supportTickets: myTickets,
+    chatApplicationMessages: chatTurns,
   };
 }
 
@@ -327,6 +331,7 @@ export async function eraseUserAccount(userId: number): Promise<{
     await db.delete(adverseEvents).where(inArray(adverseEvents.applicationId, draftIds));
     await db.delete(amendments).where(inArray(amendments.applicationId, draftIds));
     await db.delete(aiSwarmReviews).where(inArray(aiSwarmReviews.applicationId, draftIds));
+    await db.delete(chatApplicationMessages).where(inArray(chatApplicationMessages.applicationId, draftIds));
     await db.delete(fileUploads).where(inArray(fileUploads.applicationId, draftIds));
     await db.delete(notifications).where(inArray(notifications.applicationId, draftIds));
     await db.delete(auditLog).where(inArray(auditLog.applicationId, draftIds));
@@ -435,8 +440,12 @@ export async function generateIrbNumber(): Promise<string> {
 }
 
 export async function getApplicationStats() {
+  const empty = {
+    total: 0, approved: 0, rejected: 0, pending: 0, retracted: 0,
+    submissions: 0, chatbot: 0, traditional: 0, avgProcessingDays: 0,
+  };
   const db = await getDb();
-  if (!db) return { total: 0, approved: 0, rejected: 0, pending: 0, avgProcessingDays: 0 };
+  if (!db) return empty;
   const total = await db.select({ cnt: count() }).from(applications);
   const approved = await db.select({ cnt: count() }).from(applications).where(eq(applications.status, "approved"));
   const rejected = await db.select({ cnt: count() }).from(applications).where(
@@ -447,14 +456,24 @@ export async function getApplicationStats() {
       ne(applications.status, "approved"),
       ne(applications.status, "rejected"),
       ne(applications.status, "permanently_rejected"),
-      ne(applications.status, "draft")
+      ne(applications.status, "draft"),
+      ne(applications.status, "retracted"),
+      ne(applications.status, "hidden"),
     )
   );
+  const retracted = await db.select({ cnt: count() }).from(applications).where(eq(applications.status, "retracted"));
+  const submissions = await db.select({ cnt: count() }).from(applications).where(sql`${applications.submittedAt} IS NOT NULL`);
+  const chatbot = await db.select({ cnt: count() }).from(applications).where(eq(applications.intakeChannel, "chatbot"));
+  const traditional = await db.select({ cnt: count() }).from(applications).where(eq(applications.intakeChannel, "traditional"));
   return {
     total: total[0]?.cnt ?? 0,
     approved: approved[0]?.cnt ?? 0,
     rejected: rejected[0]?.cnt ?? 0,
     pending: pending[0]?.cnt ?? 0,
+    retracted: retracted[0]?.cnt ?? 0,
+    submissions: submissions[0]?.cnt ?? 0,
+    chatbot: chatbot[0]?.cnt ?? 0,
+    traditional: traditional[0]?.cnt ?? 0,
     avgProcessingDays: 0,
   };
 }
@@ -701,6 +720,41 @@ export async function getMonthlyAnalytics(months: number = 12) {
     WHERE createdAt >= DATE_SUB(NOW(), INTERVAL ${months} MONTH)
     GROUP BY DATE_FORMAT(createdAt, '%Y-%m')
     ORDER BY month ASC
+  `);
+  return (result as any)[0] || [];
+}
+
+export type AnalyticsGranularity = "day" | "week" | "month" | "quarter" | "year";
+
+const PERIOD_SQL: Record<AnalyticsGranularity, { bucket: string; interval: string }> = {
+  day: { bucket: "DATE_FORMAT(createdAt, '%Y-%m-%d')", interval: "INTERVAL 30 DAY" },
+  week: { bucket: "DATE_FORMAT(createdAt, '%x-W%v')", interval: "INTERVAL 16 WEEK" },
+  month: { bucket: "DATE_FORMAT(createdAt, '%Y-%m')", interval: "INTERVAL 12 MONTH" },
+  quarter: { bucket: "CONCAT(YEAR(createdAt), '-Q', QUARTER(createdAt))", interval: "INTERVAL 24 MONTH" },
+  year: { bucket: "YEAR(createdAt)", interval: "INTERVAL 5 YEAR" },
+};
+
+export async function getPeriodAnalytics(granularity: AnalyticsGranularity = "month") {
+  const spec = PERIOD_SQL[granularity] ?? PERIOD_SQL.month;
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(sql`
+    SELECT
+      ${sql.raw(spec.bucket)} as period,
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+      SUM(CASE WHEN status IN ('rejected', 'permanently_rejected') THEN 1 ELSE 0 END) as rejected,
+      SUM(CASE WHEN status = 'retracted' THEN 1 ELSE 0 END) as retracted,
+      SUM(CASE WHEN status IN ('under_review', 'pending_admin', 'submitted') THEN 1 ELSE 0 END) as pending,
+      SUM(CASE WHEN submittedAt IS NOT NULL THEN 1 ELSE 0 END) as submissions,
+      SUM(CASE WHEN intakeChannel = 'chatbot' THEN 1 ELSE 0 END) as chatbot,
+      SUM(CASE WHEN intakeChannel = 'traditional' OR intakeChannel IS NULL THEN 1 ELSE 0 END) as traditional,
+      AVG(CASE WHEN approvedAt IS NOT NULL AND submittedAt IS NOT NULL
+        THEN TIMESTAMPDIFF(HOUR, submittedAt, approvedAt) ELSE NULL END) as avgReviewHours
+    FROM applications
+    WHERE createdAt >= DATE_SUB(NOW(), ${sql.raw(spec.interval)})
+    GROUP BY period
+    ORDER BY period ASC
   `);
   return (result as any)[0] || [];
 }
@@ -1023,6 +1077,25 @@ export async function getAiSwarmReviewsByApplication(applicationId: number) {
     .limit(100);
 }
 
+export async function insertChatApplicationMessage(data: InsertChatApplicationMessage) {
+  const dbi = await getDb();
+  if (!dbi) return 0;
+  const r = await dbi.insert(chatApplicationMessages).values(data);
+  return r[0].insertId;
+}
+
+export async function getChatApplicationMessages(applicationId: number, userId: number) {
+  const dbi = await getDb();
+  if (!dbi) return [];
+  return dbi.select().from(chatApplicationMessages)
+    .where(and(
+      eq(chatApplicationMessages.applicationId, applicationId),
+      eq(chatApplicationMessages.userId, userId),
+    ))
+    .orderBy(chatApplicationMessages.id)
+    .limit(200);
+}
+
 // ─── First-party analytics (owner observability) ─────────────────────────
 
 export async function ingestAnalyticsEvent(input: {
@@ -1095,6 +1168,11 @@ export async function getObservabilityMetrics() {
       geo: [] as { country: string; sessions: number }[],
       visitsByDay: [] as { day: string; sessions: number; pageviews: number }[],
       llmToday: 0,
+      llmByDay: [] as { day: string; count: number }[],
+      applicationsByIntake: [] as { channel: string; count: number }[],
+      submissions7d: 0,
+      approvals7d: 0,
+      retractions: 0,
     };
   }
 
@@ -1134,7 +1212,7 @@ export async function getObservabilityMetrics() {
       COUNT(*) as sessions,
       COALESCE(SUM(pageviews), 0) as pageviews
     FROM analytics_sessions
-    WHERE startedAt >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+    WHERE startedAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
     GROUP BY day ORDER BY day ASC
   `);
 
@@ -1142,6 +1220,21 @@ export async function getObservabilityMetrics() {
   const [llmRow] = await dbi.select({ cnt: sql<number>`COALESCE(SUM(${llmUsageDaily.count}), 0)` })
     .from(llmUsageDaily)
     .where(eq(llmUsageDaily.day, today));
+  const llmDayRows = await dbi.execute(sql`
+    SELECT day, COALESCE(SUM(count), 0) as count FROM llm_usage_daily
+    WHERE day >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 14 DAY), '%Y-%m-%d')
+    GROUP BY day ORDER BY day ASC
+  `);
+  const intakeRows = await dbi.execute(sql`
+    SELECT COALESCE(intakeChannel, 'traditional') as channel, COUNT(*) as count
+    FROM applications GROUP BY intakeChannel
+  `);
+  const [sub7] = await dbi.select({ cnt: count() }).from(applications)
+    .where(sql`${applications.submittedAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`);
+  const [appr7] = await dbi.select({ cnt: count() }).from(applications)
+    .where(and(eq(applications.status, "approved"), sql`${applications.approvedAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`));
+  const [retr] = await dbi.select({ cnt: count() }).from(applications)
+    .where(eq(applications.status, "retracted"));
 
   // drizzle-orm mysql2 `execute` returns [rows, fields] — same shape as
   // getPublicStats(). Prefer that tuple form over treating the pair as rows.
@@ -1190,5 +1283,15 @@ export async function getObservabilityMetrics() {
         pageviews: Number(r.pageviews ?? 0),
       })),
     llmToday: Number(llmRow?.cnt ?? 0),
+    llmByDay: asRows(llmDayRows)
+      .filter(r => r.day != null && String(r.day).length > 0)
+      .map(r => ({ day: String(r.day), count: Number(r.count ?? 0) })),
+    applicationsByIntake: asRows(intakeRows).map(r => ({
+      channel: String(r.channel ?? "traditional"),
+      count: Number(r.count ?? 0),
+    })),
+    submissions7d: Number(sub7?.cnt ?? 0),
+    approvals7d: Number(appr7?.cnt ?? 0),
+    retractions: Number(retr?.cnt ?? 0),
   };
 }

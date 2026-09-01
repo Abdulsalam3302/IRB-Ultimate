@@ -2,6 +2,7 @@ import * as db from "../db";
 import { ENV } from "../_core/env";
 import { generateAndStoreCertificatePdf } from "../certificateV2";
 import {
+  decideAcceleratedOutcome,
   runBotPanelReview,
   runSwarmReview,
   type BotPanelResult,
@@ -56,7 +57,28 @@ export async function runAcceleratedPipeline(
   if (!app) throw new Error("Application not found");
 
   const swarm = runSwarmReview(app);
-  const bots = runBotPanelReview(app);
+  let bots: BotPanelResult = { passed: false, unanimous: false, approvals: 0, reviewers: [] };
+  const first = decideAcceleratedOutcome(swarm.passed, null);
+  if (first === "run_bots") {
+    bots = runBotPanelReview(app);
+  }
+  const decision = decideAcceleratedOutcome(swarm.passed, first === "run_bots" ? bots : null);
+
+  try {
+    await db.createAiSwarmReview({
+      applicationId,
+      requestedByUserId: actorUserId,
+      runGroup: `accelerated-${Date.now()}`,
+      panel: 1,
+      status: "completed",
+      verdict: swarm.passed ? "pass" : "fail",
+      score: swarm.overallScore,
+      report: JSON.stringify({ kind: "accelerated_heuristic", swarm, bots, decision }),
+      completedAt: new Date(),
+    });
+  } catch (err) {
+    console.warn("[Accelerated] swarm persist failed", err);
+  }
 
   await db.addAuditLog({
     applicationId,
@@ -65,8 +87,10 @@ export async function runAcceleratedPipeline(
     details: JSON.stringify({
       swarmPassed: swarm.passed,
       swarmScore: swarm.overallScore,
+      botsRan: first === "run_bots",
       botsPassed: bots.passed,
       botApprovals: bots.approvals,
+      decision,
     }),
   });
 
@@ -84,7 +108,7 @@ export async function runAcceleratedPipeline(
     });
   }
 
-  const fastPath = swarm.passed || bots.passed;
+  const fastPath = decision === "auto_approve";
 
   if (fastPath && !REVIEWABLE.has(app.status)) {
     const reason =

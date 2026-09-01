@@ -160,3 +160,27 @@ Common cases:
 - Restore stalls — the dump is large; pipe through `pv` to see throughput.
 
 If the script aborts mid-run, the partial dump file is deleted automatically.
+
+
+## Certificate file backups (last 30 days)
+
+Generated IRB certificates (PDF, or HTML-print fallback when Playwright/Chromium
+is unavailable on Render free RAM) are snapshotted daily:
+
+1. **On each issue** the artifact is copied to `uploads/certificate-backups/YYYY-MM-DD/`
+   and, if `S3_BUCKET` + AWS keys are set, also to `s3://$S3_BUCKET/certificate-backups/YYYY-MM-DD/`.
+2. **At API boot** (and every 24h) `startCertificateBackupScheduler()` copies any
+   files still under `uploads/certificates/` into today's folder, then **prunes**
+   day folders older than 30 days.
+
+### Operator path
+
+- **Preferred (production):** configure `S3_BUCKET` / `AWS_*` so certificates and
+  their 30-day copies live off-box. Enable bucket versioning.
+- **Render free / disk fallback:** files live on the instance under
+  `uploads/certificate-backups/`. This does **not** survive disk-less deploys —
+  attach a persistent disk or use S3.
+- Verify: `GET /api/health` (`appVersion` 2.1.0+) and list
+  `uploads/certificate-backups/` after issuing a certificate.
+- Word download: `GET /api/export/certificate/:id?format=docx` (signed-in owner/admin).
+  HTML print fallback: `?format=html` or automatic when PDF generation fails.

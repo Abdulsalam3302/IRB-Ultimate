@@ -170,3 +170,13 @@ export function runBotPanelReview(app: Application): BotPanelResult {
     reviewers,
   };
 }
+
+export type AcceleratedDecision = "auto_approve" | "run_bots" | "owner_alert";
+
+/** Swarm first. Bots run only if swarm fails. Unanimous bots can still auto-approve. */
+export function decideAcceleratedOutcome(swarmPassed: boolean, bots: BotPanelResult | null): AcceleratedDecision {
+  if (swarmPassed) return "auto_approve";
+  if (!bots) return "run_bots";
+  if (bots.passed) return "auto_approve";
+  return "owner_alert";
+}

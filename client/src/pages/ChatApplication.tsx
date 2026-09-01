@@ -70,6 +70,21 @@ export default function ChatApplication() {
   const [missing, setMissing] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
   const pendingUserText = useRef<string | null>(null);
+  const hydrated = useRef(false);
+
+  const history = trpc.chatApplication.history.useQuery(
+    { applicationId: appId },
+    { enabled: isAuthenticated && appId > 0 },
+  );
+
+  useEffect(() => {
+    if (hydrated.current || !history.data) return;
+    if (history.data.messages.length > 0) {
+      setMessages(history.data.messages);
+      setMissing(history.data.missing);
+    }
+    hydrated.current = true;
+  }, [history.data]);
 
   const createApp = trpc.application.create.useMutation({
     onSuccess: data => {
@@ -85,7 +100,7 @@ export default function ChatApplication() {
   useEffect(() => {
     if (loading || !isAuthenticated || appId || started.current) return;
     started.current = true;
-    createApp.mutate();
+    createApp.mutate({ intakeChannel: "chatbot" });
   }, [loading, isAuthenticated, appId, createApp]);
 
   const chat = trpc.chatApplication.sendMessage.useMutation({
@@ -125,6 +140,7 @@ export default function ChatApplication() {
     chat.mutate({
       applicationId: appId,
       messages: payload,
+      lang: isAr ? "ar" : "en",
     });
   };
 
@@ -141,6 +157,7 @@ export default function ChatApplication() {
     chat.mutate({
       applicationId: appId,
       messages: payload,
+      lang: isAr ? "ar" : "en",
     });
   };
 
@@ -179,7 +196,7 @@ export default function ChatApplication() {
                 onClick={() => {
                   started.current = true;
                   setLastError(null);
-                  createApp.mutate();
+                  createApp.mutate({ intakeChannel: "chatbot" });
                 }}
               >
                 <RefreshCw className="h-4 w-4 me-2" />

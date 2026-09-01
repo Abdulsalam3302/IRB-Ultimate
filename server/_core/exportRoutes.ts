@@ -5,7 +5,7 @@ import {
   renderApplicationHtml,
   buildInspectorZip,
 } from "../applicationExport";
-import { renderCertificatePdf, renderCertificateHtml } from "../certificateV2";
+import { renderCertificateHtml, renderCertificateArtifact, renderCertificateDocx } from "../certificateV2";
 import { getResourceBySlug } from "@shared/resources";
 import { buildPrefillMap } from "@shared/resourcePrefill";
 import { isFormattableSlug } from "@shared/templateFields";
@@ -180,28 +180,34 @@ export function registerExportRoutes(app: Express) {
       }
       const applicant = await db.getUserById(application.applicantId);
       const applicantEmailForRender = applicant?.email ?? null;
-      const wantsHtml = req.query.format === "html";
-      if (wantsHtml) {
-        const html = renderCertificateHtml({
-          app: application,
-          applicantName: applicant?.name ?? null,
-          applicantEmail: applicantEmailForRender,
-        });
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.send(html);
-        return;
-      }
-      const pdf = await renderCertificatePdf({
+      const payload = {
         app: application,
         applicantName: applicant?.name ?? null,
         applicantEmail: applicantEmailForRender,
-      });
-      res.setHeader("Content-Type", "application/pdf");
+      };
+      const fmt = String(req.query.format || "").toLowerCase();
+      const safeName = (application.irbNumber || `app-${id}`).replace(/[^a-zA-Z0-9_-]/g, "-");
+      if (fmt === "html") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(renderCertificateHtml(payload));
+        return;
+      }
+      if (fmt === "docx" || fmt === "word") {
+        const buf = await renderCertificateDocx(payload);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res.setHeader("Content-Disposition", `attachment; filename="irb-certificate-${safeName}.docx"`);
+        res.send(buf);
+        return;
+      }
+      const artifact = await renderCertificateArtifact(payload);
+      res.setHeader("Content-Type", artifact.contentType);
       res.setHeader(
         "Content-Disposition",
-        `inline; filename="irb-certificate-${(application.irbNumber || `app-${id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf"`
+        artifact.extension === "pdf"
+          ? `inline; filename="irb-certificate-${safeName}.pdf"`
+          : `inline; filename="irb-certificate-${safeName}.html"`,
       );
-      res.send(pdf);
+      res.send(artifact.buffer);
     } catch (err) {
       console.error("[Export Cert] failed:", err);
       if (!res.headersSent) res.status(500).type("text/plain").send("certificate generation failed");

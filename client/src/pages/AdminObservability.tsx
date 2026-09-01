@@ -113,7 +113,7 @@ export default function AdminObservability() {
               ? "زيارات، مواقع تقريبية، الوقت المستغرق، الحسابات، والطلبات — للمالك فقط."
               : "Visits, approximate locations, time on site, accounts, and applications — owner only."}
           </p>
-          <p className="font-mono text-[11px] text-muted-foreground mt-2">v2.0.0</p>
+          <p className="font-mono text-[11px] text-muted-foreground mt-2">v2.1.0</p>
         </div>
 
         {error && (
@@ -194,6 +194,9 @@ export default function AdminObservability() {
               <MetricCard icon={Users} label={isAr ? "نشطون (7ي)" : "Active (7d)"} value={data.activeUsers7d} />
               <MetricCard icon={FileText} label={isAr ? "الطلبات" : "Applications"} value={data.applicationsTotal} />
               <MetricCard icon={Bot} label={isAr ? "استدعاءات الذكاء (اليوم)" : "LLM calls (today)"} value={data.llmToday} />
+              <MetricCard icon={FileText} label={isAr ? "تقديمات (7ي)" : "Submissions (7d)"} value={data.submissions7d} />
+              <MetricCard icon={FileText} label={isAr ? "موافقات (7ي)" : "Approvals (7d)"} value={data.approvals7d} />
+              <MetricCard icon={FileText} label={isAr ? "مسحوبات" : "Retractions"} value={data.retractions} />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
@@ -232,12 +235,38 @@ export default function AdminObservability() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">{isAr ? "الزيارات يومياً" : "Visits by day"}</CardTitle>
-                  <CardDescription>{isAr ? "آخر 14 يوماً" : "Last 14 days"}</CardDescription>
+                  <CardDescription>{isAr ? "آخر 30 يوماً" : "Last 30 days"}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <SimpleTable
                     headers={[isAr ? "اليوم" : "Day", isAr ? "جلسات" : "Sessions", isAr ? "مشاهدات" : "Views"]}
                     rows={data.visitsByDay.map(d => [d.day, String(d.sessions), String(d.pageviews)])}
+                    empty={isAr ? "لا بيانات بعد" : "No data yet"}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{isAr ? "استدعاءات الذكاء يومياً" : "LLM calls by day"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SimpleTable
+                    headers={[isAr ? "اليوم" : "Day", isAr ? "العدد" : "Count"]}
+                    rows={(data.llmByDay ?? []).map(d => [d.day, String(d.count)])}
+                    empty={isAr ? "لا بيانات بعد" : "No data yet"}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{isAr ? "المحادثة مقابل التقليدي" : "Chatbot vs traditional"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SimpleTable
+                    headers={[isAr ? "القناة" : "Channel", isAr ? "العدد" : "Count"]}
+                    rows={(data.applicationsByIntake ?? []).map(d => [d.channel, String(d.count)])}
                     empty={isAr ? "لا بيانات بعد" : "No data yet"}
                   />
                 </CardContent>

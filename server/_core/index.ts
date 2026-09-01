@@ -17,6 +17,8 @@ import { UPLOADS_DIR_PATH } from "../storage";
 import { APP_VERSION } from "@shared/const";
 import { sdk } from "./sdk";
 import { registerIrbAgentRoutes, registerMcpJsonRpc } from "../agent/irbApiRoutes";
+import { listTrpcProcedurePaths } from "./trpcMeta";
+import { startCertificateBackupScheduler } from "../services/certificateBackup";
 import * as db from "../db";
 import * as fsSync from "node:fs";
 
@@ -75,6 +77,7 @@ async function startServer() {
   // header that matches ENV.allowedOrigins. Includes a build-version hint
   // so deploys are confirmable (SA-39); does NOT touch the DB so it never
   // leaks connectivity status.
+  const procedurePaths = listTrpcProcedurePaths(appRouter);
   app.get("/api/health", (_req, res) => {
     res.json({
       ok: true,
@@ -87,6 +90,9 @@ async function startServer() {
         process.env.RAILWAY_GIT_COMMIT_SHA ||
         "dev",
       host: process.env.RENDER ? "render" : process.env.RAILWAY_ENVIRONMENT ? "railway" : "local",
+      features: {
+        chatApplicationSendMessage: procedurePaths.includes("chatApplication.sendMessage"),
+      },
     });
   });
   // CORS + Origin allowlist for state-changing /api/* calls (SA-01, SA-20).
@@ -246,6 +252,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    startCertificateBackupScheduler();
   });
 }
 

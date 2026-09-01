@@ -169,7 +169,11 @@ const MAX_AUTHORS_PER_APPLICATION = 25;
 // ─── Application Router ─────────────────────────────────────────────────────
 
 const applicationRouter = router({
-  create: protectedProcedure.mutation(async ({ ctx }) => {
+  create: protectedProcedure
+    .input(z.object({
+      intakeChannel: z.enum(["traditional", "chatbot"]).optional(),
+    }).optional())
+    .mutation(async ({ ctx, input }) => {
     // Cap open drafts per user so a script can't insert unbounded
     // applications + audit rows (the general limiter alone allows ~200/min).
     const MAX_OPEN_DRAFTS = parseInt(process.env.MAX_OPEN_DRAFTS_PER_USER ?? "25", 10);
@@ -183,15 +187,17 @@ const applicationRouter = router({
         message: `You have ${openDrafts} unfinished applications. Please submit or delete some before starting a new one.`,
       });
     }
+    const intakeChannel = input?.intakeChannel === "chatbot" ? "chatbot" : "traditional";
     const id = await db.createApplication({
       applicantId: ctx.user.id,
       status: "draft",
+      intakeChannel,
     });
     await db.addAuditLog({
       applicationId: id,
       userId: ctx.user.id,
       action: "application_created",
-      details: "New application draft created",
+      details: intakeChannel === "chatbot" ? "New chatbot application draft created" : "New application draft created",
     });
     return { id };
   }),
@@ -887,6 +893,12 @@ const applicationRouter = router({
         accelerated = await runAcceleratedPipeline(input.id, ctx.user.id);
       } catch (e) {
         console.error("[Accelerated] pipeline failed after submit", e);
+        try {
+          await notifyOwner({
+            title: "IRB accelerated review pipeline failed",
+            content: `Application #${input.id} submitted but the digital swarm pipeline threw. Manual owner action is required.`,
+          });
+        } catch { /* best-effort */ }
       }
 
       return { success: true, assignedMembers: selected.length, accelerated };
@@ -1925,6 +1937,14 @@ const adminRouter = router({
       return db.getMonthlyAnalytics(input?.months || 12);
     }),
 
+  periodAnalytics: adminProcedure
+    .input(z.object({
+      granularity: z.enum(["day", "week", "month", "quarter", "year"]).default("month"),
+    }).optional())
+    .query(async ({ input }) => {
+      return db.getPeriodAnalytics(input?.granularity || "month");
+    }),
+
   statusDistribution: adminProcedure.query(async () => {
     return db.getStatusDistribution();
   }),
@@ -2559,13 +2579,32 @@ const chatApplicationRouter = router({
         role: z.enum(["user", "assistant"]),
         content: z.string().max(4000),
       })).max(16),
+      lang: z.enum(["ar", "en"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       return chatApplicationTurn({
         applicationId: input.applicationId,
         userId: ctx.user.id,
         messages: input.messages,
+        langHint: input.lang,
       });
+    }),
+  history: protectedProcedure
+    .input(z.object({ applicationId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const app = await db.getApplicationById(input.applicationId);
+      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const rows = await db.getChatApplicationMessages(input.applicationId, app.applicantId);
+      const { listMissingRequirements } = await import("./services/irb.validation");
+      return {
+        messages: rows
+          .filter(r => r.role === "user" || r.role === "assistant")
+          .map(r => ({ role: r.role as "user" | "assistant", content: r.content })),
+        missing: listMissingRequirements(app),
+      };
     }),
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Application } from "../../drizzle/schema";
-import { BOT_REVIEWERS, runBotPanelReview, runSwarmReview } from "./acceleratedReview.service";
+import { BOT_REVIEWERS, decideAcceleratedOutcome, runBotPanelReview, runSwarmReview } from "./acceleratedReview.service";
 
 function app(overrides: Partial<Application> = {}): Application {
   return {
@@ -88,5 +88,34 @@ describe("accelerated review swarm + bots", () => {
     const bots = runBotPanelReview(incomplete);
     expect(swarm.passed).toBe(false);
     expect(bots.passed).toBe(false);
+  });
+});
+
+describe("accelerated pipeline decision order", () => {
+  it("auto-approves on swarm pass without requiring bots", () => {
+    expect(decideAcceleratedOutcome(true, null)).toBe("auto_approve");
+  });
+
+  it("runs bots only after swarm issues", () => {
+    expect(decideAcceleratedOutcome(false, null)).toBe("run_bots");
+  });
+
+  it("auto-approves on unanimous bots after swarm fail", () => {
+    const bots = runBotPanelReview(app());
+    expect(decideAcceleratedOutcome(false, bots)).toBe("auto_approve");
+  });
+
+  it("alerts the owner when swarm and bots both fail", () => {
+    const incomplete = app({
+      methodology: "",
+      informedConsentProcess: "",
+      confidentialityMeasures: "",
+      riskAssessment: "",
+      stage1Passed: false,
+      stage2Passed: false,
+      researchObjectives: "",
+    });
+    const bots = runBotPanelReview(incomplete);
+    expect(decideAcceleratedOutcome(false, bots)).toBe("owner_alert");
   });
 });

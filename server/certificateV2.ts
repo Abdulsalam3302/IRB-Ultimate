@@ -12,6 +12,7 @@ import QRCode from "qrcode";
 import type { Application } from "../drizzle/schema";
 import { storagePut } from "./storage";
 import { AUTHOR } from "@shared/branding";
+import { backupCertificateArtifact } from "./services/certificateBackup";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +38,7 @@ interface CertData {
 
 function verifyBaseUrl(): string {
   const base = (process.env.VITE_PUBLIC_SITE_URL ?? process.env.PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
-  return base || "https://irb-sa.org";
+  return base || "https://irb-saudi-arabia.vercel.app";
 }
 
 /**
@@ -263,11 +264,61 @@ export async function renderCertificatePdf(data: CertData): Promise<Buffer> {
   });
 }
 
+export type CertificateArtifact = {
+  buffer: Buffer;
+  contentType: string;
+  extension: "pdf" | "html";
+};
+
+/** Playwright PDF, or HTML-print fallback when Chromium is missing / OOM (Render free). */
+export async function renderCertificateArtifact(data: CertData): Promise<CertificateArtifact> {
+  try {
+    const pdf = await renderCertificatePdf(data);
+    return { buffer: pdf, contentType: "application/pdf", extension: "pdf" };
+  } catch (err) {
+    console.warn("[Certificate] Playwright PDF unavailable; HTML print fallback", err);
+    const html = renderCertificateHtml(data);
+    return {
+      buffer: Buffer.from(html, "utf8"),
+      contentType: "text/html; charset=utf-8",
+      extension: "html",
+    };
+  }
+}
+
 export async function generateAndStoreCertificatePdf(data: CertData): Promise<string> {
-  // The stored PDF is fetched by anyone with the verify link — force the
+  // The stored artifact is fetched by anyone with the verify link — force the
   // public redaction regardless of what the caller passed.
-  const pdf = await renderCertificatePdf({ ...data, redactForPublic: true });
-  const key = `certificates/${(data.app.irbNumber || `app-${data.app.id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}-${Date.now()}.pdf`;
-  const { url } = await storagePut(key, pdf, "application/pdf");
+  const payload = { ...data, redactForPublic: true };
+  const artifact = await renderCertificateArtifact(payload);
+  const key = `certificates/${(data.app.irbNumber || `app-${data.app.id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}-${Date.now()}.${artifact.extension}`;
+  const { url } = await storagePut(key, artifact.buffer, artifact.contentType);
+  void backupCertificateArtifact(key, artifact.buffer, artifact.contentType).catch(err => {
+    console.warn("[Certificate] backup copy failed", err);
+  });
   return url;
+}
+
+export async function renderCertificateDocx(data: CertData): Promise<Buffer> {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
+  const { app, applicantName } = data;
+  const irb = app.irbNumber || `IRB-PENDING-${app.id}`;
+  const status = app.status === "retracted" ? "RETRACTED" : (app.status === "rejected" || app.status === "permanently_rejected") ? "REJECTED" : "APPROVED";
+  const verify = `${verifyBaseUrl()}/verify/${encodeURIComponent(irb)}`;
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("NBCE Digital IRB — Saudi Arabia")] }),
+        new Paragraph({ children: [new TextRun({ text: status, bold: true })] }),
+        new Paragraph({ children: [new TextRun(`IRB number: ${irb}`)] }),
+        new Paragraph({ children: [new TextRun(`Principal investigator: ${app.principalInvestigator || "—"}`)] }),
+        new Paragraph({ children: [new TextRun(`Institution: ${app.piInstitution || "—"}`)] }),
+        new Paragraph({ children: [new TextRun(`Applicant: ${applicantName || "—"}`)] }),
+        new Paragraph({ children: [new TextRun(`Title: ${app.researchTitle || "—"}`)] }),
+        new Paragraph({ children: [new TextRun(`Approving authority: Dr. Abdulsalam Aleid`)] }),
+        new Paragraph({ children: [new TextRun(`Verify: ${verify}`)] }),
+      ],
+    }],
+  });
+  return Buffer.from(await Packer.toBuffer(doc));
 }

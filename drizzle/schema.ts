@@ -158,6 +158,9 @@ export const applications = mysqlTable("applications", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   submittedAt: timestamp("submittedAt"),
+
+  // How the applicant started the file (chatbot AI apply vs traditional form).
+  intakeChannel: mysqlEnum("intakeChannel", ["traditional", "chatbot"]).default("traditional").notNull(),
 });
 
 export type Application = typeof applications.$inferSelect;
@@ -413,6 +416,21 @@ export const analyticsSessions = mysqlTable("analytics_sessions", {
 
 export type AnalyticsSession = typeof analyticsSessions.$inferSelect;
 export type InsertAnalyticsSession = typeof analyticsSessions.$inferInsert;
+
+// Chatbot application turns — persisted for audit/analysis. Content is
+// redacted of secrets before insert. Never store passwords or tokens.
+export const chatApplicationMessages = mysqlTable("chat_application_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("applicationId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("chatRole", ["user", "assistant", "system"]).notNull(),
+  content: text("content").notNull(),
+  lang: varchar("lang", { length: 8 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChatApplicationMessage = typeof chatApplicationMessages.$inferSelect;
+export type InsertChatApplicationMessage = typeof chatApplicationMessages.$inferInsert;
 
 export const analyticsEvents = mysqlTable("analytics_events", {
   id: int("id").autoincrement().primaryKey(),

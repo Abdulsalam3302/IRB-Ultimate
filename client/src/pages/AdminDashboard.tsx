@@ -293,30 +293,29 @@ function OverviewTab() {
   const { data: stats } = trpc.admin.stats.useQuery();
   const { data: apps } = trpc.admin.allApplications.useQuery();
   const { data: members } = trpc.admin.allCommitteeMembers.useQuery();
-  const { data: monthlyData } = trpc.admin.monthlyAnalytics.useQuery();
   const { data: statusDist } = trpc.admin.statusDistribution.useQuery();
   const { data: typeDist } = trpc.admin.researchTypeDistribution.useQuery();
   const { lang } = useT();
   const isAr = lang === "ar";
+  const [period, setPeriod] = useState<"day" | "week" | "month" | "quarter" | "year">("month");
+  const { data: periodData } = trpc.admin.periodAnalytics.useQuery({ granularity: period });
 
   const pendingAdmin = apps?.filter((a: any) => a.status === "pending_admin") || [];
   const activeMembers = members?.filter((m: any) => m.isActive) || [];
 
-  // Compute chart data from monthly analytics
   const chartData = useMemo(() => {
-    if (!monthlyData || !Array.isArray(monthlyData) || monthlyData.length === 0) return null;
-    const months = monthlyData.map((m: any) => {
-      const [y, mo] = (m.month || "").split("-");
-      const date = new Date(Number(y), Number(mo) - 1);
-      return date.toLocaleDateString(isAr ? "ar-SA" : "en-US", { month: "short", year: "2-digit" });
-    });
-    const totals = monthlyData.map((m: any) => Number(m.total) || 0);
-    const approved = monthlyData.map((m: any) => Number(m.approved) || 0);
-    const rejected = monthlyData.map((m: any) => Number(m.rejected) || 0);
-    const avgHours = monthlyData.map((m: any) => m.avgReviewHours ? Math.round(Number(m.avgReviewHours)) : 0);
+    if (!periodData || !Array.isArray(periodData) || periodData.length === 0) return null;
+    const labels = periodData.map((m: any) => String(m.period ?? m.month ?? ""));
+    const totals = periodData.map((m: any) => Number(m.total) || 0);
+    const approved = periodData.map((m: any) => Number(m.approved) || 0);
+    const rejected = periodData.map((m: any) => Number(m.rejected) || 0);
+    const retracted = periodData.map((m: any) => Number(m.retracted) || 0);
+    const chatbot = periodData.map((m: any) => Number(m.chatbot) || 0);
+    const traditional = periodData.map((m: any) => Number(m.traditional) || 0);
+    const avgHours = periodData.map((m: any) => m.avgReviewHours ? Math.round(Number(m.avgReviewHours)) : 0);
     const maxVal = Math.max(...totals, 1);
-    return { months, totals, approved, rejected, avgHours, maxVal };
-  }, [monthlyData, isAr]);
+    return { months: labels, totals, approved, rejected, retracted, chatbot, traditional, avgHours, maxVal };
+  }, [periodData]);
 
   // Status distribution for donut chart
   const statusChartData = useMemo(() => {
@@ -422,6 +421,25 @@ function OverviewTab() {
         </Card>
       </div>
 
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card><CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">{isAr ? "التقديمات" : "Submissions"}</p>
+          <p className="text-2xl font-bold">{stats?.submissions ?? "—"}</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">{isAr ? "مسحوبات" : "Retractions"}</p>
+          <p className="text-2xl font-bold text-red-700">{stats?.retracted ?? "—"}</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">{isAr ? "طلب عبر المحادثة" : "Chatbot apply"}</p>
+          <p className="text-2xl font-bold text-violet-600">{stats?.chatbot ?? "—"}</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">{isAr ? "النموذج التقليدي" : "Traditional form"}</p>
+          <p className="text-2xl font-bold">{stats?.traditional ?? "—"}</p>
+        </CardContent></Card>
+      </div>
+
       {/* Rate Cards */}
       {stats && (
         <div className="grid sm:grid-cols-3 gap-4">
@@ -449,15 +467,27 @@ function OverviewTab() {
         </div>
       )}
 
-      {/* Monthly Trends Bar Chart */}
       {chartData && chartData.months.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              {isAr ? "الاتجاهات الشهرية" : "Monthly Application Trends"}
+              {isAr ? "اتجاهات الطلبات" : "Application Trends"}
             </CardTitle>
-            <CardDescription>{isAr ? "عدد الطلبات والموافقات والرفض شهرياً" : "Applications, approvals, and rejections per month"}</CardDescription>
+            <CardDescription>{isAr ? "يومي / أسبوعي / شهري / ربع سنوي / سنوي" : "Daily, weekly, monthly, quarterly, or annual"}</CardDescription>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {([
+                ["day", isAr ? "يومي" : "Daily"],
+                ["week", isAr ? "أسبوعي" : "Weekly"],
+                ["month", isAr ? "شهري" : "Monthly"],
+                ["quarter", isAr ? "ربع سنوي" : "Quarterly"],
+                ["year", isAr ? "سنوي" : "Annually"],
+              ] as const).map(([key, label]) => (
+                <Button key={key} size="sm" variant={period === key ? "default" : "outline"} onClick={() => setPeriod(key)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

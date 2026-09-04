@@ -87,6 +87,18 @@ if (typeof window !== "undefined" && typeof PUBLIC_SITE_URL === "string" && PUBL
   link.setAttribute("href", canonical);
 }
 
+const GTM_ID = import.meta.env.VITE_GTM_ID;
+if (
+  typeof window !== "undefined" &&
+  typeof GTM_ID === "string" &&
+  /^GTM-[A-Z0-9]+$/i.test(GTM_ID)
+) {
+  const s = document.createElement("script");
+  s.async = true;
+  s.src = `https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(GTM_ID)}`;
+  document.head.appendChild(s);
+}
+
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>

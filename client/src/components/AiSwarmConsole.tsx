@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import {
@@ -228,14 +228,17 @@ export function AiSwarmConsole() {
     { applicationId: appId! },
     {
       enabled: appId != null,
-      // Deliberation finishes in the background on the server; poll while
-      // any panel row is still running, stop as soon as all settle.
       refetchInterval: query =>
         (query.state.data ?? []).some(r => r.status === "running") ? 4000 : false,
     },
   );
   const { data: budget } = trpc.application.aiBudget.useQuery();
   const anyRunning = (history ?? []).some(r => r.status === "running");
+
+  useEffect(() => {
+    if (anyRunning) return;
+    void utils.admin.allApplications.invalidate();
+  }, [anyRunning, utils.admin.allApplications]);
 
   const runSwarm = trpc.aiSwarm.run.useMutation({
     onSuccess: () => {
@@ -280,13 +283,14 @@ export function AiSwarmConsole() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5" />
-            {isAr ? "مراجعة سرب الذكاء الاصطناعي" : "AI Swarm Review"}
+            {isAr ? "سرب الذكاء الاصطناعي" : "AI Swarm Review"}
             <Badge variant="outline" className="ms-2"><Lock className="h-3 w-3 me-1" /> {isAr ? "للمالك فقط" : "Owner only"}</Badge>
+            <Badge className="bg-emerald-600 hover:bg-emerald-600">{isAr ? "مسار رسمي معتمد" : "Authorized official pathway"}</Badge>
           </CardTitle>
           <CardDescription>
             {isAr
-              ? "لجنتان مستقلتان تماماً من الذكاء الاصطناعي — كل لجنة تحاكي ٥١٠ خبراء عبر ست تخصصات (المنهجية، الأخلاقيات، التنظيم، مناصرة المرضى، الخصوصية، الجدارة العلمية) — تدققان الطلب بصرامة وحياد وتصدران حكم نجاح/رسوب مع تغذية راجعة قابلة للتنفيذ. استشارية فقط: لا تغير حالة الطلب ولا يراها مقدم الطلب أبداً."
-              : "Two fully independent AI panels — each simulating 510 expert reviewers across six specialties (methodology, ethics, regulatory, patient advocacy, privacy, scientific merit) — strictly and impartially audit an application and return a pass/fail verdict with actionable feedback. Advisory only: it never changes application status and is never visible to the applicant."}
+              ? "مسار القرار الرسمي المعتمد: نجاح السرب يعتمد الطلب ويصدر الشهادة باسم د. عبدالسلام العيد. إذا لم يجتز السرب، يراجع أربعة مراجعون رقميون. نجاح الإجماع يعتمد الطلب. فشل المسارين ينبّه المالك للتدخل البشري."
+              : "Authorized official decision pathway: a swarm pass auto-approves and issues a certificate under Dr. Abdulsalam Aleid. If the swarm does not pass, four designated digital reviewers decide. Unanimous pass still auto-approves. If both paths fail, the owner is alerted that human intervention is required."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -298,7 +302,7 @@ export function AiSwarmConsole() {
               <SelectContent>
                 {eligibleApps.map(a => (
                   <SelectItem key={a.id} value={String(a.id)}>
-                    #{a.id} — {(a.researchTitle || "Untitled").slice(0, 70)}
+                    #{a.id} [{a.status}] — {(a.researchTitle || "Untitled").slice(0, 70)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -317,8 +321,8 @@ export function AiSwarmConsole() {
                   <AlertDialogTitle>{isAr ? "تشغيل تدقيق السرب المزدوج؟" : "Run the dual-panel swarm audit?"}</AlertDialogTitle>
                   <AlertDialogDescription>
                     {isAr
-                      ? "سيتم تشغيل لجنتين مستقلتين (١٠٢٠ مراجعاً محاكى). يستهلك هذا ١٤ استدعاءً من حصة الذكاء الاصطناعي اليومية وقد يستغرق دقيقة أو دقيقتين. النتيجة استشارية ولن تغير حالة الطلب."
-                      : "This launches two independent panels (1,020 simulated reviewers in total). It consumes 14 calls from the daily AI budget and can take a minute or two. The result is advisory and will not change the application's status."}
+                      ? "سيتم تشغيل لجنتين مستقلتين. النتيجة مسار قرار رسمي: النجاح يعتمد الطلب ويصدر شهادة؛ الفشل يشغّل المراجعين الرقميين الأربعة أو ينبّه المالك."
+                      : "This launches two independent panels. The result is an official decision pathway: a pass auto-approves and issues a certificate; a fail runs the four digital reviewers or alerts the owner."}
                     {budget && (
                       <span className="mt-2 block text-xs">
                         {isAr ? "المتبقي اليوم:" : "Remaining today:"} {Math.max(0, budget.userLimit - budget.userUsed)} {isAr ? "استدعاء" : "calls"}

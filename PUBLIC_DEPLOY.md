@@ -127,7 +127,7 @@ Both should return healthy JSON (Vercel proxies to Render).
 
 | Name | Purpose |
 |------|---------|
-| `RENDER_DEPLOY_HOOK` | Optional — Render → Settings → Deploy Hook |
+| `RENDER_DEPLOY_HOOK` | Optional — Render → Settings → Deploy Hook. **Not set today.** Until it is, after each `main` push: Render → `irb-saudi-arabia` → Manual Deploy. Confirm `/api/health` `version` is the new Git SHA (not `e9de9c03…`) and `appVersion` is current. |
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | Frontend CI deploy |
 | `JWT_SECRET` | Prefer setting on Render dashboard (not only GitHub) |
 | var `RENDER_URL` | Keep-warm + docs (`https://….onrender.com`) |

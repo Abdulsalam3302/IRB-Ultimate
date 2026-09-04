@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Loader2, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
 import { useT } from "@/contexts/LanguageContext";
 import { getLoginUrl } from "@/const";
+import { friendlyChatSendError, sendChatApplicationTurn } from "@/lib/chatSend";
 
 const CHAT_HISTORY_CAP = 16;
 
@@ -69,6 +70,7 @@ export default function ChatApplication() {
   ]);
   const [missing, setMissing] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const pendingUserText = useRef<string | null>(null);
   const hydrated = useRef(false);
 
@@ -103,41 +105,63 @@ export default function ChatApplication() {
     createApp.mutate({ intakeChannel: "chatbot" });
   }, [loading, isAuthenticated, appId, createApp]);
 
-  const chat = trpc.chatApplication.sendMessage.useMutation({
-    onSuccess: data => {
-      setLastError(null);
-      pendingUserText.current = null;
-      setMessages(prev => [
-        ...prev,
-        { role: "assistant", content: data.reply },
-      ]);
-      setMissing(data.missing);
-      if (data.updatesApplied.length > 0) {
-        toast.success(
-          isAr
-            ? `تم تحديث: ${data.updatesApplied.map(k => labelFor(k, true)).join("، ")}`
-            : `Updated: ${data.updatesApplied.map(k => labelFor(k, false)).join(", ")}`
-        );
-      }
-    },
-    onError: e => {
-      setLastError(e.message);
-      toast.error(e.message);
-    },
-  });
+  const chat = trpc.chatApplication.sendMessage.useMutation();
+  const aliasChat = trpc.application.sendChatMessage.useMutation();
+
+  const applyReply = (data: { reply: string; missing: string[]; updatesApplied: string[] }) => {
+    setLastError(null);
+    pendingUserText.current = null;
+    setMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
+    setMissing(data.missing);
+    if (data.updatesApplied.length > 0) {
+      toast.success(
+        isAr
+          ? `تم تحديث: ${data.updatesApplied.map(k => labelFor(k, true)).join("، ")}`
+          : `Updated: ${data.updatesApplied.map(k => labelFor(k, false)).join(", ")}`,
+      );
+    }
+  };
+
+  const dispatchTurn = async (payload: {
+    applicationId: number;
+    messages: { role: "user" | "assistant"; content: string }[];
+    lang: "ar" | "en";
+  }) => {
+    setSending(true);
+    setLastError(null);
+    try {
+      const data = await sendChatApplicationTurn(payload, async () => {
+        try {
+          return await chat.mutateAsync(payload);
+        } catch (err) {
+          try {
+            return await aliasChat.mutateAsync(payload);
+          } catch {
+            throw err;
+          }
+        }
+      });
+      applyReply(data);
+    } catch {
+      const friendly = friendlyChatSendError(isAr);
+      setLastError(friendly);
+      toast.error(friendly);
+    } finally {
+      setSending(false);
+    }
+  };
 
   const send = (content: string) => {
     const next = [...messages, { role: "user" as const, content }];
     setMessages(next);
     pendingUserText.current = content;
-    setLastError(null);
     const payload = next
       .filter(
         (m): m is { role: "user" | "assistant"; content: string } =>
           m.role === "user" || m.role === "assistant"
       )
       .slice(-CHAT_HISTORY_CAP);
-    chat.mutate({
+    void dispatchTurn({
       applicationId: appId,
       messages: payload,
       lang: isAr ? "ar" : "en",
@@ -147,14 +171,13 @@ export default function ChatApplication() {
   const retry = () => {
     const text = pendingUserText.current;
     if (!text) return;
-    const withoutFailedAssistant = messages;
-    const payload = withoutFailedAssistant
+    const payload = messages
       .filter(
         (m): m is { role: "user" | "assistant"; content: string } =>
           m.role === "user" || m.role === "assistant"
       )
       .slice(-CHAT_HISTORY_CAP);
-    chat.mutate({
+    void dispatchTurn({
       applicationId: appId,
       messages: payload,
       lang: isAr ? "ar" : "en",
@@ -283,7 +306,7 @@ export default function ChatApplication() {
                   ? "تعذر إرسال الرسالة. تحقق من الاتصال وحاول مرة أخرى."
                   : "Could not send that message. Check your connection and try again."}
               </span>
-              <Button size="sm" variant="outline" onClick={retry} disabled={chat.isPending}>
+              <Button size="sm" variant="outline" onClick={retry} disabled={sending}>
                 <RefreshCw className="h-3.5 w-3.5 me-1" />
                 {isAr ? "إعادة" : "Retry"}
               </Button>
@@ -291,7 +314,7 @@ export default function ChatApplication() {
           </Card>
         )}
 
-        {chat.isPending && (
+        {sending && (
           <p className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
             <Loader2 className="h-3 w-3 animate-spin" />
             {isAr ? "المساعد يراجع إجابتك..." : "Assistant is reviewing your answer..."}
@@ -300,7 +323,7 @@ export default function ChatApplication() {
 
         <AIChatBox
           messages={messages}
-          isLoading={chat.isPending}
+          isLoading={sending}
           onSendMessage={send}
           placeholder={
             isAr ? "اكتب إجابتك هنا..." : "Type your answer here..."

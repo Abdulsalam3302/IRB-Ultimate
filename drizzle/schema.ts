@@ -362,8 +362,8 @@ export type InsertAmendment = typeof amendments.$inferInsert;
 //     simulates 500+ expert perspectives across specialty clusters
 //     (methodology, ethics, regulatory, patient advocacy, privacy,
 //     scientific merit) and returns a strict pass/fail verdict with a
-//     structured report. Advisory only: it never mutates application
-//     status — the human owner/committee remains the deciding authority.
+//     structured report. Authorized official pathway: swarm or unanimous
+//     digital reviewers may auto-approve; both failing requires the owner.
 export const aiSwarmReviews = mysqlTable("ai_swarm_reviews", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("applicationId").notNull(),

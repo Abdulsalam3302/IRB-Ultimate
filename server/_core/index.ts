@@ -19,6 +19,7 @@ import { sdk } from "./sdk";
 import { registerIrbAgentRoutes, registerMcpJsonRpc } from "../agent/irbApiRoutes";
 import { listTrpcProcedurePaths } from "./trpcMeta";
 import { startCertificateBackupScheduler } from "../services/certificateBackup";
+import { ensureDefaultCommittee } from "../services/committeeAutoEnroll";
 import * as db from "../db";
 import * as fsSync from "node:fs";
 
@@ -92,6 +93,9 @@ async function startServer() {
       host: process.env.RENDER ? "render" : process.env.RAILWAY_ENVIRONMENT ? "railway" : "local",
       features: {
         chatApplicationSendMessage: procedurePaths.includes("chatApplication.sendMessage"),
+        applicationSendChatMessage: procedurePaths.includes("application.sendChatMessage"),
+        certificateHtmlFallback: true,
+        acceleratedDigitalReview: true,
       },
     });
   });
@@ -253,6 +257,9 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     startCertificateBackupScheduler();
+    void ensureDefaultCommittee()
+      .then(r => console.log("[committee] auto-enroll", r))
+      .catch(err => console.warn("[committee] auto-enroll failed", err));
   });
 }
 

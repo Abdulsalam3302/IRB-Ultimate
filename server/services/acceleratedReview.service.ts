@@ -29,22 +29,22 @@ export type SwarmReviewResult = {
 
 export const BOT_REVIEWERS = [
   {
-    email: "hanan.aldosari.ethics@irb.sa",
+    email: "hanan.aldosari.ethics@irbtest.sa",
     name: "Dr. Hanan Al-Dosari",
     specialty: "ethics",
   },
   {
-    email: "majed.alotaibi.methods@irb.sa",
+    email: "majed.alotaibi.methods@irbtest.sa",
     name: "Dr. Majed Al-Otaibi",
     specialty: "methodology",
   },
   {
-    email: "reem.alshammari.clinical@irb.sa",
+    email: "reem.alshammari.clinical@irbtest.sa",
     name: "Dr. Reem Al-Shammari",
     specialty: "clinical",
   },
   {
-    email: "yazeed.alghamdi.privacy@irb.sa",
+    email: "yazeed.alghamdi.privacy@irbtest.sa",
     name: "Dr. Yazeed Al-Ghamdi",
     specialty: "privacy",
   },

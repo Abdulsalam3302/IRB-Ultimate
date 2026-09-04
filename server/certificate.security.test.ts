@@ -80,4 +80,24 @@ describe("certificate security", () => {
     expect(html).toContain("سحب");
     expect(html).toContain("Safety signal");
   });
+
+  it("treats approved, rejected, and retracted as certificate-eligible", async () => {
+    const { isCertificateEligibleStatus } = await import("./certificateV2");
+    expect(isCertificateEligibleStatus("approved")).toBe(true);
+    expect(isCertificateEligibleStatus("rejected")).toBe(true);
+    expect(isCertificateEligibleStatus("retracted")).toBe(true);
+    expect(isCertificateEligibleStatus("draft")).toBe(false);
+    expect(isCertificateEligibleStatus("under_review")).toBe(false);
+  });
+
+  it("HTML fallback still renders QR and stamps without Playwright", () => {
+    const html = renderCertificateHtml({
+      app: fakeApp({ status: "approved" }),
+      applicantName: "Dr. Real PI",
+      applicantEmail: null,
+    });
+    expect(html.toLowerCase()).not.toContain("certificate generation failed");
+    expect(html).toMatch(/<svg/i);
+    expect(html).toContain("IRB-SA-2026-00123");
+  });
 });

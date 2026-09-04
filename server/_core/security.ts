@@ -31,8 +31,10 @@ const STRICT_ROUTES = [
   "/api/trpc/literature.search",
   "/api/trpc/support.create",
   "/api/trpc/chatApplication.sendMessage",
+  "/api/trpc/application.sendChatMessage",
   "/api/mcp",
   "/api/irb",
+  "/api/chat",
   "/api/trpc/analytics.ingest",
   "/api/export",
 ];
@@ -118,6 +120,11 @@ setInterval(() => {
 // web. AI + literature endpoints are listed so the SPA's tRPC calls and any
 // browser-side fetches stay on-allowlist. ALLOWED_CONNECT_HOSTS (comma-sep)
 // lets ops add their Sentry DSN or analytics endpoint without a code change.
+function gtmContainerId(): string {
+  const id = (process.env.VITE_GTM_ID || process.env.GTM_ID || "").trim();
+  return /^GTM-[A-Z0-9]+$/i.test(id) ? id : "";
+}
+
 function buildConnectSrc(): string {
   if (!ENV.isProduction) return "'self' https: ws: wss:";
   const base = [
@@ -141,21 +148,22 @@ function buildConnectSrc(): string {
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
+  if (gtmContainerId()) {
+    extra.push("https://www.googletagmanager.com", "https://www.google-analytics.com");
+  }
   return [...base, ...extra].join(" ");
 }
 
 function buildCsp(): string {
+  const gtm = Boolean(gtmContainerId());
   const scriptSrc = ENV.isProduction
-    ? "'self'"
+    ? (gtm ? "'self' https://www.googletagmanager.com" : "'self'")
     : "'self' 'unsafe-inline' 'unsafe-eval'";
-  // img-src is scoped, not an open `https:` — otherwise a stored-XSS could
-  // exfiltrate data via <img src> to any host, defeating the locked-down
-  // connect-src. data:/blob: cover inline cert SVGs; the cloud hosts cover
-  // S3-served uploads and the asset CDN. Extra hosts via ALLOWED_IMG_HOSTS.
   const imgHosts = (process.env.ALLOWED_IMG_HOSTS ?? "")
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
+  if (gtm) imgHosts.push("https://www.googletagmanager.com", "https://www.google-analytics.com");
   const imgSrc = ENV.isProduction
     ? ["'self'", "data:", "blob:", "https://*.amazonaws.com", "https://*.cloudfront.net", ...imgHosts].join(" ")
     : "'self' data: blob: https:";

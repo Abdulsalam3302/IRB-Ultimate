@@ -42,6 +42,37 @@ function parseApplicationId(raw: string | undefined): number | null {
   return id;
 }
 
+function parseChatPayload(body: unknown, fallbackId?: number | null) {
+  const raw = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const applicationId = parseApplicationId(String(raw.applicationId ?? fallbackId ?? ""));
+  let messages = Array.isArray(raw.messages) ? raw.messages : [];
+  if (messages.length === 0 && typeof raw.message === "string") {
+    messages = [{ role: "user", content: raw.message }];
+  }
+  const lang: "ar" | "en" | undefined = raw.lang === "ar" ? "ar" : raw.lang === "en" ? "en" : undefined;
+  return { applicationId, messages, lang };
+}
+
+async function handleChatSend(req: Request, res: Response, fallbackId?: number | null) {
+  const auth = await requireUser(req, res);
+  if (!auth) return;
+  const parsed = parseChatPayload(req.body, fallbackId);
+  if (!parsed.applicationId) {
+    res.status(400).json({ error: "Invalid application id" });
+    return;
+  }
+  try {
+    const result = await auth.caller.chatApplication.sendMessage({
+      applicationId: parsed.applicationId,
+      messages: parsed.messages as { role: "user" | "assistant"; content: string }[],
+      lang: parsed.lang,
+    });
+    res.json(result);
+  } catch (error) {
+    sendAgentError(res, error);
+  }
+}
+
 /**
  * Thin REST adapter around existing tRPC. Cookie session required.
  * Also mounts JSON-RPC MCP at POST /api/mcp (and POST /mcp on the API host).
@@ -110,24 +141,15 @@ export function registerIrbAgentRoutes(app: Express) {
   });
 
   app.post("/api/irb/applications/:id/chat", async (req, res) => {
-    const auth = await requireUser(req, res);
-    if (!auth) return;
-    const id = parseApplicationId(req.params.id);
-    if (!id) {
-      res.status(400).json({ error: "Invalid application id" });
-      return;
-    }
-    const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    try {
-      const result = await auth.caller.chatApplication.sendMessage({
-        applicationId: id,
-        messages,
-        lang: req.body?.lang === "ar" ? "ar" : req.body?.lang === "en" ? "en" : undefined,
-      });
-      res.json(result);
-    } catch (error) {
-      sendAgentError(res, error);
-    }
+    await handleChatSend(req, res, parseApplicationId(req.params.id));
+  });
+
+  app.post("/api/irb/chat", async (req, res) => {
+    await handleChatSend(req, res);
+  });
+
+  app.post("/api/chat/send", async (req, res) => {
+    await handleChatSend(req, res);
   });
 
   app.post("/api/irb/applications/:id/submit", async (req, res) => {
@@ -215,6 +237,19 @@ const MCP_TOOLS = [
   },
 ] as const;
 
+const MCP_ADMIN_TOOLS = [
+  {
+    name: "irb_admin_committee_members",
+    description: "List IRB committee members (admin only; authorized on the server)",
+    inputSchema: { type: "object", properties: {} },
+  },
+] as const;
+
+function mcpToolsFor(role: string | undefined) {
+  if (role === "admin") return [...MCP_TOOLS, ...MCP_ADMIN_TOOLS];
+  return [...MCP_TOOLS];
+}
+
 async function handleMcp(req: Request, res: Response) {
   const auth = await requireUser(req, res);
   if (!auth) return;
@@ -237,7 +272,7 @@ async function handleMcp(req: Request, res: Response) {
       return;
     }
     if (method === "tools/list") {
-      res.json({ jsonrpc: "2.0", id, result: { tools: MCP_TOOLS } });
+      res.json({ jsonrpc: "2.0", id, result: { tools: mcpToolsFor(auth.user.role) } });
       return;
     }
     if (method === "tools/call") {
@@ -266,6 +301,12 @@ async function handleMcp(req: Request, res: Response) {
           applicationId,
           messages: messages as { role: "user" | "assistant"; content: string }[],
         }));
+      } else if (name === "irb_admin_committee_members") {
+        if (auth.user.role !== "admin") {
+          res.status(403).json({ jsonrpc: "2.0", id, error: { code: -32003, message: "admin required" } });
+          return;
+        }
+        text = JSON.stringify(await auth.caller.admin.allCommitteeMembers());
       } else {
         res.json({ jsonrpc: "2.0", id, error: { code: -32601, message: "Unknown tool" } });
         return;
@@ -283,7 +324,23 @@ async function handleMcp(req: Request, res: Response) {
   }
 }
 
+export function mcpDiscoveryDocument() {
+  return {
+    name: "irb-ultimate",
+    version: APP_VERSION,
+    description: "Official NBCE digital IRB MCP tools. Session cookie required. Authorization is enforced on the server.",
+    endpoint: "/mcp",
+    transport: "http-jsonrpc",
+    tools: [...MCP_TOOLS, ...MCP_ADMIN_TOOLS],
+  };
+}
+
 export function registerMcpJsonRpc(app: Express) {
+  const discovery = (_req: Request, res: Response) => {
+    res.json(mcpDiscoveryDocument());
+  };
+  app.get("/.well-known/mcp.json", discovery);
+  app.get("/api/mcp.json", discovery);
   app.post("/api/mcp", handleMcp);
   app.post("/mcp", handleMcp);
 }

@@ -264,6 +264,17 @@ export async function renderCertificatePdf(data: CertData): Promise<Buffer> {
   });
 }
 
+export const CERTIFICATE_ELIGIBLE_STATUSES = [
+  "approved",
+  "rejected",
+  "retracted",
+  "permanently_rejected",
+] as const;
+
+export function isCertificateEligibleStatus(status: string | null | undefined): boolean {
+  return (CERTIFICATE_ELIGIBLE_STATUSES as readonly string[]).includes(String(status ?? ""));
+}
+
 export type CertificateArtifact = {
   buffer: Buffer;
   contentType: string;

@@ -119,3 +119,12 @@ describe("accelerated pipeline decision order", () => {
     expect(decideAcceleratedOutcome(false, bots)).toBe("owner_alert");
   });
 });
+
+describe("owner alert copy", () => {
+  it("uses the required human-intervention phrase", async () => {
+    const { OWNER_ALERT_NOT_PASSED } = await import("./acceleratedReview.pipeline");
+    expect(OWNER_ALERT_NOT_PASSED).toBe(
+      "AI Swarm auto review NOT passed — human intervention required",
+    );
+  });
+});

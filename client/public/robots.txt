@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /chat-apply
+Disallow: /apply
+Disallow: /application
+Disallow: /reviews
+Disallow: /profile
+
+Sitemap: https://irb-saudi-arabia.vercel.app/sitemap.xml

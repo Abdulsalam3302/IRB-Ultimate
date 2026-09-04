@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { DisclaimerGate } from "./components/DisclaimerGate";
 import { AnalyticsBeacon } from "./components/AnalyticsBeacon";
+import { WebMcpProvider } from "./components/WebMcpProvider";
 
 // Lazy-loaded route pages — each becomes its own chunk so first paint
 // only ships the home + framework. Pages load on navigation.
@@ -94,7 +95,9 @@ function App() {
         <LanguageProvider>
           <TooltipProvider>
             <Toaster />
-            <Router />
+            <WebMcpProvider>
+              <Router />
+            </WebMcpProvider>
           </TooltipProvider>
         </LanguageProvider>
       </ThemeProvider>

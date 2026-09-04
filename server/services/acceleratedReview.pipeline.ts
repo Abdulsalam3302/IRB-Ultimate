@@ -43,7 +43,76 @@ async function notifyOwnerAccelerated(
   }
 }
 
+export const OWNER_ALERT_NOT_PASSED =
+  "AI Swarm auto review NOT passed — human intervention required";
+
 const REVIEWABLE = new Set(["under_review", "pending_admin", "submitted"]);
+
+export async function applyOfficialDigitalApproval(opts: {
+  applicationId: number;
+  actorUserId: number;
+  via: string;
+  swarm: SwarmReviewResult;
+  bots: BotPanelResult;
+}): Promise<AcceleratedReviewOutcome> {
+  const { applicationId, actorUserId, via, swarm, bots } = opts;
+  const app = await db.getApplicationById(applicationId);
+  if (!app) throw new Error("Application not found");
+
+  if (app.status === "approved" && app.irbNumber) {
+    return { action: "auto_approved", irbNumber: app.irbNumber };
+  }
+
+  if (!REVIEWABLE.has(app.status)) {
+    const reason =
+      "Accelerated review passed but application is not in a reviewable status";
+    await notifyOwnerAccelerated(applicationId, OWNER_ALERT_NOT_PASSED, reason);
+    return { action: "owner_alert", reason };
+  }
+
+  const irbNumber = await db.generateIrbNumber();
+  const applicant = await db.getUserById(app.applicantId);
+  let certUrl = "";
+  try {
+    certUrl = await generateAndStoreCertificatePdf({
+      app: { ...app, irbNumber, approvedAt: new Date(), status: "approved" } as typeof app,
+      applicantName: applicant?.name ?? null,
+      applicantEmail: applicant?.email ?? null,
+    });
+  } catch (e) {
+    console.error("[Accelerated] certificate generation failed", e);
+  }
+
+  await db.updateApplication(applicationId, {
+    status: "approved",
+    irbNumber,
+    approvedAt: new Date(),
+    certificateUrl: certUrl || null,
+    adminNotes: `Official digital approval under Dr. Abdulsalam Aleid via ${via}. Swarm=${swarm.passed}, Bots=${bots.passed}.`,
+  });
+
+  await db.addAuditLog({
+    applicationId,
+    userId: actorUserId,
+    action: "accelerated_auto_approved",
+    details: `IRB ${irbNumber} issued via ${via}`,
+  });
+
+  await notifyOwnerAccelerated(
+    applicationId,
+    "IRB auto-approved (official digital pathway)",
+    `Application #${applicationId} approved as ${irbNumber} under Dr. Abdulsalam Aleid. Swarm=${swarm.passed}, Bots=${bots.passed}.`,
+  );
+
+  try {
+    await emailService.notifyAdminApproved(app.applicantId, applicationId, irbNumber);
+    await emailService.notifyCertificateIssued(app.applicantId, applicationId, irbNumber);
+  } catch {
+    /* best-effort */
+  }
+
+  return { action: "auto_approved", irbNumber };
+}
 
 /**
  * Official NBCE digital pathway: AI Swarm OR unanimous 4-reviewer pass
@@ -108,68 +177,23 @@ export async function runAcceleratedPipeline(
     });
   }
 
-  const fastPath = decision === "auto_approve";
-
-  if (fastPath && !REVIEWABLE.has(app.status)) {
-    const reason =
-      "Accelerated review passed but application is not in a reviewable status";
-    await notifyOwnerAccelerated(applicationId, "IRB review attention needed", reason);
-    return { swarm, bots, outcome: { action: "owner_alert", reason } };
-  }
-
-  if (fastPath) {
-    const irbNumber = await db.generateIrbNumber();
-    const applicant = await db.getUserById(app.applicantId);
-    let certUrl = "";
-    try {
-      certUrl = await generateAndStoreCertificatePdf({
-        app: { ...app, irbNumber, approvedAt: new Date(), status: "approved" } as typeof app,
-        applicantName: applicant?.name ?? null,
-        applicantEmail: applicant?.email ?? null,
-      });
-    } catch (e) {
-      console.error("[Accelerated] certificate generation failed", e);
-    }
-
+  if (decision === "auto_approve") {
     const via = swarm.passed ? "AI Swarm pass" : "unanimous digital reviewers (4/4)";
-    await db.updateApplication(applicationId, {
-      status: "approved",
-      irbNumber,
-      approvedAt: new Date(),
-      certificateUrl: certUrl || null,
-      adminNotes: `Official digital approval via ${via}. Swarm=${swarm.passed}, Bots=${bots.passed}.`,
-    });
-
-    await db.addAuditLog({
+    const outcome = await applyOfficialDigitalApproval({
       applicationId,
-      userId: actorUserId,
-      action: "accelerated_auto_approved",
-      details: `IRB ${irbNumber} issued via ${via}`,
+      actorUserId,
+      via,
+      swarm,
+      bots,
     });
-
-    await notifyOwnerAccelerated(
-      applicationId,
-      "IRB auto-approved (official digital pathway)",
-      `Application #${applicationId} approved as ${irbNumber}. Swarm=${swarm.passed}, Bots=${bots.passed}.`,
-    );
-
-    try {
-      await emailService.notifyAdminApproved(app.applicantId, applicationId, irbNumber);
-      await emailService.notifyCertificateIssued(app.applicantId, applicationId, irbNumber);
-    } catch {
-      /* best-effort */
-    }
-
-    return { swarm, bots, outcome: { action: "auto_approved", irbNumber } };
+    return { swarm, bots, outcome };
   }
 
-  const reason =
-    "Neither the AI Swarm nor the four designated digital reviewers reached a pass. Manual owner action is required.";
   await notifyOwnerAccelerated(
     applicationId,
-    "IRB manual review required",
-    `${reason} Application #${applicationId}.`,
+    OWNER_ALERT_NOT_PASSED,
+    `${OWNER_ALERT_NOT_PASSED} Application #${applicationId}. Neither the AI Swarm nor the four designated digital reviewers reached a pass.`,
   );
 
-  return { swarm, bots, outcome: { action: "owner_alert", reason } };
+  return { swarm, bots, outcome: { action: "owner_alert", reason: OWNER_ALERT_NOT_PASSED } };
 }

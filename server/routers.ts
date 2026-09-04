@@ -13,8 +13,10 @@ import { runSwarmPanel, SWARM_LLM_CALLS_PER_RUN } from "./aiSwarmReview";
 import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
-import { runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
+import { applyOfficialDigitalApproval, runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
 import { chatApplicationTurn } from "./services/chatApplication.service";
+import { ensureDefaultCommittee } from "./services/committeeAutoEnroll";
+import { runSwarmReview } from "./services/acceleratedReview.service";
 import { storagePut } from "./storage";
 import * as emailService from "./emailService";
 import { searchLiterature } from "./literature";
@@ -214,6 +216,25 @@ const applicationRouter = router({
   myApplications: protectedProcedure.query(async ({ ctx }) => {
     return db.getApplicationsByApplicant(ctx.user.id);
   }),
+
+  // Alias for older SPA builds / fallbacks when chatApplication.* is missing.
+  sendChatMessage: protectedProcedure
+    .input(z.object({
+      applicationId: z.number().int().positive(),
+      messages: z.array(z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().max(4000),
+      })).max(16),
+      lang: z.enum(["ar", "en"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return chatApplicationTurn({
+        applicationId: input.applicationId,
+        userId: ctx.user.id,
+        messages: input.messages,
+        langHint: input.lang,
+      });
+    }),
 
   // Phase 0: Save Declaration
   saveDeclaration: protectedProcedure
@@ -1752,6 +1773,11 @@ const adminRouter = router({
     }),
 
   allCommitteeMembers: adminProcedure.query(async () => {
+    try {
+      await ensureDefaultCommittee();
+    } catch (err) {
+      console.warn("[committee] auto-enroll on list failed", err);
+    }
     const members = await db.getAllCommitteeMembers();
     const enriched = await Promise.all(members.map(async (m) => {
       const user = await db.getUserById(m.userId);
@@ -2388,11 +2414,9 @@ const literatureRouter = router({
 
 // ─── AI Swarm Review Router (owner-only, hidden from public) ────────────────
 // Two fully independent AI panels, each simulating 510 expert reviewers
-// across six specialty clusters, deep-audit an application and return a
-// strict pass/fail verdict with structured, actionable feedback. The swarm
-// is ADVISORY: it never mutates application status, never notifies the
-// applicant, and is invisible to every role except the platform owner.
-// Secondary admins receive the same FORBIDDEN as regular users.
+// across six specialty clusters. This is an AUTHORIZED official decision
+// pathway: dual-panel pass auto-approves; otherwise the 4 digital reviewers
+// run; both fail alerts the owner. Invisible to non-owners.
 
 const aiSwarmRouter = router({
   // The only non-owner-gated endpoint: lets the SPA decide whether to
@@ -2511,11 +2535,37 @@ const aiSwarmRouter = router({
             }
           }
 
+          const bothPass =
+            !panel1.unavailable &&
+            !panel2.unavailable &&
+            panel1.verdict === "pass" &&
+            panel2.verdict === "pass";
+          if (bothPass) {
+            const live = await db.getApplicationById(input.applicationId);
+            const swarmScore = Math.round(((panel1.score ?? 0) + (panel2.score ?? 0)) / 2);
+            await applyOfficialDigitalApproval({
+              applicationId: input.applicationId,
+              actorUserId: requesterId,
+              via: "Owner-triggered dual-panel AI Swarm (authorized official pathway)",
+              swarm: live
+                ? { ...runSwarmReview(live), passed: true, overallScore: swarmScore, summary: "Dual-panel LLM swarm PASS" }
+                : {
+                    passed: true,
+                    overallScore: swarmScore,
+                    panels: [],
+                    summary: "Dual-panel LLM swarm PASS",
+                  },
+              bots: { passed: false, unanimous: false, approvals: 0, reviewers: [] },
+            });
+          } else {
+            await runAcceleratedPipeline(input.applicationId, requesterId);
+          }
+
           await db.addAuditLog({
             applicationId: input.applicationId,
             userId: requesterId,
             action: "ai_swarm_review_run",
-            details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Advisory only — no status change.`,
+            details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Authorized official pathway — status may change.`,
           });
         } catch (err) {
           console.error("[AI Swarm] background run failed:", err);

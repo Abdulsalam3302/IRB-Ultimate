@@ -13,23 +13,34 @@ permissions:
   contents: read
 
 jobs:
-  # Render auto-deploys from Git when Blueprint/service is connected.
-  # Optional: fire Deploy Hook for explicit redeploys.
+  # Render Git auto-deploy can miss pushes when the GitHub webhook is absent.
+  # Prefer a Deploy Hook; otherwise POST the Render API with a CLI token.
   deploy-render:
-    name: Render (deploy hook)
+    name: Render (deploy)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Trigger Render deploy hook
+      - name: Trigger Render deploy
         env:
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "RENDER_DEPLOY_HOOK not set — Render Git auto-deploy will pick up this push."
+          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+            curl -sfS -X POST "$RENDER_DEPLOY_HOOK"
+            echo "Render deploy hook triggered."
             exit 0
           fi
-          curl -sfS -X POST "$RENDER_DEPLOY_HOOK"
-          echo "Render deploy hook triggered."
+          if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
+            curl -sfS -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d '{"clearCache":"do_not_clear"}'
+            echo
+            echo "Render API deploy triggered."
+            exit 0
+          fi
+          echo "No RENDER_DEPLOY_HOOK or RENDER_API_KEY — relying on Render Git auto-deploy."
 
   deploy-vercel:
     name: Vercel (frontend)
@@ -76,6 +87,7 @@ jobs:
 
       - name: Deploy production
         if: steps.vercel_skip.outputs.skip != 'true'
+        continue-on-error: true
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

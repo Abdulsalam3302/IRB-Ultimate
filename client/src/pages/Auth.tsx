@@ -16,7 +16,7 @@ import {
 import { Loader2, Mail } from "lucide-react";
 
 type Mode = "signin" | "signup";
-type AccountMethod = "applicant" | "institutional";
+type AccountMethod = "password" | "connected";
 
 function GoogleIcon() {
   return (
@@ -76,8 +76,12 @@ export default function Auth() {
   // Only allow same-origin path redirects — blocks open-redirect via ?next=//evil.com
   const next = safeNextPath(rawNext);
   const [mode, setMode] = useState<Mode>("signin");
-  const [method, setMethod] = useState<AccountMethod>("applicant");
-  const institutional = method === "institutional";
+  const [method, setMethod] = useState<AccountMethod>(
+    params.get("method") === "connected" && isSupabaseAuthEnabled
+      ? "connected"
+      : "password"
+  );
+  const connected = method === "connected";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,16 +92,17 @@ export default function Auth() {
     useState<InstitutionalAuthCapabilities | null>(null);
   const [capabilityAttempt, setCapabilityAttempt] = useState(0);
   const socialProviders = capabilities?.socialProviders || [];
-  const socialAvailable = institutional && socialProviders.length > 0;
-  const emailAvailable = !institutional || capabilities?.email === true;
-  const emailId = institutional ? "institutional-email" : "email";
-  const passwordId = institutional ? "institutional-password" : "password";
+  const socialAvailable = connected && socialProviders.length > 0;
+  const emailAvailable = !connected || capabilities?.email === true;
+  const emailId = "email";
+  const passwordId = "password";
 
   useEffect(() => {
     if (params.get("error")) setAuthError(t("auth.failed"));
   }, [params]);
 
   useEffect(() => {
+    if (!connected) return;
     let active = true;
     setCapabilities(null);
     getInstitutionalAuthCapabilities().then(result => {
@@ -106,7 +111,7 @@ export default function Auth() {
     return () => {
       active = false;
     };
-  }, [capabilityAttempt]);
+  }, [connected, capabilityAttempt]);
 
   const selectMethod = (value: AccountMethod) => {
     if (requestBusy.current || value === method) return;
@@ -124,7 +129,7 @@ export default function Auth() {
   const oauth = async (provider: "google" | "apple" | "linkedin_oidc") => {
     if (
       requestBusy.current ||
-      !institutional ||
+      !connected ||
       !socialProviders.includes(provider)
     )
       return;
@@ -162,8 +167,8 @@ export default function Auth() {
         return t("auth.networkError");
       case "SESSION_BRIDGE_FAILED":
         return isAr
-          ? "تعذر إنشاء جلسة المنصة. أعد المحاولة أو تواصل مع مسؤول المؤسسة. لم يكتمل تسجيل الدخول."
-          : "The platform session could not be established. Retry or contact your institutional administrator. Sign-in was not completed.";
+          ? "تعذر إنشاء جلسة المنصة. أعد المحاولة أو تواصل مع الدعم. لم يكتمل تسجيل الدخول."
+          : "The platform session could not be established. Retry or contact support. Sign-in was not completed.";
       default:
         return t("auth.failed");
     }
@@ -177,7 +182,7 @@ export default function Auth() {
     setAuthError(null);
     setBusy(true);
     try {
-      if (institutional) {
+      if (connected) {
         const result = await signInInstitutional(
           getSupabase(),
           email,
@@ -250,57 +255,13 @@ export default function Auth() {
             {mode === "signin" ? t("auth.signInTitle") : t("auth.signUpTitle")}
           </h1>
           <p className="mt-2 text-center text-sm text-ink-soft">
-            {isAr
-              ? "اختر نوع الحساب الذي تريد استخدامه."
-              : "Choose the account you want to use."}
-          </p>
-
-          <fieldset
-            className="mt-6"
-            disabled={busy}
-            aria-describedby="account-method-description"
-          >
-            <legend className="mb-2 text-sm font-medium text-forest-950">
-              {isAr ? "نوع الحساب" : "Account type"}
-            </legend>
-            <div className="grid grid-cols-2 gap-2">
-              {(["applicant", "institutional"] as const).map(value => (
-                <label
-                  key={value}
-                  className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-sm ${method === value ? "border-forest-800 bg-forest-900/5" : "border-forest-900/15 bg-white"}`}
-                >
-                  <input
-                    type="radio"
-                    name="account-method"
-                    value={value}
-                    checked={method === value}
-                    onChange={() => selectMethod(value)}
-                    className="mt-0.5 accent-forest-900"
-                  />
-                  <span>
-                    {value === "applicant"
-                      ? isAr
-                        ? "حساب مقدم الطلب"
-                        : "Applicant account"
-                      : isAr
-                        ? "حساب المؤسسة"
-                        : "Institutional account"}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <p
-            id="account-method-description"
-            className="mt-3 text-sm leading-relaxed text-ink-soft"
-          >
-            {institutional
+            {connected
               ? isAr
-                ? "استخدم حساب الهوية المخصص لك من مؤسستك لهذه المنصة. يبقى حساب مقدم الطلب منفصلاً؛ لا تنتقل الطلبات أو الصلاحيات تلقائياً. تتطلب صلاحيات الموظفين تعييناً معتمداً والتحقق بخطوتين من صفحة الملف الشخصي."
-                : "Use the identity account issued for this platform by your institution. Your applicant account remains separate; applications and permissions do not transfer automatically. Staff access requires an authorized appointment and two-step verification in Profile."
+                ? "تابع باستخدام حساب تسجيل الدخول المرتبط بك."
+                : "Continue with your connected sign-in account."
               : isAr
-                ? "لإنشاء الطلبات ومتابعتها، استخدم حساب مقدم الطلب المسجل مباشرة في المنصة. هذا الحساب لا يثبت التحقق المؤسسي بخطوتين."
-                : "Use your account registered directly with the platform to create and track applications. This account does not establish institutional two-step verification."}
+                ? "ادخل إلى حسابك لمتابعة طلباتك."
+                : "Access your account and continue your applications."}
           </p>
 
           {authError && (
@@ -312,26 +273,26 @@ export default function Auth() {
             </p>
           )}
 
-          {institutional && !emailAvailable && (
+          {connected && !emailAvailable && (
             <div
               role="status"
               className="mt-5 rounded-xl border border-forest-900/15 bg-white p-4 text-sm leading-relaxed"
             >
               {!isSupabaseAuthEnabled
                 ? isAr
-                  ? "تسجيل الدخول المؤسسي غير مضبوط في هذا النشر. تواصل مع مشغل المنصة."
-                  : "Institutional sign-in is not configured for this deployment. Contact the platform operator."
+                  ? "خيار تسجيل الدخول هذا غير متاح. تواصل مع الدعم."
+                  : "This sign-in option is not configured. Contact support."
                 : !capabilities
                   ? isAr
-                    ? "جارٍ التحقق من طرق تسجيل الدخول المؤسسي المتاحة…"
-                    : "Checking available institutional sign-in methods…"
+                    ? "جارٍ تحميل خيارات تسجيل الدخول…"
+                    : "Loading sign-in options…"
                   : capabilities.available
                     ? isAr
-                      ? "لم تفعّل المؤسسة تسجيل الدخول بالبريد وكلمة المرور. تواصل مع مسؤول المؤسسة إذا لم تتوفر طريقة أخرى لتسجيل الدخول."
-                      : "Institutional email and password sign-in is not enabled. Contact your institutional administrator if no other sign-in method is available."
+                      ? "تسجيل الدخول بالبريد وكلمة المرور غير متاح لهذا الخيار. استخدم طريقة متاحة أدناه أو تواصل مع الدعم."
+                      : "Email sign-in is not enabled for this option. Use an available method below or contact support."
                     : isAr
-                      ? "خدمة الهوية المؤسسية غير متاحة حالياً. أعد المحاولة لاحقاً أو تواصل مع مسؤول المؤسسة."
-                      : "The institutional identity service is currently unavailable. Retry later or contact your institutional administrator."}
+                      ? "خدمة تسجيل الدخول غير متاحة حالياً. أعد المحاولة أو تواصل مع الدعم."
+                      : "The sign-in service is currently unavailable. Retry later or contact support."}
               {isSupabaseAuthEnabled &&
                 capabilities &&
                 !capabilities.available && (
@@ -404,13 +365,7 @@ export default function Auth() {
             <form
               key={method}
               aria-label={
-                institutional
-                  ? isAr
-                    ? "تسجيل الدخول بحساب المؤسسة"
-                    : "Institutional email sign-in"
-                  : isAr
-                    ? "حساب مقدم الطلب"
-                    : "Applicant account"
+                isAr ? "تسجيل الدخول بالبريد الإلكتروني" : "Email sign-in"
               }
               aria-busy={busy}
               onSubmit={emailAuth}
@@ -432,11 +387,7 @@ export default function Auth() {
               )}
               <div className="space-y-2">
                 <Label htmlFor={emailId}>
-                  {institutional
-                    ? t("auth.email")
-                    : isAr
-                      ? "البريد الإلكتروني"
-                      : "Email address"}
+                  {isAr ? "البريد الإلكتروني" : "Email address"}
                 </Label>
                 <Input
                   id={emailId}
@@ -447,9 +398,9 @@ export default function Auth() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   autoComplete={
-                    institutional
-                      ? "section-institutional username"
-                      : "section-applicant username"
+                    connected
+                      ? "section-connected username"
+                      : "section-password username"
                   }
                   required
                 />
@@ -471,10 +422,10 @@ export default function Auth() {
                   onChange={e => setPassword(e.target.value)}
                   autoComplete={
                     mode === "signup"
-                      ? "section-applicant new-password"
-                      : institutional
-                        ? "section-institutional current-password"
-                        : "section-applicant current-password"
+                      ? "section-password new-password"
+                      : connected
+                        ? "section-connected current-password"
+                        : "section-password current-password"
                   }
                   minLength={mode === "signup" ? 12 : 1}
                   maxLength={128}
@@ -494,20 +445,16 @@ export default function Auth() {
                 ) : (
                   <>
                     <Mail className="h-4 w-4 mr-2" />
-                    {institutional
-                      ? isAr
-                        ? "الدخول بحساب المؤسسة"
-                        : "Sign in to institutional account"
-                      : mode === "signin"
-                        ? t("auth.signInButton")
-                        : t("auth.signUpButton")}
+                    {mode === "signin"
+                      ? t("auth.signInButton")
+                      : t("auth.signUpButton")}
                   </>
                 )}
               </Button>
             </form>
           )}
 
-          {!institutional && (
+          {!connected && (
             <p className="mt-6 text-center text-sm text-ink-soft">
               {mode === "signin" ? t("auth.noAccount") : t("auth.hasAccount")}{" "}
               <button
@@ -523,6 +470,26 @@ export default function Auth() {
                 {mode === "signin"
                   ? t("auth.signUpLink")
                   : t("auth.signInLink")}
+              </button>
+            </p>
+          )}
+          {isSupabaseAuthEnabled && (
+            <p className="mt-4 text-center text-sm text-ink-soft">
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                disabled={busy}
+                onClick={() =>
+                  selectMethod(connected ? "password" : "connected")
+                }
+              >
+                {connected
+                  ? isAr
+                    ? "العودة لتسجيل الدخول بالبريد"
+                    : "Back to email sign-in"
+                  : isAr
+                    ? "خيارات أخرى لتسجيل الدخول"
+                    : "More sign-in options"}
               </button>
             </p>
           )}

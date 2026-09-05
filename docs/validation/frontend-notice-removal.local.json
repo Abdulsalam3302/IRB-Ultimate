@@ -1,0 +1,163 @@
+{
+  "testedAt": "2026-09-05T17:16:49.364Z",
+  "buildEnvironment": {
+    "VITE_PUBLIC_DEMO_BANNER": "1"
+  },
+  "scope": "Copied local production browser build; API calls mocked, no live accounts or provider calls. Notice removal only.",
+  "htmlFiles": 12,
+  "checks": [
+    {
+      "name": "static disclaimer/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static policy/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static resources/guideline/data-privacy/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static resources/guideline/declaration-of-helsinki/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static resources/guideline/ich-gcp/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static resources/guideline/nbce-ethical-guidelines/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static resources/guideline/privacy-policy/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static resources/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static support/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static verify/index.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "static workspace.html excludes evaluation notice",
+      "passed": true
+    },
+    {
+      "name": "all bundled scripts exclude removed notice copy and flag",
+      "passed": true
+    },
+    {
+      "name": "en / notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /resources notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /support notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /policy notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /disclaimer notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /verify notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /auth notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /chat-apply notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /profile notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "en /not-a-real-page notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar / notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /resources notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /support notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /policy notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /disclaimer notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /verify notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /auth notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /chat-apply notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /profile notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "ar /not-a-real-page notice absent and mobile layout fits",
+      "passed": true
+    },
+    {
+      "name": "no uncaught browser exceptions",
+      "passed": true
+    },
+    {
+      "name": "no external requests or mutations",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "externalRequests": 0,
+  "writes": 0,
+  "sourceHashes": {
+    "client/src/App.tsx": "dd603afeee85a72881a3cccb293cf97fb4f0145a85e887843a187f023c19e4e4",
+    "client/src/contexts/LanguageContext.tsx": "0026bf7ecb1c9c4bb823a970087c90e86604617b3e6133544412e985719e415e",
+    "scripts/build-public-pages.ts": "78815fafed8283ba4d2674940fc05781537511ddf7c9c66a7fda34c0e3082279",
+    ".github/workflows/deploy.yml": "6d4cd23d0f054348fe3f189f0d3885645b578942eeaa9afd7e93cdfd53d234f2"
+  },
+  "artifactHashes": {
+    "index-CHOVSyG9.js": "790b1e9493b883edc6f37c4cf2074969eb06798a341fad39487fe119306b0529",
+    "public/index.html": "86c0c0d2c8a6e1ac102f5da7c3e3a29335355d6a51a65a54cab6e8e928f62a0b"
+  }
+}

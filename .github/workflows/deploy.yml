@@ -102,5 +102,4 @@ jobs:
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
             --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" \
             --build-env "VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL" \
-            --build-env 'VITE_PUBLIC_DEMO_BANNER=1' \
             --build-env 'VITE_APP_ID=irb-sa-prod'

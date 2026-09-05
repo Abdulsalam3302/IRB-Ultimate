@@ -4,14 +4,12 @@ import { loadEnv } from "vite";
 import { PUBLIC_PAGES, getPageMetadata, getPublicSiteOrigin } from "../shared/seo";
 import { PLATFORM_FAQS } from "../shared/platformFaqs";
 import { GUIDELINE_DOCS } from "../shared/guidelineDocs";
-import { EVALUATION_NOTICE } from "../shared/publicNotices";
 
 const root = path.resolve(import.meta.dirname, "..");
 const output = path.join(root, "dist/public");
 const original = await readFile(path.join(output, "index.html"), "utf8");
 const buildEnv = loadEnv("production", root, "VITE_");
 const origin = getPublicSiteOrigin(process.env.VITE_PUBLIC_SITE_URL || buildEnv.VITE_PUBLIC_SITE_URL);
-const evaluationMode = (process.env.VITE_PUBLIC_DEMO_BANNER ?? buildEnv.VITE_PUBLIC_DEMO_BANNER) === "1";
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const json = (x: unknown) => JSON.stringify(x).replace(/</g, "\\u003c");
 await writeFile(path.join(output, "workspace.html"), original);
@@ -31,8 +29,7 @@ for (const page of PUBLIC_PAGES) {
   const sections = guideline?.sections.map(section => `<section><h2>${escape(section.titleEn)}</h2>${section.bodyEn.map(body => `<p>${escape(body)}</p>`).join("")}<div dir="rtl" lang="ar"><h2>${escape(section.titleAr)}</h2>${section.bodyAr.map(body => `<p>${escape(body)}</p>`).join("")}</div></section>`).join("") || "";
   const faqs = ["/", "/resources"].includes(page.path) ? PLATFORM_FAQS.map(f => `<section><h2>${escape(f.qEn)}</h2><p>${escape(f.aEn)}</p><div dir="rtl" lang="ar"><h2>${escape(f.qAr)}</h2><p>${escape(f.aAr)}</p></div></section>`).join("") : "";
   const nav = PUBLIC_PAGES.filter(p => !p.path.includes("guideline")).map(p => `<a href="${escape(p.path)}">${escape(p.titleEn)}</a>`).join(" · ");
-  const notice = evaluationMode ? `<aside role="note"><p lang="en">${escape(EVALUATION_NOTICE.en)}</p><p dir="rtl" lang="ar">${escape(EVALUATION_NOTICE.ar)}</p></aside>` : "";
-  const content = `<main style="max-width:72rem;margin:auto;padding:2rem;font-family:system-ui;line-height:1.7">${notice}<nav aria-label="Public pages">${nav}</nav><h1>${escape(page.titleEn)}</h1><p>${escape(page.descriptionEn)}</p><div dir="rtl" lang="ar"><h2>${escape(page.titleAr)}</h2><p>${escape(page.descriptionAr)}</p></div>${sections}${faqs}<p><a href="/auth">Sign in / تسجيل الدخول</a></p></main>`;
+  const content = `<main style="max-width:72rem;margin:auto;padding:2rem;font-family:system-ui;line-height:1.7"><nav aria-label="Public pages">${nav}</nav><h1>${escape(page.titleEn)}</h1><p>${escape(page.descriptionEn)}</p><div dir="rtl" lang="ar"><h2>${escape(page.titleAr)}</h2><p>${escape(page.descriptionAr)}</p></div>${sections}${faqs}<p><a href="/auth">Sign in / تسجيل الدخول</a></p></main>`;
   html = html.replace('<div id="root"></div>', `<div id="root">${content}</div>`);
   const directory = page.path === "/" ? output : path.join(output, page.path);
   await mkdir(directory, { recursive: true });

@@ -1,4 +1,3 @@
-import { MfaSettings } from "@/components/MfaSettings";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -161,8 +160,6 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
-
-        <MfaSettings />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">

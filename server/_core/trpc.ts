@@ -3,20 +3,9 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { reserveLlmCall } from "./budget";
 import type { TrpcContext } from "./context";
-import { ENV } from "./env";
 import { assertStaffMfa } from "./staffAuth";
-
-// Captured once at module init (same SA-26 rationale as db.ts): a mid-run
-// env mutation cannot re-target who counts as the platform owner.
-const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
-
-/** Owner authority binds to one explicit authenticated subject, never an email
- * shared across native/provider accounts or a newly migrated identity tenant.
- * OWNER_EMAIL remains a contact setting and grants no privilege.
- */
-export function isPlatformOwner(user: { role: string; openId: string; email?: string | null } | null): boolean {
-  return Boolean(BOOT_OWNER_OPEN_ID && user?.role === "admin" && user.openId === BOOT_OWNER_OPEN_ID);
-}
+import { isPlatformOwner } from "./ownerAuthority";
+export { isPlatformOwner } from "./ownerAuthority";
 
 const isProduction = process.env.NODE_ENV === "production";
 

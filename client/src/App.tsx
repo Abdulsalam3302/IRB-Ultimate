@@ -7,7 +7,6 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AnalyticsBeacon } from "./components/AnalyticsBeacon";
-import { DemoBanner } from "./components/DemoBanner";
 import { RouteMetadata } from "./components/RouteMetadata";
 
 // Experimental tool definitions load only in browsers exposing WebMCP.
@@ -103,7 +102,6 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <LanguageProvider>
           <TooltipProvider>
-            <DemoBanner />
             <Toaster />
             <BrowserTools />
             <Router />

@@ -1,4 +1,4 @@
-# IRB Ultimate 2.4.0
+# IRB Ultimate 2.4.1
 
 IRB Ultimate is a bilingual Arabic/English research ethics workflow platform being prepared for a controlled Saudi Arabia pilot. It supports protocol drafting, advisory AI checks, qualified human committee review, decision records, and public verification of eligible decisions.
 

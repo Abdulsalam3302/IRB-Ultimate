@@ -3,8 +3,8 @@ import { isSupabaseAuthEnabled } from "@/lib/supabase";
 export { COOKIE_NAME, ONE_YEAR_MS, SESSION_TTL_MS } from "@shared/const";
 
 /**
- * Applicant and institutional identities share the explicit /auth selector.
- * Keep the legacy portal entry point when configured without institutional auth;
+ * The default /auth page opens directly to email and password sign-in.
+ * Keep the legacy portal entry point when configured without connected auth;
  * its server route creates and validates the OAuth state nonce.
  * The optional destination is restricted to a safe same-origin path.
  */

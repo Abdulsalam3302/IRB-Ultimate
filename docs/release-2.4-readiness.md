@@ -27,7 +27,7 @@ See the [storage and identity deletion runbook](storage-deletion-lifecycle.md). 
 
 ## Frontend and discovery
 
-Public English and Arabic pages have consistent synthetic-data notices and route-specific search/social metadata. Unverified support response promises were removed. FAQs and WebMCP registration load only when needed; bundle budgets stay enforced. WebMCP keeps its supported-browser feature check and application authorization boundaries.
+Public English and Arabic pages have route-specific search/social metadata. The evaluation notice was removed from the app and generated pages at the operator's request; the former build flag cannot restore it. Human decision authority wording remains accurate. Unverified support response promises were removed. FAQs and WebMCP registration load only when needed; bundle budgets stay enforced. WebMCP keeps its supported-browser feature check and application authorization boundaries.
 
 ## Release verification
 

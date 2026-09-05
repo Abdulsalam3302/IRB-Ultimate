@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("./_core/env", async importOriginal => {
   const original = await importOriginal<typeof import("./_core/env")>();
-  return { ...original, ENV: { ...original.ENV, isProduction: true } };
+  return { ...original, ENV: { ...original.ENV, isProduction: true, ownerOpenId: "synthetic:12" } };
 });
 vi.mock("./_core/context", () => ({ createContext: mocks.createContext }));
 vi.mock("./storage", () => ({ storageGet: mocks.storageGet, storagePut: vi.fn() }));
@@ -59,6 +59,19 @@ describe("private downloads follow application ownership and staff authority", (
     login(9, "admin", aal);
     expect((await download()).status).toBe(aal === "aal2" ? 302 : 403);
     expect(mocks.storageGet).toHaveBeenCalledTimes(aal === "aal2" ? 1 : 0);
+  });
+  it.each([42, null])("allows the appointed admin owner at aal1 to retrieve a private document with application binding %s", async applicationId => {
+    login(12, "admin", "aal1");
+    mocks.file.mockResolvedValue({ id: 123, userId: 8, applicationId, fileKey: "8/synthetic-staff-document.pdf" });
+    const response = await download();
+    expect(response.status).toBe(302);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(mocks.storageGet).toHaveBeenCalledOnce();
+  });
+  it("does not give a demoted owner subject access to another applicant's document", async () => {
+    login(12, "user", "aal1");
+    expect((await download()).status).toBe(403);
+    expect(mocks.storageGet).not.toHaveBeenCalled();
   });
   it.each(["aal1", "aal2"])("requires MFA as well as current assignment for a reviewer (%s)", async aal => {
     login(10, "reviewer", aal);

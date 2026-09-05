@@ -39,18 +39,49 @@ describe("explicit owner subject authority", () => {
     expect(isPlatformOwner(user("native:admin", "aal2", "admin", env.ownerEmail))).toBe(false);
   });
 
-  it("retains required staff MFA after matching the owner subject", async () => {
-    const { ownerProcedure, router } = await import("./_core/trpc");
-    const routes = router({ privileged: ownerProcedure.mutation(() => ({ changed: true })) });
-    await expect(routes.createCaller(context(user(undefined, "aal1"))).privileged()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(await routes.createCaller(context(user())).privileged()).toEqual({ changed: true });
+  it("exempts the appointed admin owner from MFA consistently across staff, admin and owner procedures", async () => {
+    const { ownerProcedure, adminProcedure, staffProcedure, router } = await import("./_core/trpc");
+    const routes = router({
+      staff: staffProcedure.query(() => true),
+      admin: adminProcedure.query(() => true),
+      owner: ownerProcedure.query(() => true),
+    });
+    const caller = routes.createCaller(context(user(undefined, "aal1")));
+    await expect(caller.staff()).resolves.toBe(true);
+    await expect(caller.admin()).resolves.toBe(true);
+    await expect(caller.owner()).resolves.toBe(true);
+  });
+
+  it("keeps required MFA for a secondary admin even with the owner's email", async () => {
+    const { adminProcedure, staffProcedure, ownerProcedure, router } = await import("./_core/trpc");
+    const routes = router({ staff: staffProcedure.query(() => true), admin: adminProcedure.query(() => true), owner: ownerProcedure.query(() => true) });
+    const account = user("supabase:secondary-admin", "aal1", "admin", env.ownerEmail);
+    const caller = routes.createCaller(context(account));
+    await expect(caller.staff()).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("multi-factor") });
+    await expect(caller.admin()).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("multi-factor") });
+    await expect(caller.owner()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const verified = routes.createCaller(context({ ...account, authLevel: "aal2" }));
+    await expect(verified.staff()).resolves.toBe(true);
+    await expect(verified.admin()).resolves.toBe(true);
+    await expect(verified.owner()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("never grants admin or owner access to an owner subject whose role was removed", async () => {
+    const { adminProcedure, ownerProcedure, router } = await import("./_core/trpc");
+    const routes = router({ admin: adminProcedure.query(() => true), owner: ownerProcedure.query(() => true) });
+    const caller = routes.createCaller(context(user(undefined, "aal2", "user")));
+    await expect(caller.admin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.owner()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("does not retarget owner authority through a mid-process configuration mutation", async () => {
     const { isPlatformOwner } = await import("./_core/trpc");
+    const { staffMfaRequired } = await import("./_core/staffAuth");
     env.ownerOpenId = "supabase:replacement";
     env.ownerEmail = "changed@example.invalid";
     expect(isPlatformOwner(user())).toBe(true);
+    expect(staffMfaRequired(user(undefined, "aal1"))).toBe(false);
     expect(isPlatformOwner(user("supabase:replacement", "aal2", "admin", env.ownerEmail))).toBe(false);
+    expect(staffMfaRequired(user("supabase:replacement", "aal1", "admin", env.ownerEmail))).toBe(true);
   });
 });

@@ -95,8 +95,6 @@ services:
         value: "500"
       - key: LLM_MAX_CONCURRENCY
         value: "2"
-      - key: VITE_PUBLIC_DEMO_BANNER
-        value: "1"
       - key: LLM_MAX_TOKENS
         value: "8192"
       - key: PILOT_LOGIN_ENABLED

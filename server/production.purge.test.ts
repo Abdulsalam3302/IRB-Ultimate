@@ -70,6 +70,14 @@ describe("development account purge cannot bypass production erasure", () => {
     expect(mocks.audit).not.toHaveBeenCalled();
   });
 
+  it("keeps production deletion protections for the owner who is exempt from MFA", async () => {
+    await expect(
+      appRouter.createCaller(context({ openId: "sb:synthetic-appointed-owner", role: "admin", authLevel: "aal1" })).admin.purgeTestAccounts()
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("disabled in production") });
+    expect(mocks.purge).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
   it("keeps the scoped maintenance action available to the appointed development owner", async () => {
     env.isProduction = false;
     expect(

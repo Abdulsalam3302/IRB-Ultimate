@@ -1,6 +1,6 @@
 # Operator facts required for public intake
 
-Prepared 5 September 2026. This is an activation checklist, not a declaration that public intake or committee issuance is authorized. The current public offer is an evaluation deployment for synthetic data. A passing build, functioning login, private storage or clean malware scan does not establish the operating entity, lawful data handling or committee authority.
+Prepared 5 September 2026. This is an activation checklist, not a declaration that public intake or committee issuance is authorized. The operator has requested removal of the public evaluation notice. A passing build, functioning login, private storage or clean malware scan does not establish the operating entity, lawful data handling or committee authority.
 
 The operator must supply and approve the following facts. Publish the public-facing information naturally in both English and Arabic; keep identity evidence, appointment records, incident contacts and contractual records in controlled operational storage.
 
@@ -17,10 +17,10 @@ The operator must supply and approve the following facts. Publish the public-fac
 
 The release coordinator has confirmed **Sydney** as the new Supabase tenant's region. This does not support a Saudi-only hosting claim. The requested free scanner plan uses the operator's Mac; its physical location, connectivity, any relay path, availability and exact data access must be recorded and tested before accepting research documents. Earlier paid scanner proposals are not evidence of a provisioned service. Do not publish a provider-location or data-residency claim from a blueprint alone.
 
-Public intake and official decision issuance are separate activation decisions. After the relevant facts are approved, complete a controlled pilot using the intended infrastructure and an explicitly authorized cohort, then record its acceptance. Only then should the operator authorize the server intake configuration and set `VITE_PUBLIC_DEMO_BANNER=0` in a matching frontend build. Removing the evaluation notice alone does not open or authorize intake. A launch record must identify the approved scope, responsible people, deployed commit, verification receipts and activation time; unresolved items remain explicit blockers.
+Public intake and official decision issuance are separate activation decisions. After the relevant facts are approved, complete a controlled pilot using the intended infrastructure and an explicitly authorized cohort, then record its acceptance before authorizing the server intake configuration. The evaluation notice has been removed at the operator's request, and the former `VITE_PUBLIC_DEMO_BANNER` setting has no effect. This presentation change does not alter server intake controls or institutional issuance requirements. A launch record must identify the approved scope, responsible people, deployed commit, verification receipts and activation time; unresolved items remain explicit blockers.
 
 International expansion from 2027 is a roadmap. Each new jurisdiction or receiving institution needs its own authority, contractual and data-handling assessment before the offer expands; the date alone does not confer global validity.
 
-Until those decisions are recorded, retain the synthetic-data notice, the human decision boundary and the current absence of a guaranteed support response time. Do not replace the privacy notice's missing operational facts with invented entity names, contacts, retention periods, residency claims or legal assurances.
+Retain the human decision boundary and the current absence of a guaranteed support response time. Do not replace the privacy notice's missing operational facts with invented entity names, contacts, retention periods, residency claims or legal assurances.
 
 Related records: [production readiness](production-readiness.md), [marketing launch sequence](../MARKETING.md), [infrastructure activation](infrastructure-activation-2026-09-05.md) and [operations runbook](operations-runbook.md). Dated records prove only their stated scope and must be refreshed after configuration or deployment changes.

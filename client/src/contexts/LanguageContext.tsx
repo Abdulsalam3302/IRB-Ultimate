@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { EVALUATION_NOTICE } from "@shared/publicNotices";
 
 export type Language = "en" | "ar";
 
@@ -83,8 +82,6 @@ const en: Record<string, string> = {
   "platform.notice":
     "Independent software for research ethics workflows in Saudi Arabia. AI assists preparation; authorized human review determines ethics decisions.",
 
-  // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
-  "demo.banner": EVALUATION_NOTICE.en,
 
   // Open beta (always on for v1.1.0)
   "beta.banner": "Research ethics workflow platform · Saudi Arabia",
@@ -523,8 +520,6 @@ const ar: Record<string, string> = {
   "platform.notice":
     "منصة مستقلة لإدارة إجراءات أخلاقيات البحث في السعودية. يساعد الذكاء الاصطناعي في الإعداد، وتصدر القرارات الأخلاقية عن المراجعة البشرية المخولة.",
 
-  // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
-  "demo.banner": EVALUATION_NOTICE.ar,
 
   "beta.banner": "منصة لإدارة إجراءات أخلاقيات البحث · المملكة العربية السعودية",
   "beta.learnMore": "عن المنصة",

@@ -38,7 +38,7 @@ export function MfaSettings() {
     const reason = failure instanceof Error ? failure.message : "";
     return reason === "SESSION_BRIDGE_FAILED"
       ? (isAr ? "تم التحقق لدى مزود الهوية، لكن تعذر تحديث جلسة المنصة. أعد التحقق قبل استخدام صلاحيات الموظفين." : "The identity provider verified the code, but the platform session could not be updated. Verify again before using staff access.")
-      : (isAr ? "تعذر إتمام التحقق. استخدم الرمز الحالي من تطبيق المصادقة، وتأكد من ضبط ساعة جهازك، ثم حاول مجدداً. إذا استمرت المشكلة فتواصل مع المسؤول المؤسسي." : "Verification could not be completed. Use the current authenticator code, check your device clock, and retry. Contact your institutional administrator if the issue continues.");
+      : (isAr ? "تعذر إتمام التحقق. استخدم الرمز الحالي من تطبيق المصادقة، وتأكد من ضبط ساعة جهازك، ثم حاول مجدداً. إذا استمرت المشكلة فتواصل مع الدعم." : "Verification could not be completed. Use the current authenticator code, check your device clock, and retry. Contact support if the issue continues.");
   };
 
   const load = useCallback(async () => {
@@ -112,12 +112,12 @@ export function MfaSettings() {
   };
 
   return <Card className="mb-8" id="account-security">
-    <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" />{isAr ? "أمان الحساب والتحقق بخطوتين" : "Account security and two-step verification"}</CardTitle><CardDescription>{isAr ? "تتطلب صلاحيات المراجعة والإدارة جلسة موثقة بعاملين عند تفعيل الضابط المؤسسي. لا يمنح التحقق صفة المراجع أو صلاحية القرار وحده." : "Reviewer and administrator authority requires a two-factor session when the institutional control is enabled. Verification alone does not confer reviewer appointment or decision authority."}</CardDescription></CardHeader>
+    <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" />{isAr ? "تأكيد الدخول" : "Verify access"}</CardTitle><CardDescription>{isAr ? "أكمل التحقق للمتابعة إلى أدوات المراجعة والإدارة." : "Complete verification to continue to review and administration tools."}</CardDescription></CardHeader>
     <CardContent className="space-y-4">
       {verified && <p role="status" className="text-emerald-700 dark:text-emerald-400">{isAr ? "أكدت المنصة التحقق بعاملين لهذه الجلسة." : "The platform has confirmed two-factor verification for this session."}</p>}
-      {!isSupabaseAuthEnabled ? <p>{isAr ? "التحقق المؤسسي غير مضبوط في هذا النشر. تواصل مع مشغل المنصة لإعداد مزود الهوية قبل استخدام صلاحيات الموظفين. لم يتم تفعيل التحقق بخطوتين هنا." : "Institutional authentication is not configured for this deployment. Contact the operator to configure the identity provider before using staff authority. Two-step verification has not been enabled here."}</p>
+      {!isSupabaseAuthEnabled ? <p>{isAr ? "التحقق غير متاح لهذا الحساب. تواصل مع الدعم." : "Verification is unavailable for this account. Contact support."}</p>
       : state === "loading" ? <p role="status" className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{isAr ? "جارٍ التحقق من إعدادات الأمان" : "Checking security settings"}</p>
-      : state === "signin" ? <div className="space-y-3"><p>{isAr ? "سجّل الدخول بحساب الهوية المؤسسي المرتبط بهذا الحساب أولاً. تسجيل الدخول المحلي بالبريد وكلمة المرور لا يثبت التحقق بخطوتين. يجب تعيين الحساب المؤسسي للمراجعة أو الإدارة بشكل مستقل؛ لا تنتقل الصلاحيات تلقائياً." : "Sign in with the institutional identity linked to this account first. Local email/password login does not establish two-factor verification. The institutional account must be appointed separately for reviewer or administrator duties; roles do not transfer automatically."}</p><Button asChild variant="outline"><a href="/auth?next=%2Fprofile">{isAr ? "فتح تسجيل الدخول المؤسسي" : "Open institutional sign-in"}</a></Button></div>
+      : state === "signin" ? <div className="space-y-3"><p>{isAr ? "استخدم حساب تسجيل الدخول المرتبط المعيّن للمراجعة أو الإدارة. إذا لم يكن لديك حساب معيّن، فتواصل مع الدعم." : "Use the connected sign-in account assigned for review or administration. If you have not been assigned an account, contact support."}</p><Button asChild variant="outline"><a href={`/auth?method=connected&next=${encodeURIComponent(window.location.pathname)}`}>{isAr ? "متابعة تسجيل الدخول" : "Continue to sign-in"}</a></Button></div>
       : state === "error" ? <div role="alert" className="space-y-3"><p>{isAr ? "تعذر تأكيد إعدادات التحقق. لم يتم تغيير أي عامل مصادقة." : "Security settings could not be confirmed. No authentication factor was changed."}</p><Button variant="outline" onClick={() => { setState("loading"); void load(); }}>{isAr ? "إعادة المحاولة" : "Retry"}</Button></div>
       : <>
         {!enrollment && !verified && factors.length === 0 && <Button onClick={enroll} disabled={busy}>{isAr ? "إعداد تطبيق المصادقة" : "Set up an authenticator app"}</Button>}

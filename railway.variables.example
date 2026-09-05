@@ -7,7 +7,6 @@ VITE_APP_ID=irb-sa-prod
 OWNER_OPEN_ID=dev-owner-001
 PILOT_LOGIN_ENABLED=1
 PILOT_LOGIN_TOKEN=<same value as GitHub secret PILOT_LOGIN_TOKEN>
-VITE_PUBLIC_DEMO_BANNER=1
 DATABASE_URL=${{MySQL.MYSQL_URL}}
 # Entries may use * wildcards (one hostname label per *). The Vercel preview
 # pattern keeps per-deployment URLs (irb-saudi-arabia-<hash>-<team>.vercel.app)

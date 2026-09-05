@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, staffProcedure, adminProcedure, aiProcedure, ownerProcedure, isPlatformOwner, router } from "./_core/trpc";
-import { assertStaffMfa } from "./_core/staffAuth";
+import { assertStaffMfa, staffMfaRequired } from "./_core/staffAuth";
 import { inspectLlmBudget, reserveLlmCall } from "./_core/budget";
 import { ENV } from "./_core/env";
 import { sdk } from "./_core/sdk";
@@ -2377,7 +2377,7 @@ export const appRouter = router({
       return {
         ...safeUser,
         authLevel: u.authLevel ?? "aal1",
-        staffMfaRequired: ENV.isProduction && process.env.STAFF_MFA_REQUIRED !== "false",
+        staffMfaRequired: staffMfaRequired(u),
         isOwner: isPlatformOwner(u),
       };
     }),

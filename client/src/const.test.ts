@@ -33,7 +33,7 @@ describe("login destination selection", () => {
       "https://irb.example.test/api/oauth/start?next=%2Fdashboard"
     );
   });
-  it("prefers the explicit account selector when institutional auth is available", () => {
+  it("prefers the email sign-in page when connected auth is available", () => {
     configure(true, "https://legacy.example.test");
     expect(getLoginUrl()).toBe("https://irb.example.test/auth");
   });

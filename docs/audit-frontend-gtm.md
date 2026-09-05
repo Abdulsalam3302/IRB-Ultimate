@@ -37,7 +37,9 @@ The current language toggle produces Arabic and English interface content, but d
 
 `MARKETING.md` contains Saudi buyer priorities, pilot-to-launch sequence, bilingual campaign drafts, discovery/measurement plan, and a publication claims register. Domain purchase, approved pricing, real data-controller and reviewer/institution records, legal/provider/region/retention details, operational staffing and actual ad account setup remain external launch requirements.
 
-When `VITE_PUBLIC_DEMO_BANNER=1`, a bilingual global evaluation banner appears on every route, including authentication and submissions. It instructs visitors to use synthetic data only and exclude participant, patient and confidential research information. The flag is an operator-facing deployment safeguard, not proof that backend production gates are complete.
+The evaluation banner was removed from the app and generated public HTML at the operator's request on 5 September 2026. Its component, translations and build configuration were removed, so the former `VITE_PUBLIC_DEMO_BANNER` setting cannot restore it. The platform's human authority wording and server security controls remain. Earlier banner visibility receipts below describe their historical build only.
+
+The removal check built with the legacy flag still set to `1`: 35 local checks passed across all 12 generated HTML files, bundled scripts, and 10 mobile routes in both English and Arabic, with no browser exceptions or horizontal overflow. The existing discovery and client security subset passed 16 tests. This notice-specific evidence is recorded in [the removal receipt](validation/frontend-notice-removal.local.json); it does not attest later changes to authentication or the production deployment.
 
 ## Institutional authentication boundary
 

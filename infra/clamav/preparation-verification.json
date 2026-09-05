@@ -1,0 +1,73 @@
+{
+  "verifiedAt": "2026-09-05T08:06:38.690Z",
+  "scope": "Private scanner infrastructure preparation; no production change or paid provisioning",
+  "paidServiceCreated": false,
+  "productionConfigurationChanged": false,
+  "secretAccessRequired": false,
+  "plan": {
+    "id": "2c-4g",
+    "blueprintLegacyId": "pro",
+    "cpu": 2,
+    "memoryGB": 4,
+    "computeMonthlyUSD": 85,
+    "signatureDiskGB": 6,
+    "diskMonthlyUSD": 1.5,
+    "incrementalMonthlyUSD": 86.5,
+    "excludes": [
+      "tax",
+      "workspace upgrade if separately selected",
+      "usage overages",
+      "other application services"
+    ],
+    "source": "https://render.com/pricing"
+  },
+  "checks": {
+    "imageIndexDigestVerified": true,
+    "healthTests": {
+      "passed": 9,
+      "durationSeconds": 10.333
+    },
+    "existingScannerAndRouteTests": {
+      "passed": 21,
+      "files": 2,
+      "durationSeconds": 1.04
+    },
+    "shellSyntax": true,
+    "javascriptSyntax": true,
+    "dockerComposeConfig": true,
+    "renderBlueprint": {
+      "attempted": true,
+      "valid": false,
+      "errors": [
+        {
+          "path": "services[0]",
+          "error": "need_payment_info"
+        }
+      ],
+      "previousFieldErrorCorrected": "maxShutdownDelaySeconds is unsupported with disk"
+    },
+    "actualLocalRuntime": {
+      "receipt": "local-runtime-verification.json",
+      "imageBuild": true,
+      "realSignatures": true,
+      "cleanAndEicar": true,
+      "engineReload": true,
+      "staleHealthWatchdog": true,
+      "recovery": true,
+      "expandedArchiveEngineLimit": false,
+      "applicationArchivePreflight": {
+        "passed": true,
+        "fixtures": 3,
+        "engineExceptionRetained": true
+      }
+    }
+  },
+  "unverified": [
+    "Render AMD64 image build and private network connectivity",
+    "staged authenticated upload/private storage integration",
+    "production sustained-load and automatic signature-update monitoring"
+  ],
+  "dockerDaemonAvailable": true,
+  "subsequentRuntimeVerifiedAt": "2026-09-05T08:22:47.964Z",
+  "localScannerStoppedAfterTests": true
+}

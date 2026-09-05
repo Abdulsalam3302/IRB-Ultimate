@@ -59,6 +59,18 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: STORAGE_PROVIDER
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: UPLOAD_SCAN_REQUIRED
+        value: "true"
+      - key: CLAMAV_HOST
+        sync: false
+      - key: CLAMAV_PORT
+        value: "3310"
       - key: LLM_API_URL
         sync: false
       - key: LLM_API_KEY

@@ -1,0 +1,24 @@
+# Standalone Blueprint. Creating it incurs approximately USD 86.50/month.
+# Review docs/scanner-deployment.md and confirm the price before applying.
+services:
+  - type: pserv
+    name: irb-clamav
+    runtime: docker
+    plan: pro # Render 2c-4g: 2 CPU / 4 GB, USD 85/month. Legacy ID still valid.
+    region: frankfurt # Must equal the API service's actual region/workspace.
+    repo: https://github.com/Abdulsalam3302/IRB-Ultimate
+    branch: main
+    autoDeployTrigger: off
+    dockerfilePath: infra/clamav/Dockerfile
+    dockerContext: infra/clamav
+    numInstances: 1
+    # Private services support TCP health checks only: no healthCheckPath.
+    disk:
+      name: clamav-signatures
+      mountPath: /var/lib/clamav
+      sizeGB: 6
+    envVars:
+      - key: PORT
+        value: "3310"
+      - key: SIGNATURE_MAX_AGE_HOURS
+        value: "48"

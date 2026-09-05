@@ -69,12 +69,28 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: {node-version: 24, cache: pnpm}
-      - run: npm install -g vercel@52
+      - run: npm install -g vercel@55.0.0
+      - name: Check deployment credential rotation date
+        env:
+          VERCEL_TOKEN_EXPIRES_AT: ${{ vars.VERCEL_TOKEN_EXPIRES_AT }}
+        run: |
+          python3 - <<'PY'
+          import datetime, os
+          value = os.environ.get('VERCEL_TOKEN_EXPIRES_AT', '')
+          if not value:
+              raise SystemExit('Set VERCEL_TOKEN_EXPIRES_AT to the token expiration date (YYYY-MM-DD).')
+          remaining = (datetime.date.fromisoformat(value) - datetime.datetime.now(datetime.timezone.utc).date()).days
+          if remaining <= 0:
+              raise SystemExit('The deployment token has reached its rotation date. Replace VERCEL_TOKEN before deploying.')
+          if remaining <= 14:
+              print(f'::warning::Rotate the Vercel deployment token within {remaining} days.')
+          PY
       - name: Deploy verified frontend revision
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERIFIED_SHA: ${{ needs.verified-revision.outputs.sha }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
@@ -82,6 +98,7 @@ jobs:
           set -euo pipefail
           test -n "$VERCEL_TOKEN" && test -n "$VITE_PUBLIC_SITE_URL"
           vercel deploy --prod --token="$VERCEL_TOKEN" \
+            --meta "releaseSourceCommit=$VERIFIED_SHA" \
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
             --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" \
             --build-env "VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL" \

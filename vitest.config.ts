@@ -31,7 +31,8 @@ export default defineConfig({
       VITE_APP_ID: "irb-test",
       LLM_API_KEY: "", BUILT_IN_FORGE_API_KEY: "", BUILT_IN_FORGE_API_URL: "",
       SMTP_HOST: "", SENTRY_DSN: "", S3_BUCKET: "", OAUTH_SERVER_URL: "",
-      SUPABASE_URL: "", VITE_SUPABASE_URL: "",
+      SUPABASE_URL: "", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "",
+      SUPABASE_SECRET_KEY: "", SUPABASE_STORAGE_BUCKET: "", STORAGE_PROVIDER: "auto",
     },
   },
 });

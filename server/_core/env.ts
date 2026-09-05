@@ -45,6 +45,10 @@ export const ENV = {
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   ownerEmail: (process.env.OWNER_EMAIL ?? "").trim().toLowerCase(),
   supabaseUrl: (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim(),
+  storageProvider: (process.env.STORAGE_PROVIDER ?? "auto").trim().toLowerCase(),
+  supabaseStorageBucket: (process.env.SUPABASE_STORAGE_BUCKET ?? "").trim(),
+  // Server-only key. Never use a VITE_* variable for privileged Storage access.
+  supabaseSecretKey: (process.env.SUPABASE_SECRET_KEY ?? "").trim(),
   supabaseEnabled: Boolean(
     (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()
   ),

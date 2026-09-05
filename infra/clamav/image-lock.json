@@ -1,0 +1,30 @@
+{
+  "verifiedAt": "2026-09-05T07:57:12.098Z",
+  "source": "https://hub.docker.com/v2/repositories/clamav/clamav/tags/1.5.4_base-debian13-slim",
+  "registry": "https://registry-1.docker.io/v2/clamav/clamav/manifests/sha256:2bc2f9c5c1fd5120a334490d005c694430f0589d085a7aca400bbd93458fe1f0",
+  "image": "clamav/clamav:1.5.4_base-debian13-slim",
+  "tagDigest": "sha256:2bc2f9c5c1fd5120a334490d005c694430f0589d085a7aca400bbd93458fe1f0",
+  "registryDigest": "sha256:2bc2f9c5c1fd5120a334490d005c694430f0589d085a7aca400bbd93458fe1f0",
+  "calculatedDigest": "sha256:2bc2f9c5c1fd5120a334490d005c694430f0589d085a7aca400bbd93458fe1f0",
+  "digestVerified": true,
+  "platforms": [
+    {
+      "os": "linux",
+      "architecture": "amd64",
+      "digest": "sha256:5b0e2d6e1044607a3dec02f39a0c4525829ce29097b03f0a1f7df10ef120d0fa"
+    },
+    {
+      "os": "linux",
+      "architecture": "ppc64le",
+      "digest": "sha256:a6066f47b52f68c8e1409a72faa11c40961425f705582142cf3113e0d2af20a9"
+    },
+    {
+      "os": "linux",
+      "architecture": "arm64",
+      "digest": "sha256:df3b99666de79f393a65f750756f585aaaf8068d6eb9129ddaa8dda829aed93f"
+    }
+  ],
+  "dockerDaemonAvailable": true,
+  "runtimeImageExecuted": true,
+  "runtimeVerification": "local-runtime-verification.json"
+}

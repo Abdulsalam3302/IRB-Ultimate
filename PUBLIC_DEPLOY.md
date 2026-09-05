@@ -1,4 +1,4 @@
-# Render/Vercel pilot deployment — 2.2.0
+# Render/Vercel pilot deployment — 2.3.0
 
 This guide describes the checked-in configuration, not the current state of any hosting account. The Render blueprint selects a **free Frankfurt** service and disables automatic deployment. Use this topology for synthetic pilot data while institutional authority, processor/residency review, durability and capacity are being established. Free-tier capacity and availability must be checked against the provider's current terms; no uptime or load guarantee follows from this repository.
 
@@ -6,7 +6,7 @@ This guide describes the checked-in configuration, not the current state of any 
 
 Render runs the Node 24 Express process and Chromium document generation. It can serve both the frontend and API. Optional Vercel hosting serves `dist/public` and proxies `/api/*` to Render using `vercel.json`. **Both providers handle proxied API traffic**, including authenticated payloads. Include them in the data-flow and processor assessment.
 
-An external MySQL-compatible database stores application, decision, audit, session-revocation, request-limit and AI usage records. The code requires private durable storage for production uploads and a working malware scanner; the blueprint does not provision those services, staff MFA or an operating committee.
+An external MySQL-compatible database stores application, decision, audit, session-revocation, request-limit and AI usage records. The code requires private durable storage for production uploads and a working malware scanner. Follow [Supabase activation](docs/supabase-storage-activation.md) and the separate [private ClamAV deployment](docs/scanner-deployment.md); the web-service blueprint alone does not provision them, staff MFA or an operating committee.
 
 ## Build and launch settings
 

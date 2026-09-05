@@ -1,4 +1,4 @@
-# Deployment and institutional activation — 2.2.0
+# Deployment and institutional activation — 2.3.0
 
 This guide separates a synthetic pilot from operation with real research data. The repository contains engineering safeguards; the institution must establish its authority, lawful data flows, qualified staff and operating controls before inviting the public. For the current Render/Vercel configuration see [PUBLIC_DEPLOY.md](PUBLIC_DEPLOY.md).
 
@@ -18,7 +18,7 @@ For real data, provision:
 
 1. A monitored Node 24 service with enough memory for bounded Chromium rendering, maintained OS/browser dependencies, TLS, restricted ingress and a tested restart/rollback mechanism.
 2. A private verified-TLS database with capacity monitoring, encryption, separate service/migration/backup credentials where feasible, and recovery objectives. MariaDB 11 is the CI migration reference. Test the exact managed database engine before cutover.
-3. Private durable object storage. The implemented S3 driver uses AWS region and credentials, requests AES256 encryption, and returns short-lived downloads after application authorization. Configure block-public-access, IAM, versioning, retention and recovery at the bucket level. Arbitrary S3-compatible endpoints and KMS configuration are not exposed by the current driver.
+3. Private durable object storage. Select `STORAGE_PROVIDER=supabase` with a private 15 MiB bucket, a server-only modern secret key, and no direct anonymous/authenticated object policies; follow [Supabase activation](docs/supabase-storage-activation.md). The alternative S3 driver requests AES256 encryption and short-lived downloads. Configure retention, independent recovery and access policies at the provider. A private bucket flag alone does not prove that object policies deny direct access.
 4. A private ClamAV daemon with current signatures, monitoring and INSTREAM size settings sufficient for the application's 15 MiB file cap. The API limits scanning concurrency and rejects missing, malicious, malformed, timed-out or unavailable scans by default in production.
 5. Institutional Supabase authentication with MFA enrollment and a verified `aal2` session for owner/admin/reviewer access. Protect provider administrative access and recovery codes. Configure exact `OWNER_OPEN_ID`; do not rely on unverified email bootstrap.
 6. Approved model/evidence providers and optional observability/push providers, each with appropriate contracts and data handling. No SMTP email delivery is implemented; operational escalation needs a separately established monitored channel.

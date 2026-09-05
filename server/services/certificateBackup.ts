@@ -1,7 +1,7 @@
 import { safeLogError } from "../_core/safeLog";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { storagePut, UPLOADS_DIR_PATH } from "../storage";
+import { storagePut, resolveStorageProvider, UPLOADS_DIR_PATH } from "../storage";
 
 export const CERT_BACKUP_RETENTION_DAYS = 30;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -44,11 +44,11 @@ export async function backupCertificateArtifact(
   if (!base || base === "." || base === "..") throw new Error("Invalid certificate artifact key");
   await fs.writeFile(path.join(destDir, base), buf, { mode: 0o600 });
 
-  if (process.env.S3_BUCKET && process.env.AWS_ACCESS_KEY_ID) {
+  if (resolveStorageProvider() !== "local") {
     try {
       await storagePut(`certificate-backups/${day}/${base}`, buf, contentType);
     } catch (err) {
-      console.warn("[cert-backup] S3 copy failed; disk copy retained", safeLogError(err));
+      console.warn("[cert-backup] Remote copy failed; local cache retained", safeLogError(err));
     }
   }
 }

@@ -1,4 +1,4 @@
-# IRB Ultimate 2.2.0
+# IRB Ultimate 2.3.0
 
 IRB Ultimate is a bilingual Arabic/English research ethics workflow platform being prepared for a controlled Saudi Arabia pilot. It supports protocol drafting, advisory AI checks, qualified human committee review, decision records, and public verification of eligible decisions.
 
@@ -62,6 +62,8 @@ node scripts/check-bundle.mjs
 These commands are the verification procedure, not a claim that a particular commit or live deployment passed. Current evidence and pending release checks belong in [production readiness](docs/production-readiness.md). The CI workflow includes isolated migration, dependency audit, typecheck, tests, build, browser and bounded load checks. Historical scripts such as `e2e:roles` are development tools; use the current CI readiness workflow for release acceptance.
 
 ## Security and deployment
+
+Version 2.3 adds a private Supabase Storage adapter, explicit institutional email sign-in alongside existing applicant accounts, and archive expansion checks before malware scanning. [Infrastructure activation](docs/infrastructure-activation-2026-09-05.md) distinguishes completed tests and deployment credentials from remaining account/billing prerequisites. [Supabase storage acceptance](docs/supabase-storage-activation.md) and [scanner deployment](docs/scanner-deployment.md) include executable checks; configuration files are not evidence of live activation.
 
 Production controls include revocable signed sessions, shared database-backed request/AI accounting, staff MFA, origin checks, bounded expensive operations, private downloads, upload scanning, strict model output validation, and privacy-filtered external notifications. These controls require correctly configured infrastructure and operating procedures; prompt defenses are not complete data-loss prevention.
 

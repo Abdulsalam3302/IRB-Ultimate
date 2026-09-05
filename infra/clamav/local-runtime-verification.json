@@ -1,0 +1,141 @@
+{
+  "checkedAt": "2026-09-05T08:19:13.302Z",
+  "scope": "Actual local Docker Linux ARM64 engine plus application transport; no Render creation or production mutation",
+  "syntheticOnly": true,
+  "realResearchDataSent": false,
+  "paidServiceCreated": false,
+  "applicationWrites": false,
+  "docker": {
+    "version": "29.2.1",
+    "architecture": "arm64",
+    "imageId": "sha256:d25402ead6d7ce28b75f2cbb529f20728047fb4593434b454e7b36ed38d664d9",
+    "repoDigests": [
+      "irb-clamav@sha256:d25402ead6d7ce28b75f2cbb529f20728047fb4593434b454e7b36ed38d664d9"
+    ],
+    "exposedPorts": [
+      "3310/tcp"
+    ],
+    "publishedHostPorts": [],
+    "memoryLimitBytes": 4294967296,
+    "cpuLimit": 2
+  },
+  "engine": {
+    "version": "1.5.4",
+    "dailyDatabaseVersion": 28114,
+    "dailyDatabaseTime": "2026-09-05T06:23:38Z",
+    "signatureCountAfterReload": 3628050,
+    "initialStartedAt": "2026-09-05T08:12:32.497691888Z",
+    "initialReadyAt": "2026-09-05T08:12:54Z",
+    "initialDownloadAndReadySeconds": 22,
+    "initialSignatureIntegrityTestsPassed": true,
+    "freshclamRemainsRunning": true,
+    "healthCheckPassed": true
+  },
+  "checks": {
+    "providedPrivateProbe": {
+      "cleanAccepted": true,
+      "eicarRejected": true,
+      "latencyMs": 17
+    },
+    "actualApplicationTransport": {
+      "cleanAccepted": true,
+      "eicarRejected": true,
+      "latencyMs": 12
+    },
+    "pausedDaemon": {
+      "errorCode": "SERVICE_UNAVAILABLE",
+      "latencyMs": 262,
+      "recoveredAfterUnpause": true
+    },
+    "encryptedZipRejected": true,
+    "expandedZipEngineLimit": {
+      "rejected": false,
+      "compressedBytes": 16457,
+      "advertisedEntryBytes": 16777216,
+      "configuredMaxFileBytes": 15728640,
+      "observed": "Engine returned clean; application metadata preflight is required and assigned to another workstream"
+    },
+    "signatureReload": {
+      "requested": true,
+      "completed": true,
+      "durationSeconds": 5
+    },
+    "staleSignatureHealth": {
+      "method": "Actual running engine VERSION/PING with isolated health-only clock advanced72hours; signed databases and system clock were not modified",
+      "healthExitCode": 3,
+      "watchdogStoppedContainer": true,
+      "containerExitCode": 1,
+      "finishedAt": "2026-09-05T08:19:26.069742343Z",
+      "appTransportAfterStop": {
+        "errorCode": "SERVICE_UNAVAILABLE",
+        "latencyMs": 122
+      },
+      "authenticOldDatabaseUsed": false,
+      "autoRestartTemporarilyDisabledForObservation": true
+    },
+    "recovery": {
+      "method": "Recreate from the original unmodified image using the existing signature volume",
+      "healthCheckPassed": true,
+      "startedAt": "2026-09-05T08:20:13.948710754Z",
+      "readyAt": "2026-09-05T08:20:20Z",
+      "definitionRedownloadRequired": false
+    },
+    "applicationArchivePreflight": {
+      "verifiedAt": "2026-09-05T08:24:16.472Z",
+      "implementation": "server/services/uploadArchiveGuard.ts inspectUploadArchive",
+      "syntheticOnly": true,
+      "checks": [
+        {
+          "file": "normal.zip",
+          "expectedRejected": false,
+          "rejected": false,
+          "passed": true,
+          "entries": 1,
+          "advertisedBytes": 35,
+          "compressedBytes": 37
+        },
+        {
+          "file": "oversized-entry.zip",
+          "expectedRejected": true,
+          "rejected": true,
+          "errorCode": "BAD_REQUEST",
+          "reason": "Archive rejected: entry size limit. Upload an ordinary, unencrypted document within the archive limits.",
+          "passed": true
+        },
+        {
+          "file": "encrypted.zip",
+          "expectedRejected": true,
+          "rejected": true,
+          "errorCode": "BAD_REQUEST",
+          "reason": "Archive rejected: encrypted entry. Upload an ordinary, unencrypted document within the archive limits.",
+          "passed": true
+        }
+      ],
+      "passed": true
+    }
+  },
+  "resourceObservation": {
+    "cgroupPeakBytes": 2196766720,
+    "cgroupCurrentBytes": 1215868928,
+    "memoryEvents": {
+      "low": 0,
+      "high": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_kill": 0,
+      "oom_group_kill": 0
+    },
+    "scope": "Cgroup peak across startup, synthetic scans and explicit engine reload; not production throughput proof"
+  },
+  "remaining": [
+    "Render billing/private service deployment",
+    "Render API-to-scanner connectivity",
+    "staged authenticated upload/private storage path",
+    "production sustained-load and update monitoring"
+  ],
+  "localCleanup": {
+    "scannerContainerStopped": true,
+    "signatureVolumeRetainedForReuse": true,
+    "normalImageAndConfigRestoredBeforeStop": true
+  }
+}

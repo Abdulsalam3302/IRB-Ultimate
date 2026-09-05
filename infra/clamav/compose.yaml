@@ -1,0 +1,20 @@
+# Local integration fixture. No host ports are published.
+services:
+  clamav:
+    build:
+      context: .
+    image: irb-clamav:1.5.4
+    expose:
+      - "3310"
+    volumes:
+      - signatures:/var/lib/clamav
+    tmpfs:
+      - /run/clamav:rw,noexec,nosuid,size=256m
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+volumes:
+  signatures:

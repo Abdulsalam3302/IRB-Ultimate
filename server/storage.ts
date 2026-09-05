@@ -1,7 +1,6 @@
-// Storage helpers — three drivers, picked at runtime in this order:
-//   1. Forge proxy (BUILT_IN_FORGE_API_URL + BUILT_IN_FORGE_API_KEY)
-//   2. AWS S3 (AWS_REGION + S3_BUCKET + AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
-//   3. Local disk in development or explicitly configured durable private volume.
+// Storage helpers — STORAGE_PROVIDER selects an explicit backend, or auto
+// prefers configured Supabase Storage, then Forge, S3 and development disk.
+// A selected remote provider never downgrades to disk on failure.
 //
 // The local fallback means the platform works out-of-the-box without any
 // cloud credentials — useful for local dev and small private deploys.
@@ -29,6 +28,33 @@ function hasS3Credentials(): boolean {
     process.env.AWS_ACCESS_KEY_ID &&
     process.env.AWS_SECRET_ACCESS_KEY
   );
+}
+
+export type StorageProvider = "supabase" | "forge" | "s3" | "local";
+
+export function resolveStorageProvider(): StorageProvider {
+  const provider = ENV.storageProvider || "auto";
+  if (provider !== "auto" && !["supabase", "forge", "s3", "local"].includes(provider)) {
+    throw new Error("Invalid storage provider configuration");
+  }
+  if (provider === "supabase" || (provider === "auto" && (ENV.supabaseStorageBucket || ENV.supabaseSecretKey))) {
+    if (!ENV.supabaseUrl || !ENV.supabaseStorageBucket || !ENV.supabaseSecretKey) {
+      throw new Error("Supabase private storage configuration is incomplete");
+    }
+    return "supabase";
+  }
+  if (provider === "forge" || (provider === "auto" && hasForgeCredentials())) {
+    if (!hasForgeCredentials()) throw new Error("Forge storage configuration is incomplete");
+    return "forge";
+  }
+  if (provider === "s3" || (provider === "auto" && hasS3Credentials())) {
+    if (!hasS3Credentials()) throw new Error("S3 storage configuration is incomplete");
+    return "s3";
+  }
+  if (ENV.isProduction && process.env.ALLOW_LOCAL_STORAGE !== "true") {
+    throw new Error("Private durable storage is not configured");
+  }
+  return "local";
 }
 
 function getForgeConfig(): StorageConfig {
@@ -178,13 +204,15 @@ export async function storagePut(
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
   normalizeStorageKey(relKey);
-  if (hasForgeCredentials()) return forgePut(relKey, data, contentType);
-  if (hasS3Credentials()) {
+  const provider = resolveStorageProvider();
+  if (provider === "supabase") {
+    const { supabasePut } = await import("./storage.supabase");
+    return supabasePut(relKey, data, contentType);
+  }
+  if (provider === "forge") return forgePut(relKey, data, contentType);
+  if (provider === "s3") {
     const { s3Put } = await import("./storage.s3");
     return s3Put(relKey, data, contentType);
-  }
-  if (ENV.isProduction && process.env.ALLOW_LOCAL_STORAGE !== "true") {
-    throw new Error("Private durable storage is not configured");
   }
   return localPut(relKey, data, contentType);
 }
@@ -194,13 +222,15 @@ export async function storageGet(
   expiresInSec?: number
 ): Promise<{ key: string; url: string }> {
   normalizeStorageKey(relKey);
-  if (hasForgeCredentials()) return forgeGet(relKey);
-  if (hasS3Credentials()) {
+  const provider = resolveStorageProvider();
+  if (provider === "supabase") {
+    const { supabaseGetUrl } = await import("./storage.supabase");
+    return supabaseGetUrl(relKey, expiresInSec);
+  }
+  if (provider === "forge") return forgeGet(relKey);
+  if (provider === "s3") {
     const { s3GetUrl } = await import("./storage.s3");
     return s3GetUrl(relKey, expiresInSec);
-  }
-  if (ENV.isProduction && process.env.ALLOW_LOCAL_STORAGE !== "true") {
-    throw new Error("Private durable storage is not configured");
   }
   return localGet(relKey);
 }

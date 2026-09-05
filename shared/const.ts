@@ -9,7 +9,7 @@ export const OAUTH_STATE_COOKIE_DEV = "oauth_state";
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 /** Legacy alias — prefer SESSION_TTL_MS for new auth paths. */
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
-export const APP_VERSION = "2.2.0";
+export const APP_VERSION = "2.3.0";
 /** Session lifetime (revocable JWT). Server-side revocation also applies before expiry. */
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 /** Short-lived public certificate download URLs (S3/Forge). */

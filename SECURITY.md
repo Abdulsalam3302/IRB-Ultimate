@@ -1,4 +1,4 @@
-# Security policy — 2.2.0
+# Security policy — 2.3.0
 
 IRB Ultimate is under active hardening for a controlled pilot. This policy describes the current source and operating requirements; it is not a penetration-test certificate, regulatory approval, service-level commitment, or proof of live configuration.
 
@@ -10,7 +10,7 @@ Provide the affected version, route/role, expected and observed behavior, a mini
 
 ## Supported security baseline
 
-The active baseline is version 2.2.0 on Node 24 with its checked-in lockfile. Older deployments and legacy approved rows require review. A `main` branch name alone does not prove that a host runs the latest release.
+The active baseline is version 2.3.0 on Node 24 with its checked-in lockfile. Older deployments and legacy approved rows require review. A `main` branch name alone does not prove that a host runs the latest release.
 
 | Boundary                 | Implemented control and practical limit                                                                                                                                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -21,6 +21,7 @@ import { chatApplicationTurn } from "./services/chatApplication.service";
 import { IRB_REQUIREMENTS } from "./services/irb.validation";
 import { storagePut } from "./storage";
 import { scanUploadedFile } from "./services/uploadScanner";
+import { assertUploadArchiveSafe } from "./services/uploadArchiveGuard";
 import * as emailService from "./emailService";
 import { searchLiterature } from "./literature";
 import {
@@ -1053,6 +1054,9 @@ const applicationRouter = router({
           message: "File content does not match the declared file type. Please upload the original, unmodified file.",
         });
       }
+
+      // ZIP container expansion and structural limits are enforced before scanner work.
+      assertUploadArchiveSafe(buffer, contentType);
 
       // Request cancellation stops a queued/active scan. No bytes enter storage
       // until the configured daemon has returned a complete clean verdict.

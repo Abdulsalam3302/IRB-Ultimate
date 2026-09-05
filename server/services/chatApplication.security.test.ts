@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("../db", () => ({ getApplicationById: vi.fn(), getChatApplicationMessages: vi.fn(), insertChatApplicationMessage: vi.fn(), updateEditableApplication: vi.fn(), addAuditLog: vi.fn() }));
+vi.mock("../db", () => ({ getApplicationById: vi.fn(), getChatApplicationMessages: vi.fn(), beginChatApplicationTurn: vi.fn(async () => 100), completeChatApplicationTurn: vi.fn(), updateEditableApplication: vi.fn(), addAuditLog: vi.fn() }));
 vi.mock("../_core/llm", () => ({ invokeLLM: vi.fn(), safeJsonParse: JSON.parse }));
+vi.mock("../_core/budget", () => ({ reserveLlmCall: vi.fn(async () => ({ ok: true, userRemaining: 39, globalRemaining: 499 })) }));
+vi.mock("../_core/requestLimits", () => ({ consumeRateLimit: vi.fn(async () => ({ allowed: true, retryAfter: 60 })) }));
 import * as db from "../db";
 import { invokeLLM } from "../_core/llm";
 import { chatApplicationTurn, normalizeChatMessages } from "./chatApplication.service";

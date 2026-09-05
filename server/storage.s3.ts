@@ -2,10 +2,10 @@
 // AWS_REGION and S3_BUCKET (and credentials) are configured — keeps the
 // AWS SDK off the hot startup path for local dev.
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, GetBucketVersioningCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomBytes } from "node:crypto";
-import { normalizeStorageKey } from "./storage";
+import { normalizeStorageKey, StorageDeletionBlockedError } from "./storage";
 
 let _client: S3Client | null = null;
 
@@ -47,6 +47,7 @@ export async function s3Put(
     new PutObjectCommand({
       Bucket: bucket(),
       Key: key,
+      IfNoneMatch: "*",
       Body: body,
       ContentType: contentType,
       ServerSideEncryption: "AES256",
@@ -57,7 +58,8 @@ export async function s3Put(
         ? "inline"
         : "attachment",
       Metadata: { "x-content-type-options": "nosniff" },
-    })
+    }),
+    { abortSignal: AbortSignal.timeout(30_000) }
   );
   // 7-day signed URL — long enough for an applicant to download a
   // certificate they were emailed yesterday, short enough that a leaked
@@ -81,4 +83,21 @@ export async function s3GetUrl(
     { expiresIn: Math.max(60, Math.min(expiresInSec, 900)) }
   );
   return { key, url };
+}
+
+export async function s3Delete(relKey: string): Promise<void> {
+  const key = normalizeStorageKey(relKey);
+  const signal = AbortSignal.timeout(30_000);
+  const versioning = await client().send(new GetBucketVersioningCommand({ Bucket: bucket() }), { abortSignal: signal });
+  // A delete marker would leave historical bytes. Versioned retention requires
+  // an explicit operator policy and must not be reported as physical erasure.
+  if (versioning.Status) throw new StorageDeletionBlockedError("unsupported_provider");
+  await client().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }), { abortSignal: signal });
+  try {
+    await client().send(new HeadObjectCommand({ Bucket: bucket(), Key: key }), { abortSignal: signal });
+  } catch (error) {
+    if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return;
+    throw error;
+  }
+  throw new Error("Storage deletion cannot be verified");
 }

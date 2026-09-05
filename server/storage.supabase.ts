@@ -168,3 +168,23 @@ export async function supabaseGetUrl(relKey: string, expiresInSec = 300): Promis
   const key = normalizeStorageKey(relKey);
   return operation(async (config, signal) => ({ key, url: await signedDownload(config, key, signal, expiresInSec) }));
 }
+
+/** Delete through Storage API, then confirm exact absence using a server-only list. */
+export async function supabaseDelete(relKey: string): Promise<void> {
+  const key = normalizeStorageKey(relKey);
+  return operation(async (config, signal) => {
+    const headers = { apikey: config.secretKey, "Content-Type": "application/json", Accept: "application/json" };
+    const removed = await fetch(`${config.baseUrl}/object/${config.bucket}`, { method: "DELETE", headers, body: JSON.stringify({ prefixes: [key] }), signal, redirect: "error" });
+    if (!removed.ok) { await removed.body?.cancel(); throw new Error("Private deletion failed"); }
+    const result: unknown = JSON.parse(await readBoundedText(removed, MAX_RESPONSE_BYTES));
+    if (!Array.isArray(result)) throw new Error("Invalid private deletion receipt");
+    const prefix = key.slice(0, key.lastIndexOf("/"));
+    const name = key.slice(key.lastIndexOf("/") + 1);
+    const check = await fetch(`${config.baseUrl}/object/list/${config.bucket}`, { method: "POST", headers, body: JSON.stringify({ prefix: key.includes("/") ? prefix : "", search: name, limit: 2, offset: 0, sortBy: { column: "name", order: "asc" } }), signal, redirect: "error" });
+    if (!check.ok) { await check.body?.cancel(); throw new Error("Private deletion cannot be verified"); }
+    const matches: unknown = JSON.parse(await readBoundedText(check, MAX_RESPONSE_BYTES));
+    // Exact filenames are unique. Any search result is conservative uncertainty,
+    // avoiding paginated/truncated absence claims or misleading provider errors.
+    if (!Array.isArray(matches) || matches.length !== 0) throw new Error("Private deletion cannot be verified");
+  });
+}

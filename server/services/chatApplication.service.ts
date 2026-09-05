@@ -1,7 +1,8 @@
-import { safeLogError } from "../_core/safeLog";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { invokeLLM } from "../_core/llm";
+import { reserveLlmCall } from "../_core/budget";
+import { consumeRateLimit } from "../_core/requestLimits";
 import { fenceUserData } from "../aiReview";
 import { listMissingRequirements } from "./irb.validation";
 import type { InsertApplication } from "../../drizzle/schema";
@@ -9,6 +10,7 @@ import type { InsertApplication } from "../../drizzle/schema";
 export const CHAT_MAX_MESSAGES = 16;
 export const CHAT_MAX_CONTENT = 4000;
 export const CHAT_MAX_TOTAL_CHARS = 24_000;
+export const CHAT_DAILY_TURN_LIMIT = 100;
 
 const CHAT_SYSTEM_PROMPT = `You are the AI drafting assistant for IRB Saudi Arabia, a research ethics workflow platform.
 Help an applicant prepare an accurate draft for qualified human committee review. You cannot approve research, issue credentials, certify compliance, or confirm an unverified institutional license or affiliation.
@@ -176,23 +178,12 @@ function extractUpdates(content: string): Record<string, string> {
 }
 
 async function persistTurn(input: {
+  assistantMessageId: number;
   applicationId: number;
   userId: number;
-  role: "user" | "assistant";
   content: string;
-  lang: "ar" | "en";
 }) {
-  try {
-    await db.insertChatApplicationMessage({
-      applicationId: input.applicationId,
-      userId: input.userId,
-      role: input.role,
-      content: redactSecrets(input.content),
-      lang: input.lang,
-    });
-  } catch (err) {
-    console.warn("[chat] persist failed", safeLogError(err));
-  }
+  await db.completeChatApplicationTurn({ ...input, content: redactSecrets(input.content) });
 }
 
 export async function chatApplicationTurn(input: {
@@ -209,6 +200,16 @@ export async function chatApplicationTurn(input: {
 
   const lastUser = normalizeChatMessages(input.messages).filter(m => m.role === "user").at(-1);
   if (!lastUser) throw new TRPCError({ code: "BAD_REQUEST", message: "A non-empty applicant message is required." });
+  // Count every authorized turn, including free deterministic replies, before
+  // storing history or reserving paid AI. Counters are shared across replicas.
+  const turnLimit = await consumeRateLimit("chat-turn-day", String(input.userId), CHAT_DAILY_TURN_LIMIT, 24 * 60 * 60_000);
+  if (!turnLimit.allowed) {
+    throw new TRPCError({
+      code: turnLimit.unavailable ? "SERVICE_UNAVAILABLE" : "TOO_MANY_REQUESTS",
+      message: turnLimit.unavailable ? "Chat usage accounting is temporarily unavailable. Please try again later."
+        : `Daily chat turn limit reached. Try again in ${turnLimit.retryAfter} seconds or continue editing your application manually.`,
+    });
+  }
   // Client-supplied assistant turns are forgeable. Use only server-owned history.
   const history = await db.getChatApplicationMessages(input.applicationId, input.userId);
   const messages = normalizeChatMessages([
@@ -219,24 +220,18 @@ export async function chatApplicationTurn(input: {
   const lang = detectChatLang(lastText, input.langHint);
   const risk = classifyChatRisk(lastText);
 
-  if (lastUser) {
-    await persistTurn({
-      applicationId: input.applicationId,
-      userId: input.userId,
-      role: "user",
-      content: lastUser.content,
-      lang,
-    });
-  }
+  const assistantMessageId = await db.beginChatApplicationTurn({
+    applicationId: input.applicationId, userId: input.userId,
+    content: redactSecrets(lastUser.content), lang,
+  });
 
   if (risk !== "none") {
     const reply = jailbreakRefusal(lang);
     await persistTurn({
+      assistantMessageId,
       applicationId: input.applicationId,
       userId: input.userId,
-      role: "assistant",
       content: reply,
-      lang,
     });
     const refreshed = await db.getApplicationById(input.applicationId);
     return {
@@ -249,11 +244,10 @@ export async function chatApplicationTurn(input: {
   if (isCredibilityQuestion(lastText)) {
     const reply = credibilityReply(lang);
     await persistTurn({
+      assistantMessageId,
       applicationId: input.applicationId,
       userId: input.userId,
-      role: "assistant",
       content: reply,
-      lang,
     });
     const refreshed = await db.getApplicationById(input.applicationId);
     return {
@@ -273,6 +267,19 @@ export async function chatApplicationTurn(input: {
     lang === "ar"
       ? "مرحباً! أنا مساعد إعداد طلبات أخلاقيات البحث. لنكمل طلبك خطوة بخطوة. ما عنوان دراستك البحثية؟"
       : "Hello. I am your IRB application drafting assistant. Let's complete your submission step by step. What is the title of your research study?";
+
+  // All tRPC, REST and MCP chat aliases enter this service. Reserve only for
+  // an authorized turn that actually needs the model; deterministic safety
+  // replies are free. Keep accounting errors outside the provider catch.
+  const budget = await reserveLlmCall(input.userId);
+  if (!budget.ok) {
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: budget.reason === "user"
+        ? `Daily AI call limit reached. Resets at ${budget.resetAt}.`
+        : `Platform AI call limit reached. Resets at ${budget.resetAt}.`,
+    });
+  }
 
   try {
     const result = await invokeLLM({
@@ -336,13 +343,14 @@ export async function chatApplicationTurn(input: {
     });
   }
 
-  const cleanReply = reply.replace(/```json[\s\S]*?```/g, "").trim();
+  const cleanReply = reply.replace(/```json[\s\S]*?```/g, "").trim() || (lang === "ar"
+    ? "يرجى مراجعة مسودة طلبك وتقديم أي معلومات ناقصة."
+    : "Please review your application draft and provide any missing information.");
   await persistTurn({
+    assistantMessageId,
     applicationId: input.applicationId,
     userId: input.userId,
-    role: "assistant",
     content: cleanReply,
-    lang,
   });
 
   const refreshed = await db.getApplicationById(input.applicationId);

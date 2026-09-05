@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
+import { signOutSupabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { useT } from "@/contexts/LanguageContext";
@@ -29,6 +31,8 @@ export default function Profile() {
   const { lang } = useT();
   const isAr = lang === "ar";
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [erasureReceipt, setErasureReceipt] = useState<{ deletedDraftApplications: number; retainedRegulatoryApplications: number; queuedStorageDeletions: number; blockedStorageDeletions: number; queuedIdentityDeletions: number; blockedIdentityDeletions: number } | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: applications, isLoading: appsLoading } = trpc.application.myApplications.useQuery(
     undefined,
@@ -56,11 +60,14 @@ export default function Profile() {
   };
 
   const deleteMyAccount = trpc.auth.deleteMyAccount.useMutation({
-    onSuccess: () => {
-      toast.success(isAr ? "تم حذف حسابك." : "Your account has been deleted.");
-      window.location.href = "/";
+    onSuccess: async (result) => {
+      setErasureReceipt(result);
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      utils.auth.me.setData(undefined, null);
+      await signOutSupabase();
     },
-    onError: (e) => toast.error(e.message),
+    onError: () => toast.error(isAr ? "تعذّر إغلاق الحساب. يرجى المحاولة لاحقًا أو التواصل مع الدعم." : "Account closure could not be completed. Please retry later or contact support."),
   });
 
   // Hooks MUST run unconditionally on every render — otherwise the
@@ -82,6 +89,21 @@ export default function Profile() {
     };
     return { apps, approvedApps, pendingApps, rejectedApps, stats };
   }, [applications]);
+
+  if (erasureReceipt) {
+    return <main className="min-h-screen flex items-center justify-center p-4" dir={isAr ? "rtl" : "ltr"}>
+      <Card className="max-w-xl w-full" role="status" aria-live="polite">
+        <CardHeader><CardTitle>{isAr ? "أُغلق حسابك" : "Your account has been closed"}</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p>{isAr ? "أُلغي الوصول إلى الحساب، وأُزيلت بيانات هويتك من سجل الحساب في المنصة." : "Account access has been revoked and identifying details have been removed from the platform account record."}</p>
+          <p>{isAr ? `المسودات المحذوفة: ${erasureReceipt.deletedDraftApplications}. السجلات البحثية المحتفظ بها: ${erasureReceipt.retainedRegulatoryApplications}.` : `Drafts removed: ${erasureReceipt.deletedDraftApplications}. Research records retained: ${erasureReceipt.retainedRegulatoryApplications}.`}</p>
+          {(erasureReceipt.queuedStorageDeletions > 0 || erasureReceipt.blockedStorageDeletions > 0) && <p>{isAr ? "حذف الملفات الخاصة لم يكتمل بعد. سُجّل طلب الحذف للمعالجة، وقد تتطلب بعض الملفات مراجعة المشغّل. إغلاق الحساب لا يعني اكتمال حذف كل الملفات." : "Private file deletion is still pending. The deletion request has been recorded for processing; some files may require operator review. Account closure does not mean that every file has already been deleted."}</p>}
+          {(erasureReceipt.queuedIdentityDeletions > 0 || erasureReceipt.blockedIdentityDeletions > 0) && <p>{isAr ? "حُظر تسجيل الدخول مجددًا بهذه الهوية. لا يزال حذف هوية تسجيل الدخول لدى المزوّد قيد المعالجة، وقد يتطلب مراجعة المشغّل." : "This identity is blocked from signing in again. Removal of the sign-in identity at the provider is still pending and may require operator review."}</p>}
+          <Button disabled={deleteMyAccount.isPending} onClick={() => { window.location.href = "/"; }}>{deleteMyAccount.isPending ? (isAr ? "جارٍ مسح جلسة المتصفح…" : "Clearing browser session…") : (isAr ? "العودة إلى الرئيسية" : "Return to homepage")}</Button>
+        </CardContent>
+      </Card>
+    </main>;
+  }
 
   if (loading) {
     return (

@@ -9,9 +9,12 @@ const mocks = vi.hoisted(() => ({
   storage: vi.fn(),
   metadata: vi.fn(),
   audit: vi.fn(),
+  reserve: vi.fn(),
+  cleanup: vi.fn(),
 }));
 vi.mock("./services/uploadScanner", () => ({ scanUploadedFile: mocks.scan }));
-vi.mock("./storage", () => ({ storagePut: mocks.storage }));
+vi.mock("./storage", () => ({ storagePut: mocks.storage, assertStorageBinding: vi.fn() }));
+vi.mock("./services/storageDeletion", () => ({ reserveStorageUpload: mocks.reserve, expediteStorageCleanup: mocks.cleanup }));
 vi.mock("./db", () => ({
   getUserUploadUsage: vi.fn(async () => ({ count: 0, bytes: 0 })),
   addFileUpload: mocks.metadata,
@@ -40,10 +43,9 @@ const input = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.storage.mockResolvedValue({
-    key: "123/synthetic.pdf",
-    url: "/uploads/123/synthetic.pdf",
-  });
+  mocks.storage.mockImplementation(async key => ({ key, url: `/uploads/${key}` }));
+  mocks.reserve.mockResolvedValue({ id: 77, binding: { storageProvider: "local", storageOrigin: "/isolated/test/uploads", storageBucket: "" } });
+  mocks.cleanup.mockResolvedValue(undefined);
   mocks.metadata.mockResolvedValue(999);
 });
 
@@ -68,9 +70,9 @@ describe("upload scan occurs before persistence", () => {
       order.push("scan");
       return { status: "clean", scanner: "clamav" };
     });
-    mocks.storage.mockImplementation(async () => {
+    mocks.storage.mockImplementation(async key => {
       order.push("storage");
-      return { key: "123/synthetic.pdf" };
+      return { key };
     });
     const result = await appRouter
       .createCaller(context())
@@ -86,6 +88,30 @@ describe("upload scan occurs before persistence", () => {
         details: expect.stringContaining("malware scan clean"),
       })
     );
+  });
+
+  it("cannot write bytes when durable reservation fails", async () => {
+    mocks.scan.mockResolvedValue({ status: "clean", scanner: "clamav" });
+    mocks.reserve.mockRejectedValue(new TRPCError({ code: "SERVICE_UNAVAILABLE" }));
+    await expect(appRouter.createCaller(context()).application.uploadFile(input)).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(mocks.storage).not.toHaveBeenCalled();
+    expect(mocks.metadata).not.toHaveBeenCalled();
+  });
+
+  it.each(["storage", "metadata"] as const)("expedites the durable cleanup job after %s failure", async failure => {
+    mocks.scan.mockResolvedValue({ status: "clean", scanner: "clamav" });
+    mocks[failure].mockRejectedValue(new Error("Synthetic persistence failure"));
+    await expect(appRouter.createCaller(context()).application.uploadFile(input)).rejects.toThrow("Synthetic persistence failure");
+    expect(mocks.cleanup).toHaveBeenCalledWith(77, failure === "metadata");
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it("does not erase a committed object when later audit logging fails", async () => {
+    mocks.scan.mockResolvedValue({ status: "clean", scanner: "clamav" });
+    mocks.audit.mockRejectedValue(new Error("Synthetic audit failure"));
+    await expect(appRouter.createCaller(context()).application.uploadFile(input)).rejects.toThrow("Synthetic audit failure");
+    expect(mocks.cleanup).not.toHaveBeenCalled();
+    expect(mocks.metadata).toHaveBeenCalledWith(expect.objectContaining({ storageProvider: "local" }), 77);
   });
 
   it("cancels an active scan when the requesting connection closes", async () => {

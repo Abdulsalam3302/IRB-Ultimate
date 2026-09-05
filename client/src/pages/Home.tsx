@@ -1,4 +1,4 @@
-import { PLATFORM_FAQS } from "@shared/seo";
+import { PLATFORM_FAQS } from "@shared/platformFaqs";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";

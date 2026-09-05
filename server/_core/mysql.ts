@@ -11,7 +11,7 @@ export function resolveMysqlSsl(databaseUrl: string): mysql.ConnectionOptions["s
   if (local && insecure && process.env.ALLOW_LOCAL_TEST_DB === "1") return undefined;
   if (ENV.isProduction && insecure) throw new Error("Production database transport must use verified TLS");
   if (ENV.isProduction || parsed.searchParams.has("ssl") || /(?:tidbcloud|tidbapi|psdb|planetscale|aivencloud|amazonaws|rlwy)\./i.test(parsed.hostname)) {
-    return { rejectUnauthorized: true };
+    return { rejectUnauthorized: true, verifyIdentity: true };
   }
   return undefined;
 }

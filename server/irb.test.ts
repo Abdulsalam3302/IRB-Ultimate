@@ -1,14 +1,38 @@
-import { describe, expect, it, vi } from "vitest";
-// Raise the open-draft cap before importing the router so accumulated drafts
-// in the persistent local test DB don't trip the production default (25).
-process.env.MAX_OPEN_DRAFTS_PER_USER = "100000";
+import { randomUUID } from "node:crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
+import { getDb } from "./db";
+import { applications, auditLog, researchAuthors, users } from "../drizzle/schema";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
 // ─── Test Helpers ──────────────────────────────────────────────────────────
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
+
+const fixtureUserIds: number[] = [];
+async function createPersistedUserContext(): Promise<TrpcContext> {
+  const db = await getDb();
+  if (!db) throw new Error("This fixture requires the isolated test database");
+  const openId = `irb-test:${randomUUID()}`;
+  const [result] = await db.insert(users).values({ openId, loginMethod: "email", name: "Synthetic IRB fixture" });
+  fixtureUserIds.push(result.insertId);
+  const [user] = await db.select().from(users).where(eq(users.id, result.insertId));
+  return createUserContext(user);
+}
+afterEach(async () => {
+  if (!fixtureUserIds.length) return;
+  const db = (await getDb())!;
+  const ownedApps = await db.select({ id: applications.id }).from(applications).where(inArray(applications.applicantId, fixtureUserIds));
+  if (ownedApps.length) {
+    await db.delete(researchAuthors).where(inArray(researchAuthors.applicationId, ownedApps.map(app => app.id)));
+  }
+  await db.delete(auditLog).where(inArray(auditLog.userId, fixtureUserIds));
+  await db.delete(applications).where(inArray(applications.applicantId, fixtureUserIds));
+  await db.delete(users).where(inArray(users.id, fixtureUserIds));
+  fixtureUserIds.length = 0;
+});
 
 function createUserContext(overrides: Partial<AuthenticatedUser> = {}): TrpcContext {
   const user: AuthenticatedUser = {
@@ -99,7 +123,7 @@ describe("application.myApplications", () => {
 
 describe("application.saveStage1 input validation", () => {
   it("accepts any length research title (no min length)", async () => {
-    const ctx = createUserContext();
+    const ctx = await createPersistedUserContext();
     const caller = appRouter.createCaller(ctx);
     // Create a draft first so this test is independent of pre-existing
     // DB fixtures (Phase 5 reset wiped applications). The test still
@@ -139,7 +163,7 @@ describe("application.saveStage1 input validation", () => {
 
 describe("application.saveStage2 input validation", () => {
   it("accepts short methodology (char limits removed)", async () => {
-    const ctx = createUserContext();
+    const ctx = await createPersistedUserContext();
     const caller = appRouter.createCaller(ctx);
     // Own the draft: a shared numeric fixture can be locked by another suite.
     const created = await caller.application.create();
@@ -320,7 +344,7 @@ describe("authors.add", () => {
   });
 
   it("accepts short name (no min length)", async () => {
-    const ctx = createUserContext();
+    const ctx = await createPersistedUserContext();
     const caller = appRouter.createCaller(ctx);
     // Self-contained fixture (Phase 5 reset wiped seed data).
     const created = await caller.application.create();

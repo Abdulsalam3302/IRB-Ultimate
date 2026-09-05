@@ -54,6 +54,13 @@ afterEach(async () => {
 });
 
 describe("ClamAV INSTREAM transport", () => {
+  it("keeps an early complete FOUND terminal before a backpressured upload finishes", async () => {
+    const server = createServer(socket => { clients.add(socket); socket.on("error", () => {}); socket.once("close", () => clients.delete(socket)); socket.end("stream: Synthetic.Early FOUND\0"); });
+    servers.push(server);
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const options = { host: "127.0.0.1", port: (server.address() as { port: number }).port };
+    await expect(scanWithClamAv(Buffer.alloc(MAX_SCANNED_UPLOAD_BYTES, "synthetic"), options)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
   it("streams exact synthetic bytes in bounded frames and accepts a split complete OK response", async () => {
     const content = Buffer.alloc(140_000, "synthetic-document");
     let received: Received | undefined;

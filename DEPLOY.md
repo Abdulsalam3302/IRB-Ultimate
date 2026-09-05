@@ -1,4 +1,4 @@
-# Deployment and institutional activation — 2.3.0
+# Deployment and institutional activation — 2.4.0
 
 This guide separates a synthetic pilot from operation with real research data. The repository contains engineering safeguards; the institution must establish its authority, lawful data flows, qualified staff and operating controls before inviting the public. For the current Render/Vercel configuration see [PUBLIC_DEPLOY.md](PUBLIC_DEPLOY.md).
 

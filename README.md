@@ -1,4 +1,4 @@
-# IRB Ultimate 2.3.0
+# IRB Ultimate 2.4.0
 
 IRB Ultimate is a bilingual Arabic/English research ethics workflow platform being prepared for a controlled Saudi Arabia pilot. It supports protocol drafting, advisory AI checks, qualified human committee review, decision records, and public verification of eligible decisions.
 
@@ -63,7 +63,7 @@ These commands are the verification procedure, not a claim that a particular com
 
 ## Security and deployment
 
-Version 2.3 adds a private Supabase Storage adapter, explicit institutional email sign-in alongside existing applicant accounts, and archive expansion checks before malware scanning. [Infrastructure activation](docs/infrastructure-activation-2026-09-05.md) distinguishes completed tests and deployment credentials from remaining account/billing prerequisites. [Supabase storage acceptance](docs/supabase-storage-activation.md) and [scanner deployment](docs/scanner-deployment.md) include executable checks; configuration files are not evidence of live activation.
+Version 2.4 activates private Supabase storage and adds free, privately operated ClamAV workers with bounded failover, durable upload accounting and deletion work, and tighter chat/model limits. It also improves bilingual support, static public notices, and initial loading. See the [2.4 release record](docs/release-2.4-readiness.md), [private storage checks](docs/supabase-storage-activation.md), [free scanner deployment](docs/scanner-deployment.md), and [operator facts required for launch](docs/public-launch-operator-facts.md). Earlier infrastructure records are historical; configuration files alone do not prove live operation.
 
 Production controls include revocable signed sessions, shared database-backed request/AI accounting, staff MFA, origin checks, bounded expensive operations, private downloads, upload scanning, strict model output validation, and privacy-filtered external notifications. These controls require correctly configured infrastructure and operating procedures; prompt defenses are not complete data-loss prevention.
 

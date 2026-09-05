@@ -109,6 +109,14 @@ class HealthTests(unittest.TestCase):
         self.assertIn("type: pserv", blueprint)
         self.assertNotIn("\n    healthCheckPath:", blueprint)
 
+    def test_free_profile_preserves_all_security_limits(self):
+        def settings(name):
+            return dict(line.split(maxsplit=1) for line in (HERE / name).read_text().splitlines() if line and not line.startswith("#"))
+        expected = settings("clamd.conf")
+        expected.update(MaxThreads="1", ConcurrentDatabaseReload="no")
+        self.assertEqual(settings("clamd-free.conf"), expected)
+        self.assertNotIn("ports:", (HERE / "compose.free.yaml").read_text())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

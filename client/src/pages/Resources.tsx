@@ -1,4 +1,4 @@
-import { PLATFORM_FAQS } from "@shared/seo";
+import { PLATFORM_FAQS } from "@shared/platformFaqs";
 import { Separator } from "@/components/ui/separator";
 import { Navbar } from "@/components/Navbar";
 import { ResourceTemplateCard } from "@/components/design/ResourceTemplateCard";

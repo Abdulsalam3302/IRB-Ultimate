@@ -73,6 +73,14 @@ async function rateLimit(req: Request, res: Response, next: NextFunction) {
   const scope = rateScope(req.path);
   const limit = scope === "auth" ? AUTH_RATE_LIMIT : scope === "strict" ? STRICT_RATE_LIMIT : RATE_LIMIT;
   try {
+    // Reject an exhausted caller before charging shared capacity. Otherwise one
+    // already-blocked IP can repeatedly drain the global allowance for everyone.
+    const result = await consumeRateLimit(`api-${scope}`, clientIpKey(req), limit, RATE_WINDOW_MS);
+    if (!result.allowed) {
+      res.setHeader("Retry-After", result.retryAfter);
+      res.status(result.unavailable ? 503 : 429).json({ error: result.unavailable ? "Service temporarily unavailable" : "Too many requests" });
+      return;
+    }
     if (scope === "auth" || scope === "strict") {
       const global = await consumeRateLimit(`api-global-${scope}`, "all", scope === "auth" ? 120 : 300, RATE_WINDOW_MS);
       if (!global.allowed) {
@@ -81,14 +89,76 @@ async function rateLimit(req: Request, res: Response, next: NextFunction) {
         return;
       }
     }
-    const result = await consumeRateLimit(`api-${scope}`, clientIpKey(req), limit, RATE_WINDOW_MS);
-    if (!result.allowed) {
-      res.setHeader("Retry-After", result.retryAfter);
-      res.status(result.unavailable ? 503 : 429).json({ error: result.unavailable ? "Service temporarily unavailable" : "Too many requests" });
-      return;
-    }
     next();
   } catch (err) { next(err); }
+}
+
+export const UPLOAD_BODY_TIMEOUT_MS = 30_000;
+const MAX_UPLOAD_JSON_BYTES = 21 * 1024 * 1024;
+
+/** Authenticate before admitting/reading a large upload body. The final tRPC
+ * route still checks the current session, ownership, edit state and staff MFA.
+ * Admission is per account as well as per process; anonymous slow bodies never
+ * occupy either of the two expensive upload slots.
+ */
+export function createUploadAdmission(
+  authenticate: (req: Request) => Promise<{ id: number } | null>,
+  options: { bodyTimeoutMs?: number } = {},
+) {
+  const users = new Set<number>();
+  const bodyTimeout = Number.isFinite(options.bodyTimeoutMs)
+    ? Math.max(25, Math.min(UPLOAD_BODY_TIMEOUT_MS, options.bodyTimeoutMs!)) : UPLOAD_BODY_TIMEOUT_MS;
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (req.path !== "/api/trpc/application.uploadFile") return next();
+    // Preflight must finish before JSON parsing; preserve split-host CORS.
+    let continueRequest = false;
+    corsForApi(req, res, () => { continueRequest = true; });
+    if (!continueRequest) return;
+    const reject = (status: number, error: string, retry = false) => {
+      res.setHeader("Connection", "close");
+      if (retry) res.setHeader("Retry-After", "5");
+      res.status(status).json({ error });
+    };
+    if (req.method !== "POST") { res.setHeader("Allow", "POST, OPTIONS"); return reject(405, "Upload requires POST"); }
+    if (!isOriginAllowed(req)) return reject(403, "origin not allowed");
+    if (!req.is("application/json")) return reject(415, "Upload requires application/json");
+    const length = req.headers["content-length"];
+    if (length && (!/^\d+$/.test(length) || Number(length) > MAX_UPLOAD_JSON_BYTES)) return reject(413, "Request body too large");
+    let user: { id: number } | null;
+    try { user = await authenticate(req); }
+    catch { user = null; }
+    if (req.aborted || res.destroyed || res.writableEnded) return;
+    if (!user || !Number.isSafeInteger(user.id) || user.id <= 0) return reject(401, "Authentication required");
+    if (users.has(user.id)) return reject(429, "Another upload for this account is in progress", true);
+    if (users.size >= 2) return reject(503, "Upload service is busy", true);
+    const userId = user.id;
+    users.add(userId);
+    let released = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const bodyEnded = () => { clearTimeout(timer); };
+    const release = () => {
+      if (released) return;
+      released = true;
+      bodyEnded();
+      users.delete(userId);
+      req.off("end", bodyEnded);
+      req.off("aborted", release);
+      res.off("finish", release);
+      res.off("close", release);
+    };
+    req.once("end", bodyEnded);
+    req.once("aborted", release);
+    res.once("finish", release);
+    res.once("close", release);
+    if (!req.complete) {
+      timer = setTimeout(() => {
+        if (!res.writableEnded && !res.destroyed) reject(408, "Upload body did not finish in time");
+        release();
+      }, bodyTimeout);
+      timer.unref?.();
+    }
+    next();
+  };
 }
 
 // CSP — strict baseline. The Vite dev pipeline injects inline scripts at

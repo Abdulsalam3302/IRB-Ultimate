@@ -24,6 +24,8 @@ import {
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
 import { boundedInt } from "./_core/limits";
+import { lockStorageQuota, assertStorageAllowance, commitStorageReservation, queueAccountStorageErasure } from "./services/storageDeletion";
+import { assertSupabaseIdentityActiveInTransaction, queueIdentityErasure } from "./services/storageDeletionIdentity";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: ReturnType<typeof createMysqlPool> | null = null;
@@ -75,7 +77,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   try {
     const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["name", "email", "loginMethod", "identityIssuer"] as const;
     type TextField = (typeof textFields)[number];
     const assignNullable = (field: TextField) => {
       const value = user[field];
@@ -95,7 +97,13 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    if (user.openId.startsWith("sb:")) {
+      await db.transaction(async tx => {
+        await lockStorageQuota(tx);
+        await assertSupabaseIdentityActiveInTransaction(tx, user.openId, user.identityIssuer);
+        await tx.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+      });
+    } else await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", safeLogError(error));
     throw error;
@@ -307,14 +315,23 @@ export async function exportUserData(userId: number) {
 export async function eraseUserAccount(userId: number): Promise<{
   deletedDraftApplications: number;
   retainedRegulatoryApplications: number;
+  queuedStorageDeletions: number;
+  blockedStorageDeletions: number;
+  storageDeletionStatus: "pending" | "not_required";
+  queuedIdentityDeletions: number;
+  blockedIdentityDeletions: number;
+  identityDeletionStatus: "pending" | "not_required";
 }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
     const db = tx;
+    await lockStorageQuota(tx);
+    const [account] = await db.select().from(users).where(eq(users.id, userId)).for("update");
+    if (!account || account.loginMethod === "deleted") throw new TRPCError({ code: "UNAUTHORIZED" });
 
   const apps = await db.select({ id: applications.id, status: applications.status, submittedAt: applications.submittedAt })
-    .from(applications).where(eq(applications.applicantId, userId));
+    .from(applications).where(eq(applications.applicantId, userId)).for("update");
   const NEVER_SUBMITTED = new Set([
     "draft", "declaration_pending",
     "stage1_pending", "stage1_failed",
@@ -322,6 +339,11 @@ export async function eraseUserAccount(userId: number): Promise<{
   ]);
   const draftIds = apps.filter(a => !a.submittedAt && NEVER_SUBMITTED.has(a.status as string)).map(a => a.id);
   const retained = apps.length - draftIds.length;
+  const ownFileScope = and(eq(fileUploads.userId, userId), or(isNull(fileUploads.applicationId), draftIds.length ? inArray(fileUploads.applicationId, draftIds) : undefined));
+  const filesToErase = await db.select().from(fileUploads).where(ownFileScope).for("update");
+  const storageErasure = await queueAccountStorageErasure(tx, userId, filesToErase);
+  const identityErasure = await queueIdentityErasure(tx, account);
+  await db.delete(fileUploads).where(ownFileScope);
 
   if (draftIds.length) {
     await db.delete(researchAuthors).where(inArray(researchAuthors.applicationId, draftIds));
@@ -331,7 +353,9 @@ export async function eraseUserAccount(userId: number): Promise<{
     await db.delete(amendments).where(inArray(amendments.applicationId, draftIds));
     await db.delete(aiSwarmReviews).where(inArray(aiSwarmReviews.applicationId, draftIds));
     await db.delete(chatApplicationMessages).where(inArray(chatApplicationMessages.applicationId, draftIds));
-    await db.delete(fileUploads).where(inArray(fileUploads.applicationId, draftIds));
+    // Files uploaded by another identity are not within this erasure request.
+    // Preserve their metadata and ownership when removing the draft container.
+    await db.update(fileUploads).set({ applicationId: null }).where(inArray(fileUploads.applicationId, draftIds));
     await db.delete(notifications).where(inArray(notifications.applicationId, draftIds));
     await db.delete(auditLog).where(inArray(auditLog.applicationId, draftIds));
     await db.delete(applications).where(inArray(applications.id, draftIds));
@@ -346,13 +370,14 @@ export async function eraseUserAccount(userId: number): Promise<{
     name: "Deleted account",
     email: null,
     loginMethod: "deleted",
+    identityIssuer: null,
     passwordHash: null,
     role: "user",
     orcidId: null,
     orcidVerified: false,
   }).where(eq(users.id, userId));
 
-  return { deletedDraftApplications: draftIds.length, retainedRegulatoryApplications: retained };
+  return { deletedDraftApplications: draftIds.length, retainedRegulatoryApplications: retained, ...storageErasure, ...identityErasure, storageDeletionStatus: storageErasure.queuedStorageDeletions + storageErasure.blockedStorageDeletions > 0 ? "pending" as const : "not_required" as const };
   });
 }
 
@@ -362,7 +387,8 @@ export async function createApplication(data: InsertApplication) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
-    await tx.select({ id: users.id }).from(users).where(eq(users.id, data.applicantId)).for("update");
+    const [account] = await tx.select().from(users).where(eq(users.id, data.applicantId)).for("update");
+    if (!account || account.loginMethod === "deleted") throw new TRPCError({ code: "UNAUTHORIZED" });
     const [drafts] = await tx.select({ count: count() }).from(applications).where(and(eq(applications.applicantId, data.applicantId), inArray(applications.status, ["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"])));
     if (drafts.count >= boundedInt(process.env.MAX_OPEN_DRAFTS_PER_USER, 25, 1, 1000)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Open application limit reached. Complete an existing application first." });
     const result = await tx.insert(applications).values(data);
@@ -447,6 +473,8 @@ export async function updateEditableApplication(
   const dbi = await getDb();
   if (!dbi) throw new Error("Database not available");
   return dbi.transaction(async tx => {
+    const [account] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+    if (!account || account.loginMethod === "deleted") throw new TRPCError({ code: "UNAUTHORIZED" });
     const [current] = await tx.select().from(applications).where(eq(applications.id, id)).for("update");
     if (!current) throw new TRPCError({ code: "NOT_FOUND" });
     if (current.applicantId !== userId) throw new TRPCError({ code: "FORBIDDEN" });
@@ -843,16 +871,18 @@ export async function getFullAuditLog() {
 
 // ─── File Upload helpers ───────────────────────────────────────────────────
 
-export async function addFileUpload(data: InsertFileUpload) {
+export async function addFileUpload(data: InsertFileUpload, cleanupReservationId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
-    await tx.select({ id: users.id }).from(users).where(eq(users.id, data.userId)).for("update");
-    const [usage] = await tx.select({ bytes: sql<number>`COALESCE(SUM(${fileUploads.fileSize}), 0)`, count: count() }).from(fileUploads).where(eq(fileUploads.userId, data.userId));
-    if (usage.count >= 500 || Number(usage.bytes) + (data.fileSize || 0) > 250 * 1024 * 1024) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Upload allowance exceeded." });
+    await lockStorageQuota(tx);
+    const [user] = await tx.select().from(users).where(eq(users.id, data.userId)).for("update");
+    if (!user || user.loginMethod === "deleted") throw new TRPCError({ code: "UNAUTHORIZED" });
+    if (cleanupReservationId !== undefined) await commitStorageReservation(tx, cleanupReservationId, data);
+    await assertStorageAllowance(tx, data.userId, data.fileSize || 0);
     if (data.applicationId) {
       const [app] = await tx.select().from(applications).where(eq(applications.id, data.applicationId)).for("update");
-      if (!app || !EDITABLE_STATUSES.has(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer accepting uploads." });
+      if (!app || !EDITABLE_STATUSES.has(app.status) || (app.applicantId !== data.userId && user.role !== "admin")) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer accepting uploads." });
     }
     const result = await tx.insert(fileUploads).values(data);
     const id = result[0].insertId;
@@ -1333,11 +1363,71 @@ export async function getAiSwarmReviewsByApplication(applicationId: number) {
     .limit(100);
 }
 
-export async function insertChatApplicationMessage(data: InsertChatApplicationMessage) {
+export const MAX_APPLICATION_CHAT_MESSAGES = 1000;
+type ChatTransaction = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0];
+
+async function lockChatApplication(tx: ChatTransaction, applicationId: number, userId: number) {
+  // Match account-erasure lock order, and reject in-flight sessions whose
+  // account was erased after request authentication.
+  const [account] = await tx.select({ id: users.id, loginMethod: users.loginMethod }).from(users).where(eq(users.id, userId)).for("update");
+  if (!account || account.loginMethod === "deleted") throw new TRPCError({ code: "FORBIDDEN" });
+  const [application] = await tx.select({ applicantId: applications.applicantId }).from(applications).where(eq(applications.id, applicationId)).for("update");
+  if (!application) throw new TRPCError({ code: "NOT_FOUND" });
+  if (application.applicantId !== userId) throw new TRPCError({ code: "FORBIDDEN" });
+}
+
+async function assertChatCapacity(tx: ChatTransaction, applicationId: number, incoming: number) {
+  // A bounded locking read sees the latest committed count even under MySQL's
+  // repeatable-read isolation. All chat insertions hold the application lock.
+  const rows = await tx.select({ id: chatApplicationMessages.id }).from(chatApplicationMessages)
+    .where(eq(chatApplicationMessages.applicationId, applicationId)).limit(MAX_APPLICATION_CHAT_MESSAGES).for("update");
+  if (rows.length + incoming > MAX_APPLICATION_CHAT_MESSAGES) {
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "This application's chat history has reached its capacity. You can continue editing the application manually or contact support." });
+  }
+}
+
+/** Atomically reserve both sides of a turn before any provider attempt. Empty
+ * assistant rows are pending reservations, hidden from history but counted.
+ * They remain bounded if a process stops; existing records are never purged.
+ */
+export async function beginChatApplicationTurn(data: { applicationId: number; userId: number; content: string; lang: "ar" | "en" }): Promise<number> {
+  if (!data.content.trim() || data.content.length > 4000) throw new TRPCError({ code: "BAD_REQUEST", message: "Chat message exceeds the allowed length." });
   const dbi = await getDb();
-  if (!dbi) return 0;
-  const r = await dbi.insert(chatApplicationMessages).values(data);
-  return r[0].insertId;
+  if (!dbi) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Chat history storage is temporarily unavailable." });
+  return dbi.transaction(async tx => {
+    await lockChatApplication(tx, data.applicationId, data.userId);
+    await assertChatCapacity(tx, data.applicationId, 2);
+    await tx.insert(chatApplicationMessages).values({ ...data, role: "user" });
+    const result = await tx.insert(chatApplicationMessages).values({ ...data, role: "assistant", content: "" });
+    return result[0].insertId;
+  });
+}
+
+export async function completeChatApplicationTurn(data: { assistantMessageId: number; applicationId: number; userId: number; content: string }): Promise<void> {
+  if (!data.content.trim() || data.content.length > 4000) throw new TRPCError({ code: "BAD_REQUEST", message: "Chat response exceeds the allowed length." });
+  const dbi = await getDb();
+  if (!dbi) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Chat history storage is temporarily unavailable." });
+  await dbi.transaction(async tx => {
+    await lockChatApplication(tx, data.applicationId, data.userId);
+    const result = await tx.update(chatApplicationMessages).set({ content: data.content }).where(and(
+      eq(chatApplicationMessages.id, data.assistantMessageId), eq(chatApplicationMessages.applicationId, data.applicationId),
+      eq(chatApplicationMessages.userId, data.userId), eq(chatApplicationMessages.role, "assistant"), eq(chatApplicationMessages.content, ""),
+    ));
+    if (result[0].affectedRows !== 1) throw new TRPCError({ code: "CONFLICT", message: "This chat response can no longer be recorded." });
+  });
+}
+
+/** Compatibility helper for internal callers; it cannot bypass the same cap. */
+export async function insertChatApplicationMessage(data: InsertChatApplicationMessage) {
+  if (!data.content.trim() || data.content.length > 4000) throw new TRPCError({ code: "BAD_REQUEST" });
+  const dbi = await getDb();
+  if (!dbi) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Chat history storage is temporarily unavailable." });
+  return dbi.transaction(async tx => {
+    await lockChatApplication(tx, data.applicationId, data.userId);
+    await assertChatCapacity(tx, data.applicationId, 1);
+    const result = await tx.insert(chatApplicationMessages).values(data);
+    return result[0].insertId;
+  });
 }
 
 export async function getChatApplicationMessages(applicationId: number, userId: number) {
@@ -1347,6 +1437,7 @@ export async function getChatApplicationMessages(applicationId: number, userId: 
     .where(and(
       eq(chatApplicationMessages.applicationId, applicationId),
       eq(chatApplicationMessages.userId, userId),
+      ne(chatApplicationMessages.content, ""),
     ))
     .orderBy(desc(chatApplicationMessages.id))
     .limit(200);

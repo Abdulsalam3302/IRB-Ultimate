@@ -19,6 +19,7 @@ const MAIN_DEADLINE_MS = 60_000;
 const CLEANUP_DEADLINE_MS = 20_000;
 const REQUEST_DEADLINE_MS = 8000;
 const MAX_REQUESTS = 30;
+const TEST_SIGNATURE_SECONDS = 5;
 type CheckState = "PASS" | "FAIL" | "NOT_VERIFIED";
 type Check = { name: string; status: CheckState; httpStatus?: number; detail?: string };
 export type ProbeConfig = { origin: string; bucket: string; secretKey: string; publishableKey: string; syntheticUserToken?: string; syntheticUserId?: string };
@@ -67,6 +68,19 @@ function responseCodes(reply: Reply): string[] {
 function denied(reply: Reply): boolean {
   if ([401, 403, 404].includes(reply.status)) return true;
   return reply.status === 400 && responseCodes(reply).some(code => ["401", "403", "404", "accessdenied", "unauthorized", "not_found", "nosuchkey"].includes(code));
+}
+function missingAnonymousAuthorization(reply: Reply, actor: string): boolean {
+  const data = object(reply.data);
+  return actor === "anonymous" && reply.status === 400 && data.code === "InvalidRequest" && data.error === "Error" &&
+    String(data.statusCode) === "400" && data.message === "headers must have required property 'authorization'";
+}
+function expiredSignedDownload(reply: Reply): boolean {
+  const data = object(reply.data);
+  // Used only after an unchanged URL downloaded our exact bytes successfully
+  // and its requested lifetime elapsed. Other InvalidJWT errors prove nothing
+  // about expiry, and generic 400 / rate-limit / provider errors stay unverified.
+  return denied(reply) || (reply.status === 400 && data.code === "InvalidJWT" && data.error === "InvalidJWT" && String(data.statusCode) === "400" &&
+    ["jwt expired", "JWT expired", '"exp" claim timestamp check failed'].includes(String(data.message)));
 }
 function duplicateDenied(reply: Reply): boolean {
   return reply.status === 409 || (reply.status === 400 && responseCodes(reply).some(code => ["409", "resourcealreadyexists", "keyalreadyexists", "already_exists", "duplicate"].includes(code)));
@@ -133,7 +147,7 @@ export async function verifySupabaseStorage(input: ProbeConfig, overrides: Parti
       try {
         const reply = await run();
         const filteredEmpty = isList && reply.ok && Array.isArray(reply.data) && reply.data.length === 0;
-        const status = filteredEmpty || denied(reply) ? "PASS" : reply.ok ? "FAIL" : "NOT_VERIFIED";
+        const status = filteredEmpty || denied(reply) || missingAnonymousAuthorization(reply, name) ? "PASS" : reply.ok ? "FAIL" : "NOT_VERIFIED";
         note(`${name}.${action}_denied`, status, reply.status, filteredEmpty ? "RLS returned an empty visible list." : undefined);
       } catch { note(`${name}.${action}_denied`, "NOT_VERIFIED", undefined, "Request failed or exceeded a bounded resource limit."); }
     }
@@ -158,8 +172,8 @@ export async function verifySupabaseStorage(input: ProbeConfig, overrides: Parti
     attemptedKeys.add(primaryKey);
     await required("server.synthetic_upload", () => request(`${api}/object/${config.bucket}/${primaryKey}`, serverHeaders, "POST", CLEAN_TEXT, "text/plain"), reply => reply.ok && object(reply.data).Key === `${config.bucket}/${primaryKey}`);
     await required("server.duplicate_denied", () => request(`${api}/object/${config.bucket}/${primaryKey}`, serverHeaders, "POST", "This must never overwrite the original.\n", "text/plain"), duplicateDenied);
+    const signing = await required("server.short_download_signed", () => jsonRequest(`/object/sign/${config.bucket}/${primaryKey}`, serverHeaders, "POST", { expiresIn: TEST_SIGNATURE_SECONDS }), reply => reply.ok && typeof object(reply.data).signedURL === "string");
     const signedAt = deps.now();
-    const signing = await required("server.short_download_signed", () => jsonRequest(`/object/sign/${config.bucket}/${primaryKey}`, serverHeaders, "POST", { expiresIn: 2 }), reply => reply.ok && typeof object(reply.data).signedURL === "string");
     const rawUrl = object(signing.data).signedURL as string;
     if (rawUrl.length > 16_384) throw new Error("invalid signed URL");
     const signedUrl = new URL(rawUrl.startsWith("/object/") ? api + rawUrl : rawUrl, config.origin);
@@ -187,9 +201,9 @@ export async function verifySupabaseStorage(input: ProbeConfig, overrides: Parti
     } else {
       note("authenticated.direct_access", "NOT_VERIFIED", undefined, "Supply both dedicated synthetic-user token and expected user UUID to exercise this scope.");
     }
-    await deps.sleep(Math.max(0, signedAt + 5000 - deps.now()));
+    await deps.sleep(Math.max(0, signedAt + (TEST_SIGNATURE_SECONDS + 3) * 1000 - deps.now()));
     const expired = await request(signedUrl.href, {});
-    note("server.expired_link_denied", denied(expired) ? "PASS" : expired.ok ? "FAIL" : "NOT_VERIFIED", expired.status);
+    note("server.expired_link_denied", expiredSignedDownload(expired) ? "PASS" : expired.ok ? "FAIL" : "NOT_VERIFIED", expired.status);
   } catch {
     note("probe.completed", "FAIL", undefined, "A prerequisite, provider response, network request, or deadline failed. Raw diagnostics are intentionally omitted.");
   } finally {
@@ -212,7 +226,7 @@ export async function verifySupabaseStorage(input: ProbeConfig, overrides: Parti
     startedAt: new Date(started).toISOString(), finishedAt: new Date(deps.now()).toISOString(), projectOrigin: config.origin, bucket: config.bucket,
     syntheticPrefix: prefix, requests, checks,
     scope: "Synthetic private-storage provider activation probe; no research records or application database changes.",
-    limitations: ["A random-prefix behavioral probe does not replace review of all storage RLS policies.", "This does not verify the deployed app, malware scanner, residency, contracts, backups, or document semantics.", "The probe's two-second signing expiry is for verification only; application downloads are bounded to 60–300 seconds."],
+    limitations: ["A random-prefix behavioral probe does not replace review of all storage RLS policies.", "This does not verify the deployed app, malware scanner, residency, contracts, backups, or document semantics.", "The probe's five-second signing expiry is for verification only; application downloads are bounded to 60–300 seconds."],
   };
 }
 

@@ -67,6 +67,16 @@ services:
         sync: false
       - key: UPLOAD_SCAN_REQUIRED
         value: "true"
+      - key: UPLOAD_SCANNER_MODE
+        value: remote
+      - key: SCANNER_PUBLIC_ORIGIN
+        value: https://irb-saudi-arabia.onrender.com
+      - key: SCANNER_EXPECTED_ENGINE
+        value: "1.5.4"
+      - key: SCANNER_WORKER_TOKENS
+        sync: false
+      - key: CLAMAV_SCAN_TIMEOUT_MS
+        value: "15000"
       - key: CLAMAV_HOST
         sync: false
       - key: CLAMAV_PORT

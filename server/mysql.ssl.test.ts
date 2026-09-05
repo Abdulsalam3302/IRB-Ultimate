@@ -6,7 +6,7 @@ describe("resolveMysqlSsl", () => {
     const ssl = resolveMysqlSsl(
       "mysql://u:p@gateway01.eu-central-1.prod.aws.tidbcloud.com:4000/irb_platform?ssl=true"
     );
-    expect(ssl).toEqual({ rejectUnauthorized: true });
+    expect(ssl).toEqual({ rejectUnauthorized: true, verifyIdentity: true });
   });
 
   it("skips TLS for local mysql", () => {

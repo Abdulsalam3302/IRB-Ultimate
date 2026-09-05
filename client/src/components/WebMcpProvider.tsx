@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { registerBrowserTools, type BrowserModelContext, type BrowserTool } from "@/lib/webmcp";
 
 /** Browser WebMCP is distinct from the server's authenticated MCP transport. */
-export function WebMcpProvider({ children }: { children: React.ReactNode }) {
+export function WebMcpProvider() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const userId = user?.id;
@@ -41,5 +41,5 @@ export function WebMcpProvider({ children }: { children: React.ReactNode }) {
     });
     return registerBrowserTools(context, tools);
   }, [userId, utils.client]);
-  return <>{children}</>;
+  return null;
 }

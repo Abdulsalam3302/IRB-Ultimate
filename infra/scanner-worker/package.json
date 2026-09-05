@@ -1,0 +1,1 @@
+{"name":"irb-private-scanner-worker","version":"2.4.0","private":true,"type":"module","engines":{"node":"24.x"},"dependencies":{"ws":"8.21.3"}}

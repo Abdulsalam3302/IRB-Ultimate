@@ -9,15 +9,13 @@ import { assertStaffMfa } from "./staffAuth";
 // Captured once at module init (same SA-26 rationale as db.ts): a mid-run
 // env mutation cannot re-target who counts as the platform owner.
 const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
-const BOOT_OWNER_EMAIL = ENV.ownerEmail;
 
-/** True only for the platform owner (admin whose identity matches
- *  OWNER_OPEN_ID / OWNER_EMAIL). Fails closed when neither env is set. */
+/** Owner authority binds to one explicit authenticated subject, never an email
+ * shared across native/provider accounts or a newly migrated identity tenant.
+ * OWNER_EMAIL remains a contact setting and grants no privilege.
+ */
 export function isPlatformOwner(user: { role: string; openId: string; email?: string | null } | null): boolean {
-  if (!user || user.role !== "admin") return false;
-  if (BOOT_OWNER_OPEN_ID && user.openId === BOOT_OWNER_OPEN_ID) return true;
-  if (BOOT_OWNER_EMAIL && (user.email ?? "").toLowerCase() === BOOT_OWNER_EMAIL) return true;
-  return false;
+  return Boolean(BOOT_OWNER_OPEN_ID && user?.role === "admin" && user.openId === BOOT_OWNER_OPEN_ID);
 }
 
 const isProduction = process.env.NODE_ENV === "production";

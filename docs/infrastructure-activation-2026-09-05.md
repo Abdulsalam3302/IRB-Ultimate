@@ -1,5 +1,7 @@
 # Infrastructure activation — 5 September 2026
 
+**Historical 2.3 record.** The [2.4 release record](release-2.4-readiness.md) supersedes its account and scanner blockers. No paid scanner plan was selected.
+
 This record accompanies the 2.3.0 source upgrade. A passing local test, configured environment variable, successful cloud deployment, private upload acceptance and institutional launch authority are separate evidence states.
 
 ## Completed and prepared

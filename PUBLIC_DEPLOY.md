@@ -1,4 +1,4 @@
-# Render/Vercel pilot deployment — 2.3.0
+# Render/Vercel pilot deployment — 2.4.0
 
 This guide describes the checked-in configuration, not the current state of any hosting account. The Render blueprint selects a **free Frankfurt** service and disables automatic deployment. Use this topology for synthetic pilot data while institutional authority, processor/residency review, durability and capacity are being established. Free-tier capacity and availability must be checked against the provider's current terms; no uptime or load guarantee follows from this repository.
 

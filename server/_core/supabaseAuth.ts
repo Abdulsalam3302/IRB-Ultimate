@@ -5,6 +5,9 @@ import * as db from "../db";
 import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { assertSupabaseIdentityActive } from "../services/storageDeletionIdentity";
+
+const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
 
 function loginMethodFromProvider(provider: unknown): string {
   if (typeof provider === "string" && provider.length > 0) return provider;
@@ -34,28 +37,19 @@ async function verifySupabaseAccessToken(token: string) {
     audience: "authenticated",
   });
   const sub = payload.sub;
-  if (typeof sub !== "string" || !sub) {
+  if (typeof sub !== "string" || !/^[A-Za-z0-9-]{1,36}$/.test(sub)) {
     throw new Error("Invalid Supabase token: missing sub");
   }
   return payload as Record<string, unknown> & { sub: string };
 }
 
 /**
- * Returns admin only for OWNER_OPEN_ID, or one-time owner-email bootstrap
- * when no admin exists yet. Returns undefined when we must not touch role
- * (avoids demoting an existing admin on later logins).
+ * Only the explicitly configured subject may receive owner bootstrap authority.
+ * Matching an email, including a provider-verified address, grants no privilege.
+ * Undefined preserves an existing role assigned through the staff workflow.
  */
-async function roleForUser(
-  openId: string,
-  email: string | null,
-  emailVerified: boolean
-): Promise<"admin" | undefined> {
-  if (ENV.ownerOpenId && openId === ENV.ownerOpenId) return "admin";
-  // Owner-by-email promotion only when Supabase has confirmed the address
-  // AND no admin exists yet (matches native / upsertUser bootstrap).
-  if (emailVerified && ENV.ownerEmail && email && email.toLowerCase() === ENV.ownerEmail) {
-    if (!(await db.adminExists())) return "admin";
-  }
+function roleForUser(openId: string): "admin" | undefined {
+  if (BOOT_OWNER_OPEN_ID && openId === BOOT_OWNER_OPEN_ID) return "admin";
   return undefined;
 }
 
@@ -74,7 +68,9 @@ export function registerSupabaseAuthRoutes(app: Express) {
 
     try {
       const payload = await verifySupabaseAccessToken(token);
-      const openId = `sb:${payload.sub}`.slice(0, 64);
+      const openId = `sb:${payload.sub}`;
+      const identityIssuer = `${ENV.supabaseUrl.replace(/\/$/, "")}/auth/v1`;
+      await assertSupabaseIdentityActive(openId, identityIssuer);
       const email =
         typeof payload.email === "string" ? payload.email.trim().slice(0, 320) : null;
       const appMeta = payload.app_metadata;
@@ -83,15 +79,14 @@ export function registerSupabaseAuthRoutes(app: Express) {
           ? (appMeta as Record<string, unknown>).provider
           : payload.aal;
       const name = displayName(payload);
-      const emailVerified =
-        typeof payload.email_confirmed_at === "string"; // user_metadata is user-editable, never privilege evidence
-      const role = await roleForUser(openId, email, Boolean(emailVerified));
+      const role = roleForUser(openId);
 
       await db.upsertUser({
         openId,
         name,
         email,
         loginMethod: loginMethodFromProvider(provider),
+        identityIssuer,
         ...(role ? { role } : {}),
         lastSignedIn: new Date(),
       });

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { EVALUATION_NOTICE } from "@shared/publicNotices";
 
 export type Language = "en" | "ar";
 
@@ -83,8 +84,7 @@ const en: Record<string, string> = {
     "Independent software for research ethics workflows in Saudi Arabia. AI assists preparation; authorized human review determines ethics decisions.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
-  "demo.banner":
-    "Evaluation deployment. Use synthetic data only. Do not upload participant, patient, or confidential research data.",
+  "demo.banner": EVALUATION_NOTICE.en,
 
   // Open beta (always on for v1.1.0)
   "beta.banner": "Research ethics workflow platform · Saudi Arabia",
@@ -343,7 +343,7 @@ const en: Record<string, string> = {
   "support.category": "Category",
   "support.message": "Message",
   "support.submit": "Submit Ticket",
-  "support.success": "Your support ticket has been submitted successfully. We'll get back to you soon.",
+  "support.success": "Your support ticket has been recorded for review.",
   "support.cat.issue": "Issue / Bug Report",
   "support.cat.suggestion": "Suggestion",
   "support.cat.question": "Question",
@@ -351,11 +351,11 @@ const en: Record<string, string> = {
   "support.fillAll": "Please fill in all fields",
   "support.error": "Failed to submit ticket",
   "support.submitted": "Ticket Submitted",
-  "support.submittedDesc": "Thank you for reaching out. Your support ticket has been received and our team will review it shortly.",
+  "support.submittedDesc": "Your request has been recorded. Response times are not guaranteed.",
   "support.submitAnother": "Submit Another",
   "support.submitting": "Submitting...",
   "support.formTitle": "Submit a Support Ticket",
-  "support.formDesc": "All fields are required. We typically respond within 24 hours.",
+  "support.formDesc": "All fields are required. Response times are not guaranteed.",
   "support.namePlaceholder": "Full name",
   "support.categoryPlaceholder": "Select category",
   "support.subjectPlaceholder": "Brief description of your inquiry",
@@ -524,8 +524,7 @@ const ar: Record<string, string> = {
     "منصة مستقلة لإدارة إجراءات أخلاقيات البحث في السعودية. يساعد الذكاء الاصطناعي في الإعداد، وتصدر القرارات الأخلاقية عن المراجعة البشرية المخولة.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
-  "demo.banner":
-    "نسخة للتقييم. استخدم بيانات افتراضية فقط. لا ترفع بيانات المشاركين أو المرضى أو بيانات بحثية سرية.",
+  "demo.banner": EVALUATION_NOTICE.ar,
 
   "beta.banner": "منصة لإدارة إجراءات أخلاقيات البحث · المملكة العربية السعودية",
   "beta.learnMore": "عن المنصة",
@@ -782,7 +781,7 @@ const ar: Record<string, string> = {
   "support.category": "الفئة",
   "support.message": "الرسالة",
   "support.submit": "إرسال التذكرة",
-  "support.success": "تم إرسال تذكرة الدعم بنجاح. سنعود إليك قريبًا.",
+  "support.success": "تم تسجيل طلب الدعم للمراجعة.",
   "support.cat.issue": "مشكلة / تقرير خطأ",
   "support.cat.suggestion": "اقتراح",
   "support.cat.question": "سؤال",
@@ -790,11 +789,11 @@ const ar: Record<string, string> = {
   "support.fillAll": "يرجى ملء جميع الحقول",
   "support.error": "فشل في إرسال التذكرة",
   "support.submitted": "تم إرسال التذكرة",
-  "support.submittedDesc": "شكرًا لتواصلك. تم استلام تذكرة الدعم الخاصة بك وسيقوم فريقنا بمراجعتها قريبًا.",
+  "support.submittedDesc": "تم تسجيل طلبك. لا نضمن مدة محددة للرد.",
   "support.submitAnother": "إرسال أخرى",
   "support.submitting": "جاري الإرسال...",
   "support.formTitle": "إرسال تذكرة دعم",
-  "support.formDesc": "جميع الحقول مطلوبة. نرد عادةً خلال 24 ساعة.",
+  "support.formDesc": "جميع الحقول مطلوبة. لا نضمن مدة محددة للرد.",
   "support.namePlaceholder": "الاسم الكامل",
   "support.categoryPlaceholder": "اختر الفئة",
   "support.subjectPlaceholder": "وصف موجز لاستفسارك",

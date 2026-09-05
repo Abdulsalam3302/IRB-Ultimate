@@ -31,6 +31,56 @@ function hasS3Credentials(): boolean {
 }
 
 export type StorageProvider = "supabase" | "forge" | "s3" | "local";
+export type StorageBinding = { storageProvider: StorageProvider; storageOrigin: string; storageBucket: string };
+export class StorageDeletionBlockedError extends Error {
+  constructor(public readonly code: "binding_changed" | "unsupported_provider" | "invalid_scope") { super("Storage deletion requires operator review"); }
+}
+
+/** Public location identifiers only; never persist credentials or signed URLs. */
+export function getStorageBinding(): StorageBinding {
+  const storageProvider = resolveStorageProvider();
+  if (storageProvider === "local") return { storageProvider, storageOrigin: UPLOADS_DIR, storageBucket: "" };
+  if (storageProvider === "s3") {
+    const region = process.env.AWS_REGION || "";
+    const bucket = process.env.S3_BUCKET || "";
+    if (!/^[a-z0-9-]{3,40}$/.test(region) || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error("Invalid S3 storage binding");
+    return { storageProvider, storageOrigin: `https://s3.${region}.amazonaws.com`, storageBucket: bucket };
+  }
+  const url = new URL(storageProvider === "supabase" ? ENV.supabaseUrl : ENV.forgeApiUrl);
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.port || (storageProvider === "supabase" && url.pathname !== "/")) throw new Error("Invalid remote storage binding");
+  const storageBucket = storageProvider === "supabase" ? ENV.supabaseStorageBucket : "";
+  if (storageProvider === "supabase" && !/^[a-z0-9][a-z0-9_-]{0,62}$/.test(storageBucket)) throw new Error("Invalid private storage binding");
+  return { storageProvider, storageOrigin: url.href.replace(/\/+$/, ""), storageBucket };
+}
+
+export function assertStorageBinding(binding: StorageBinding): void {
+  const current = getStorageBinding();
+  if (current.storageProvider !== binding.storageProvider || current.storageOrigin !== binding.storageOrigin || current.storageBucket !== binding.storageBucket) throw new StorageDeletionBlockedError("binding_changed");
+}
+
+/** Exact immutable key only. Provider changes never redirect a queued deletion. */
+export async function storageDeleteBound(binding: StorageBinding, relKey: string): Promise<void> {
+  const key = normalizeStorageKey(relKey);
+  assertStorageBinding(binding);
+  if (binding.storageProvider === "supabase") {
+    const { supabaseDelete } = await import("./storage.supabase");
+    return supabaseDelete(key);
+  }
+  if (binding.storageProvider === "s3") {
+    const { s3Delete } = await import("./storage.s3");
+    return s3Delete(key);
+  }
+  if (binding.storageProvider === "forge") throw new StorageDeletionBlockedError("unsupported_provider");
+  const target = path.resolve(UPLOADS_DIR, key);
+  try {
+    const root = await fs.realpath(UPLOADS_DIR);
+    const parent = await fs.realpath(path.dirname(target));
+    if (parent !== root && !parent.startsWith(root + path.sep)) throw new StorageDeletionBlockedError("invalid_scope");
+    await fs.unlink(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
 
 export function resolveStorageProvider(): StorageProvider {
   const provider = ENV.storageProvider || "auto";
@@ -184,7 +234,7 @@ async function localPut(
       : Buffer.isBuffer(data)
         ? data
         : Buffer.from(data);
-  await fs.writeFile(target, buf, { mode: 0o600 });
+  await fs.writeFile(target, buf, { mode: 0o600, flag: "wx" });
   return { key, url: `/uploads/${key}` };
 }
 

@@ -19,7 +19,8 @@ import { notifyOwner } from "./_core/notification";
 import { runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
 import { chatApplicationTurn } from "./services/chatApplication.service";
 import { IRB_REQUIREMENTS } from "./services/irb.validation";
-import { storagePut } from "./storage";
+import { assertStorageBinding, storagePut } from "./storage";
+import { reserveStorageUpload, expediteStorageCleanup } from "./services/storageDeletion";
 import { scanUploadedFile } from "./services/uploadScanner";
 import { assertUploadArchiveSafe } from "./services/uploadArchiveGuard";
 import * as emailService from "./emailService";
@@ -545,6 +546,16 @@ const applicationRouter = router({
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
+
+      // The middleware reserves the editor call. This flow also runs a second
+      // model review; reserve it before either attempt or any draft mutation.
+      const reviewBudget = await reserveLlmCall(ctx.user.id);
+      if (!reviewBudget.ok) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: `Enhance and re-review requires two AI calls. The remaining daily budget is too low. Resets at ${reviewBudget.resetAt}.`,
+        });
+      }
 
       const stage1Fields = {
         researchTitle: app.researchTitle || "",
@@ -1083,22 +1094,34 @@ const applicationRouter = router({
       // already partitions under /uploads/<key> for the local driver
       // and namespaces by bucket for S3/Forge.
       const fileKey = `${ctx.user.id}/${Date.now()}-${randomSuffix}-${safeFileName}`;
-      const stored = await storagePut(fileKey, buffer, contentType);
-
-      // Save file metadata to DB
-      const fileId = await db.addFileUpload({
+      const reservation = await reserveStorageUpload({ userId: ctx.user.id, applicationId: input.applicationId, fileKey, fileSize: buffer.length });
+      let fileId: number;
+      let confirmedStored = false;
+      try {
+        assertStorageBinding(reservation.binding);
+        const stored = await storagePut(fileKey, buffer, contentType);
+        if (stored.key !== fileKey) throw new Error("Storage returned a different object key");
+        confirmedStored = true;
+        // Metadata and reservation cancellation commit atomically.
+        fileId = await db.addFileUpload({
           applicationId: input.applicationId || null,
           userId: ctx.user.id,
           fileName: safeFileName,
           fileKey: stored.key,
           fileUrl: "",
+          ...reservation.binding,
           mimeType: contentType,
           fileSize: buffer.length,
           category: (input.category || "other") as any,
-        });
+        }, reservation.id);
+      } catch (error) {
+        // Even if this update fails, the pre-write reservation remains durable.
+        await expediteStorageCleanup(reservation.id, confirmedStored).catch(() => {});
+        throw error;
+      }
       await db.addAuditLog({ applicationId: input.applicationId || null, userId: ctx.user.id, action: "file_upload_stored", details: `Upload #${fileId}; malware scan ${scan.status}${scan.status === "skipped" ? " under configured development/pilot policy" : " using ClamAV"}.` });
 
-      return { url: `/api/irb/files/${fileId}`, fileKey: stored.key, scanStatus: scan.status };
+      return { url: `/api/irb/files/${fileId}`, fileKey, scanStatus: scan.status };
     }),
 
   // Version history
@@ -1674,9 +1697,10 @@ const adminRouter = router({
       return { success: true };
     }),
 
-  // OWNER-ONLY: purge dev test accounts (@example.com) and their data.
-  // Hard-scoped in the DB layer; can never delete a real account.
+  // Disposable development databases only. Production erasure uses the
+  // durable object and identity deletion workflow, including for test accounts.
   purgeTestAccounts: ownerProcedure.mutation(async ({ ctx }) => {
+    if (ENV.isProduction) throw new TRPCError({ code: "FORBIDDEN", message: "Bulk test-account purge is disabled in production. Use the account erasure workflow." });
     const result = await db.purgeExampleTestAccounts();
     await db.addAuditLog({
       userId: ctx.user.id,
@@ -2401,7 +2425,7 @@ export const appRouter = router({
         await db.addAuditLog({
           userId: ctx.user.id,
           action: "account_self_deleted",
-          details: `Drafts removed: ${result.deletedDraftApplications}; regulatory records retained: ${result.retainedRegulatoryApplications}`,
+          details: `Drafts removed: ${result.deletedDraftApplications}; regulatory records retained: ${result.retainedRegulatoryApplications}; object deletions queued: ${result.queuedStorageDeletions}; object deletions blocked for review: ${result.blockedStorageDeletions}`,
         }).catch(() => {});
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

@@ -1,6 +1,6 @@
 {
   "name": "irb-platform",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -72,6 +72,7 @@
     "mysql2": "^3.24.3",
     "nanoid": "^5.1.16",
     "next-themes": "^0.4.6",
+    "playwright": "^1.63.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-day-picker": "^9.14.0",
@@ -85,8 +86,8 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2",
     "wouter": "^3.10.0",
-    "zod": "^4.5.4",
-    "playwright": "^1.63.0"
+    "ws": "8.21.3",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
@@ -98,6 +99,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.5.5",
     "drizzle-kit": "^0.31.10",

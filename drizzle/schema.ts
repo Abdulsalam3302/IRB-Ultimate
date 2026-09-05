@@ -6,6 +6,7 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  identityIssuer: varchar("identityIssuer", { length: 1024 }),
   // Native email/password auth — scrypt hash (format: scrypt$N$r$p$salt$hash).
   // NULL for users who signed up via an OAuth/social provider (no local
   // password). Login-by-password only succeeds when this is set.
@@ -277,6 +278,9 @@ export const fileUploads = mysqlTable("file_uploads", {
   fileName: varchar("fileName", { length: 512 }).notNull(),
   fileKey: varchar("fileKey", { length: 512 }).notNull(),
   fileUrl: text("fileUrl").notNull(),
+  storageProvider: varchar("storageProvider", { length: 16 }),
+  storageOrigin: varchar("storageOrigin", { length: 1024 }),
+  storageBucket: varchar("storageBucket", { length: 128 }),
   mimeType: varchar("mimeType", { length: 128 }),
   fileSize: int("fileSize"),
   category: mysqlEnum("fileCategory", [
@@ -292,6 +296,30 @@ export const fileUploads = mysqlTable("file_uploads", {
 
 export type FileUpload = typeof fileUploads.$inferSelect;
 export type InsertFileUpload = typeof fileUploads.$inferInsert;
+
+/** Lock row serializes admission across processes; usage is derived from durable rows. */
+export const storageQuotaLock = mysqlTable("storage_quota_lock", {
+  id: int("id").primaryKey(),
+});
+
+/** Never infer an unknown legacy object's location from the current provider. */
+export const storageDeletionJobs = mysqlTable("storage_deletion_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  fileSize: int("fileSize").notNull(),
+  storageProvider: varchar("storageProvider", { length: 16 }),
+  storageOrigin: varchar("storageOrigin", { length: 1024 }),
+  storageBucket: varchar("storageBucket", { length: 128 }),
+  reason: mysqlEnum("reason", ["upload_cleanup", "account_erasure", "identity_erasure"]).notNull(),
+  status: mysqlEnum("status", ["reserved", "pending", "processing", "completed", "cancelled", "blocked"]).notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  lastErrorCode: varchar("lastErrorCode", { length: 64 }),
+  nextAttemptAt: timestamp("nextAttemptAt").notNull(),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 // Application version history — snapshots saved on each submission
 export const applicationVersions = mysqlTable("application_versions", {
@@ -428,7 +456,7 @@ export const chatApplicationMessages = mysqlTable("chat_application_messages", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("applicationId").notNull(),
   userId: int("userId").notNull(),
-  role: mysqlEnum("chatRole", ["user", "assistant", "system"]).notNull(),
+  role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
   content: text("content").notNull(),
   lang: varchar("lang", { length: 8 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

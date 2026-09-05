@@ -9,7 +9,14 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { AnalyticsBeacon } from "./components/AnalyticsBeacon";
 import { DemoBanner } from "./components/DemoBanner";
 import { RouteMetadata } from "./components/RouteMetadata";
-import { WebMcpProvider } from "./components/WebMcpProvider";
+
+// Experimental tool definitions load only in browsers exposing WebMCP.
+const WebMcpProvider = lazy(() => import("./components/WebMcpProvider").then(module => ({ default: module.WebMcpProvider })));
+
+function BrowserTools() {
+  if (typeof window === "undefined" || !window.isSecureContext || !("modelContext" in document || "modelContext" in navigator)) return null;
+  return <Suspense fallback={null}><WebMcpProvider /></Suspense>;
+}
 
 // Lazy-loaded route pages — each becomes its own chunk so first paint
 // only ships the home + framework. Pages load on navigation.
@@ -98,9 +105,8 @@ function App() {
           <TooltipProvider>
             <DemoBanner />
             <Toaster />
-            <WebMcpProvider>
-              <Router />
-            </WebMcpProvider>
+            <BrowserTools />
+            <Router />
           </TooltipProvider>
         </LanguageProvider>
       </ThemeProvider>

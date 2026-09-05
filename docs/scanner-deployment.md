@@ -1,101 +1,91 @@
-# Private malware scanner deployment
+# Free private malware scanning
 
-Prepared and locally exercised on 5 September 2026. **No paid service has been created and production settings have not been changed.** The Docker image built and ran successfully on local Linux ARM64, with real signatures, clean/EICAR verdicts and failure/recovery checks. Render's live Blueprint validator currently returns `need_payment_info`; a payment method and the concrete price decision below are the remaining provisioning gate. Render's build and private-network integration are separate outstanding checks.
+The selected architecture uses the operator’s existing trusted Mac and Docker Desktop, with an outbound worker connection to the existing Render API. **Incremental scanner SaaS charge: USD 0.** Electricity, internet use, hardware, existing platform services and operator time still have costs. No paid scanner service or new Oracle resource is selected or provisioned by this design.
 
-## Resource and cost decision
+The free profile provides a primary scanner and an optional fallback scanner in separate containers. Both replicas on one Mac share power, internet, Docker and sleep state. This is process redundancy; it does not provide host-outage redundancy or a guaranteed uptime level. Actual cloud-path activation and measured capacity require the release’s current runtime receipt. Earlier scanner receipts remain historical evidence for their recorded configuration.
 
-The minimum suitable Render compute plan is **2 CPU / 4 GB RAM**, plan ID `2c-4g` (the accepted legacy Blueprint ID is `pro`). ClamAV documents a minimum of 3 GiB RAM and prefers 4 GiB; database reloads temporarily use substantially more memory than idle scanning. The 512 MB and 2 GB plans do not meet that minimum. We retain concurrent database reloads and signature integrity testing. [ClamAV Docker requirements](https://docs.clamav.net/manual/Installing/Docker.html), [Render compute plans](https://render.com/docs/compute-plans).
+## How uploads remain private
 
-| New resource | Configuration | Published monthly cost |
-| --- | --- | ---: |
-| Private scanner compute | One `2c-4g` / `pro` instance, 2 CPU, 4 GB | USD 85.00 |
-| Signature disk | 6 GB at USD 0.25/GB/month | USD 1.50 |
-| **Incremental scanner total** | One instance and disk | **USD 86.50** |
+The browser uploads to the authenticated application route. The API checks ownership, quotas, MIME/extension and magic bytes, then ZIP/DOCX metadata limits. It retains the bounded document in memory while an authenticated worker scans it. **Storage and file metadata are created only after a clean verdict.** There is no persisted queue of unscanned documents.
 
-Prices were read from the official page on 5 September 2026. Taxes, outbound usage beyond workspace allowances, build usage, and other existing services are additional. The 6 GB disk allocation exceeds ClamAV's 5 GiB free-space recommendation. The application's current compute, Supabase and Vercel costs are outside this scanner estimate. Confirm the displayed checkout estimate before creating the service. [Render pricing](https://render.com/pricing), [ClamAV system requirements](https://docs.clamav.net/Introduction.html).
+The worker connects outward to `wss://irb-saudi-arabia.onrender.com/api/internal/scanner/worker`. There is no inbound port on the Mac, no public ClamAV port, no tunnel provider, and no public reputation-service submission. Each worker has a distinct, random 256-bit credential granting only the scanner protocol. It receives file bytes and a random job identifier, SHA-256 digest, byte count and deadline; it receives no applicant name, filename, study title, storage credential or database credential.
 
-Standard private networking does not require a Pro workspace upgrade. The API and scanner must share a Render workspace and region; a free API service can initiate private requests to this paid scanner. Environment-level network isolation requires a Pro workspace or higher; the currently published Pro workspace charge is USD 25/month if that additional control is selected. Do not purchase it implicitly. [Private networking](https://render.com/docs/private-network), [free-service limitations](https://render.com/docs/free), [workspace pricing](https://render.com/pricing).
+One worker handles one scan; the server accepts at most two worker identities. A connection nonce and job identity/hash/length bind the returned verdict to the upload. The worker accepts only the configured HTTPS backend origin, with certificate verification and no redirects. Browser origins/cookies and unmatched production WebSocket upgrades are rejected. Worker messages are bounded and rate-limited. Uploaded content is never written by the worker or included in logs; engine extraction uses bounded temporary memory storage. The worker clears its received buffer on completion, cancellation or disconnect.
 
-## Files and version pin
+A clean result requires the entire input and one complete, unambiguous ClamAV response. A complete positive `FOUND` verdict is terminal even if the engine reports it before consuming the complete upload. Malware and cancellation cannot fall through to another scanner. Only unavailability can try another healthy worker. An optional explicitly configured private TCP fallback shares the request’s overall deadline. Missing workers, unknown responses, wrong engine versions, stale definitions and exhausted deadlines return unavailable before storage.
 
-- `infra/clamav/Dockerfile`: copies the official pinned ClamAV runtime into a final image that exposes only TCP 3310. It installs no extra downloaded packages and starts no milter or HTTP server.
-- `infra/clamav/image-lock.json`: registry and calculated SHA-256 evidence for the upstream image index and its platform manifests.
-- `infra/clamav/clamd.conf`: 15 MiB input/file cap, 50 MiB aggregate scan cap, bounded recursion/files/time, two scan threads, and fail-closed encrypted/over-limit detection policies.
-- `infra/clamav/freshclam.conf`: official signed signature databases, integrity testing, updates every two hours, and daemon reload notification.
-- `infra/clamav/start.sh`: supervised initial update, engine startup, updater lifecycle, periodic readiness enforcement and bounded termination.
-- `infra/clamav/health.sh`: local PING, exact engine-version check and signature timestamp validation.
-- `infra/clamav/render.yaml`: standalone private-service Blueprint. It does not modify the existing application Blueprint.
-- `infra/clamav/compose.yaml`: local fixture with a persistent signature volume, bounded resources and no published host ports.
-- `infra/clamav/probe.mjs`: two small synthetic INSTREAM requests from the API host, checking clean acceptance and rejection of the standard harmless EICAR antivirus marker.
+ClamAV’s native TCP protocol has no authentication or encryption. Each engine is isolated on its own Docker internal network with its assigned worker. No host port is published. Do not attach unrelated containers to these networks or expose TCP 3310. [ClamAV Docker guidance](https://docs.clamav.net/manual/Installing/Docker.html)
 
-The image pin is:
+## Free deployment files
 
-```text
-clamav/clamav:1.5.4_base-debian13-slim
-sha256:2bc2f9c5c1fd5120a334490d005c694430f0589d085a7aca400bbd93458fe1f0
-```
+- `infra/clamav/compose.free.yaml`: selected topology, separate primary/fallback networks and signature volumes, no published ports, bounded logs and resource limits.
+- `infra/clamav/clamd-free.conf`: one scan thread and `ConcurrentDatabaseReload no`. Reloads can temporarily block that engine; another healthy worker can handle an unavailable primary. Archive, encryption, macro and scan-limit restrictions remain enabled.
+- `infra/scanner-worker/Dockerfile`: non-root, pinned Node runtime and locked `ws` dependency. The worker container has a read-only filesystem and no application repository credentials.
+- `scripts/scanner-worker.mjs` and `scanner-worker-core.mjs`: outbound worker, engine health checks, bounded INSTREAM transport, reconnect backoff and safe state-only logging.
+- `server/services/remoteScanner.ts`: authenticated WebSocket broker and request/verdict binding.
+- `infra/clamav/start.sh`, `health.sh`, `freshclam.conf`: signed-definition updates, exact engine version, bounded startup and stale-definition watchdog.
 
-The Docker Hub tag, registry response digest and locally calculated index digest matched. The image index includes Linux amd64, arm64 and ppc64le; Render uses its applicable platform. Image identity and local ARM64 execution have been verified separately; neither establishes a vulnerability-free base image or a successful Render build. The pinned image has no bundled definitions, so its persistent signature disk and initial FreshClam update are required. [Official image distribution](https://docs.clamav.net/manual/Installing/Docker.html), [verified tag metadata](https://hub.docker.com/v2/repositories/clamav/clamav/tags/1.5.4_base-debian13-slim).
+The existing ClamAV image pin is `clamav/clamav:1.5.4_base-debian13-slim@sha256:2bc2f9c5c1fd5120a334490d005c694430f0589d085a7aca400bbd93458fe1f0`. Image-index and platform evidence is in `infra/clamav/image-lock.json`. The worker Dockerfile pins its Node image digest separately.
 
-## Network and confidentiality boundary
+ClamAV recommends 3–4 GiB RAM and 5 GiB available disk space. The free profile caps each engine at 3 GiB/one CPU and each worker at 192 MiB. These limits are resource controls, not proof that two engines fit alongside other workloads. Measure memory during real signature reloads before starting the fallback. If the host lacks safe headroom, operate one engine and leave a second host as a future fallback. Do not stop unrelated containers to manufacture capacity. [ClamAV system requirements](https://docs.clamav.net/Introduction.html)
 
-Create a **private service** (`type: pserv`), never a public web service. Bind TCP 3310 inside it; do not publish a Docker host port, add a public proxy/domain, or expose a health HTTP listener. Render private services have no public `onrender.com` hostname. Port 3310 is permitted on the private network. The prepared region is `frankfurt`, matching the checked-in API topology; verify the live API's region and workspace before applying it because a region cannot be changed after service creation. [Private services](https://render.com/docs/private-services), [network port rules](https://render.com/docs/private-network), [Blueprint regions](https://render.com/docs/blueprint-spec).
+## Credentials and activation
 
-ClamAV's TCP protocol has no native authentication or transport encryption. Same-workspace services must therefore be trusted; the protocol also supports administrative commands. Use an isolated environment/network for untrusted co-tenants. A plain public TCP listener is unacceptable. Vercel browsers/functions and Supabase clients must not connect to the scanner; the authenticated Render API scans bytes before storing an uploaded object. [ClamAV TCP warning](https://docs.clamav.net/manual/Installing/Docker.html).
+Use private files outside the repository, under `~/.config/irb-private-scanner/`, with directory mode 0700 and file mode 0600. Each file supplies only its worker identity and distinct high-entropy token. Keep tokens out of URLs, shell arguments, screenshots, command output and release receipts. Do not run `docker compose config` or print container environment/inspection output: these can disclose resolved credentials.
 
-The signature disk contains malware definitions, not uploaded studies. Document extraction uses an ephemeral directory, temporary files are removed by the engine, and clean-file/metadata/debug logging is disabled. Do not enable verbose logging or send document contents to a monitoring service. A Frankfurt scanner is processing in Germany; private networking does not establish Saudi data residency or authorization for sensitive research data. Retain the platform's deployment and institutional processing gates.
-
-## Readiness and failure behavior
-
-Render private services support TCP health checks only. An open socket alone cannot prove fresh definitions or a functioning scanner. The service therefore checks PING, the pinned engine version and the running engine's signature timestamp. A timestamp older than 48 hours or more than five minutes in the future fails readiness. An operator may reduce this threshold to 12–48 hours, but cannot extend it beyond 48 through the environment. [Render health checks](https://render.com/docs/health-checks).
-
-Initial signature download/update must succeed before starting clamd. It has a ten-minute deadline, followed by at most four minutes for engine readiness. The updater remains running and notifies clamd after updates. The watchdog checks every 15 seconds, terminates immediately after a stale-signature result, and terminates after two other consecutive readiness failures. A stopped engine/updater also stops the service. This closes the TCP listener so the application continues to reject uploads while Render restarts the instance.
-
-Application settings after a successful private probe are:
+The server configuration is:
 
 ```dotenv
 UPLOAD_SCAN_REQUIRED=true
-CLAMAV_HOST=<assigned-internal-hostname-without-port>
-CLAMAV_PORT=3310
+UPLOAD_SCANNER_MODE=remote
+SCANNER_PUBLIC_ORIGIN=https://irb-saudi-arabia.onrender.com
+SCANNER_EXPECTED_ENGINE=1.5.4
 CLAMAV_SCAN_TIMEOUT_MS=15000
-CLAMAV_MAX_CONCURRENT=2
 ```
 
-The existing application transport uses bounded INSTREAM frames and accepts one complete unambiguous verdict. Scanner outage, timeout or unknown replies return unavailable before storage; FOUND is rejected. The daemon enables alerts for encrypted content, Office macros and inspection limits. An actual encrypted ZIP was rejected. Those settings are deliberate upload restrictions, but **engine heuristics alone do not reliably reject every oversized archive entry**: see the measured exception below. Deterministic ZIP/DOCX metadata validation must enforce archive limits before scanning. Limits and feature names were checked against the [ClamAV 1.5.4 configuration sample](https://github.com/Cisco-Talos/clamav/blob/clamav-1.5.4/etc/clamd.conf.sample).
+Set `SCANNER_WORKER_TOKENS` privately to a JSON object mapping each configured worker ID to its own random 64-character hexadecimal token. Never copy sample/test tokens. The worker files contain `SCANNER_WORKER_ID` and `SCANNER_WORKER_TOKEN`; Compose supplies the fixed backend URL and private engine hostname. Update the server and matching worker together when rotating a credential. A removed credential stops authorizing new connections; restart the broker or terminate its existing worker connection to revoke the current session immediately.
 
-## Deployment sequence after the cost decision
+Commands contain paths only; substitute the actual private filenames if the operator chose different names:
 
-1. Confirm the USD 86.50/month scanner allocation, supply the payment method through Render's own billing UI, and verify the API's live workspace/region. Do not put payment details or application credentials in this service.
-2. Build and test the image with a working Docker daemon, or perform a staged Render build. From the repository, run `docker compose -f infra/clamav/compose.yaml build`. Record the resulting application image digest and engine version. Inspect the final image to confirm `3310/tcp` is its only exposed port.
-3. Run `docker compose -f infra/clamav/compose.yaml up -d`, then `docker compose -f infra/clamav/compose.yaml exec -T clamav /usr/local/bin/irb-clamav-health`. This has no published host port. Allow the initial definition download; do not repeatedly delete the signature volume and redownload it.
-4. Run `render blueprints validate infra/clamav/render.yaml --output json`, require a valid result, and create/sync that standalone Blueprint through Render. Select the verified repository commit. The Blueprint uses manual deployment triggers and a six-GB disk at `/var/lib/clamav`. It does not include an unsupported HTTP health-check field or a custom shutdown delay, which Render rejects for disk-backed services.
-5. Record the service's actual internal hostname. From the Render API host, run the prepared synthetic probe with the settings above: `node infra/clamav/probe.mjs`. Require both clean acceptance and EICAR rejection. The script accepts only an internal single-label hostname on port 3310 and emits no scanned bytes or signature names.
-6. Exercise one synthetic upload through the authenticated application route. Verify that it is scanned before private storage, another account cannot download it, and a stopped scanner produces unavailable with no object/metadata success. Verify a harmless archive that exceeds the inspection limits is rejected. These are staged tests; do not use patient/research records to establish readiness.
-7. Check memory during signature reload, disk growth, response time at two concurrent scans, logs, process restart, stale-signature failure and updater recovery. Only then change the live API's scanner settings. Keep `UPLOAD_SCAN_REQUIRED=true` during rollback; restore the last verified scanner image or pause uploads, rather than bypass scanning.
+```sh
+export IRB_SCANNER_PRIMARY_ENV="$HOME/.config/irb-private-scanner/primary.env"
+export IRB_SCANNER_FALLBACK_ENV="$HOME/.config/irb-private-scanner/fallback.env"
+docker compose -f infra/clamav/compose.free.yaml build
+docker compose -f infra/clamav/compose.free.yaml up -d clamav-primary worker-primary
+docker compose -f infra/clamav/compose.free.yaml exec -T clamav-primary /usr/local/bin/irb-clamav-health
+```
 
-A persistent disk prevents horizontal scaling and zero-downtime replacement of this single service. Scanner redeployments can temporarily make uploads unavailable. For a later availability requirement, provision separate scanners with separate disks and an explicitly designed private failover path; that is additional infrastructure and cost. [Render disk limitations](https://render.com/docs/disks).
+Both environment-file paths must be defined for Compose to resolve the file, including when starting only the primary services. After measuring adequate host/VM memory, start the fallback:
 
-## Verification completed and remaining evidence
+```sh
+docker compose -f infra/clamav/compose.free.yaml up -d clamav-fallback worker-fallback
+docker compose -f infra/clamav/compose.free.yaml exec -T clamav-fallback /usr/local/bin/irb-clamav-health
+docker compose -f infra/clamav/compose.free.yaml ps
+docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}'
+```
 
-- Registry image-index SHA-256 independently verified.
-- Nine local readiness tests passed, including current/stale/future signatures, wrong engine version, malformed/split replies, invalid age policy and timeout bounds.
-- Existing scanner and upload-route tests: 21 passed across two files; no application source change was needed.
-- Shell syntax, JavaScript syntax and Docker Compose configuration checks passed.
-- Render live Blueprint validation was exercised. The unsupported disk/shutdown-delay combination was corrected. The current result is blocked by `need_payment_info`; it is not a successful provisioning or complete deployment validation.
-- Docker Desktop subsequently became available. The actual ARM64 build, official signature download/integrity checks, real clean/EICAR detection, engine reload, health-driven shutdown and recovery were exercised as described below. A Render private-network probe and paid creation remain unperformed.
+Keep the Mac awake and Docker running if uploads are expected. No launch agent, wake policy or system sleep setting is implied by these commands. A supervisor may restart worker containers, but it cannot overcome a sleeping or disconnected host. State-only worker logs can help diagnose connection readiness; never enable payload/debug logging.
 
-See `infra/clamav/preparation-verification.json` for the machine-readable preparation receipt. Repeat validation after funding/configuration changes. Pinning the engine must be paired with regular review of ClamAV security releases and updated base-image digests; signature updates do not patch the engine or operating system. A newer pin also requires updating the exact readiness-version assertion and rerunning the tests and staged probe.
+## Operational checks and fallback
 
-## Actual local container results
+The engine and worker independently require the pinned version and definitions no older than 48 hours, with at most five minutes of future clock skew. FreshClam updates every two hours; the engine watchdog closes its listener when stale or unhealthy. Worker health is checked regularly and around scans. The server evicts workers with stale heartbeats. Reconnect attempts back off with jitter up to approximately one minute.
 
-`infra/clamav/local-runtime-verification.json` records the subsequent Docker Desktop run. The Linux ARM64 image built from the pinned upstream index and exposed exactly `3310/tcp`, with no published host ports. Container limits were 4 GiB RAM and 2 CPU. Initial FreshClam download, integrity testing and engine readiness completed in approximately 22 seconds. The engine reported ClamAV 1.5.4 with daily database 28114, built at 06:23:38 UTC on 5 September 2026.
+Before enabling public document uploads, exercise synthetic clean/EICAR uploads through the real authenticated application path. Prove another applicant cannot retrieve the object; no object/metadata is created for malware or scanner unavailability; primary failure uses the healthy fallback; loss of both workers refuses uploads; and cancellation stops the scan. Measure memory during definition reloads and verify recovery. Do not use real research records to establish these gates, and do not describe a source test or local engine result as a cloud-path receipt.
 
-The prepared network probe accepted the clean synthetic file and rejected the harmless EICAR marker in 17 ms total. The actual bundled `server/services/uploadScanner.ts` transport independently produced the same results in 12 ms. Pausing the real scanner caused the application transport to return `SERVICE_UNAVAILABLE` in 262 ms under an explicit 250 ms test deadline; unpausing restored service. An encrypted synthetic ZIP produced the expected rejection.
+The broker currently belongs to the single Render API instance. Restarts terminate pending requests safely and workers reconnect. Future horizontal API scaling requires an explicit shared routing/broker design; a replica without a worker will return unavailable. The free Render service can sleep, restart or exhaust shared monthly allowances. Render states its free instances are unsuitable for production availability commitments. WebSocket support permits the transport but does not change those limits. [Render free-instance limits](https://render.com/docs/free), [Render WebSockets](https://render.com/docs/websocket)
 
-A manual signature reload completed in approximately five seconds with 3,628,050 signatures. The container's cgroup recorded a peak of 2,196,766,720 bytes (approximately 2.05 GiB) across startup, synthetic scans and reload, with no OOM or memory-limit events. This supports retaining the 4 GB plan; it is a small ARM64 test, not a production throughput or concurrent-update capacity guarantee.
+The safe last fallback is to pause/retry uploads while retaining the applicant’s editable draft. **Never set `UPLOAD_SCAN_REQUIRED=false` as an availability workaround.** Two worker containers on the same Mac can recover from an individual process failure, but both become unavailable if the host fails.
 
-For the staleness check, a test-only wrapper advanced the health process's clock by 72 hours while it queried the real engine. Neither the signed definitions nor the system clock was modified. Health returned exit code 3; the watchdog stopped both daemons and exited the container with code 1. The actual application transport then returned `SERVICE_UNAVAILABLE` in 122 ms. This proves the readiness/watchdog failure path under an isolated clock injection; it does not claim an authentically old signature database was loaded.
+## Optional future free host
 
-**Archive exception found and addressed in the application:** a 16,457-byte ZIP containing one advertised 16 MiB entry of repeated ASCII `0` returned clean despite `MaxFileSize 15M` and `AlertExceedsMax yes`. The compressed input is below the application's raw-upload cap. The separate `server/services/uploadArchiveGuard.ts` metadata guard now rejects that exact fixture before scanning; an independent check also accepted a normal ZIP and rejected the encrypted ZIP. Its declared limits include 1,000 entries, 15 MiB per entry, 50 MiB aggregate expansion and a 200:1 compression ratio. Do not treat ClamAV's `OK` as evidence that every advertised expansion/entry bound was enforced. The receipt preserves the failed engine-only result and the passing application-guard checks as separate evidence layers. Full staged authenticated upload testing remains required.
+A second trusted machine can run the same worker with its own credential. Oracle’s current Always Free A1 allowance is **two OCPUs and 12 GB RAM total**, with regional capacity and account eligibility constraints; it is not the older four-CPU/24-GB allowance. A suitably sized instance could host a private scanner, but no account, allocation or instance is established by this repository. Idle instances may be reclaimed, and free capacity can be unavailable. Choose an eligible home region and enforce free-resource quotas; do not silently upgrade to paid service. [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
 
-After the failure injection, the unchanged image was recreated successfully using the saved signature volume. Health returned to ready without a full definition redownload. The local scanner was then stopped to release its resource allocation; the private local signature volume remains available for repeat tests.
+Processing location, access control and institutional authorization remain relevant whether the worker is on a Saudi Mac or a cloud VM. A private connection alone does not establish data residency or legal permission to process a study.
+
+## Historical and optional infrastructure evidence
+
+The earlier local ARM64 engine receipt in `infra/clamav/local-runtime-verification.json` records real clean/EICAR, outage, stale-definition and reload checks for the prior four-GiB profile with concurrent reloads. Its measured reload peak was approximately 2.05 GiB. It does not verify the new free two-replica profile or current Render-to-worker connectivity. `preparation-verification.json` and `image-lock.json` retain their original evidence scopes.
+
+The archive metadata guard was added after a real ClamAV fixture showed that engine heuristics alone could return clean for an archive containing an oversized entry. The guard bounds advertised sizes, ratios and structures; it does not prove actual deflate size, CRC correctness or nested-content safety. Keep it before the scanner.
+
+`infra/clamav/render.yaml` remains an **optional, unselected paid private-service blueprint** for a later explicit cost decision. Earlier Render preparation was blocked by missing billing information. It is not the selected free deployment, and no paid purchase is authorized by this runbook.

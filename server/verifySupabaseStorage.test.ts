@@ -9,7 +9,7 @@ const config: ProbeConfig = {
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 const forbidden = () => json({ code: "AccessDenied", message: "sensitive provider diagnostic" }, 403);
 
-function provider(options: { publicBucket?: boolean; permissiveActor?: string; wrongIdentity?: boolean; identityExpires?: boolean; failCleanup?: boolean; brokenList?: boolean; oversizeBody?: boolean; duplicateAllowed?: boolean; foreignSigning?: boolean; networkFailure?: boolean; legacyErrors?: boolean; expirationBroken?: boolean } = {}) {
+function provider(options: { publicBucket?: boolean; permissiveActor?: string; wrongIdentity?: boolean; identityExpires?: boolean; failCleanup?: boolean; brokenList?: boolean; oversizeBody?: boolean; duplicateAllowed?: boolean; foreignSigning?: boolean; networkFailure?: boolean; legacyErrors?: boolean; expirationBroken?: boolean; hostedAnonymous?: boolean; anonymousErrorActor?: string; expiryError?: { status: number; data: unknown } } = {}) {
   const objects = new Map<string, string>();
   const calls: Array<{ url: URL; init: RequestInit; headers: Headers }> = [];
   let timestamp = Date.parse("2026-09-05T08:00:00Z");
@@ -26,6 +26,7 @@ function provider(options: { publicBucket?: boolean; permissiveActor?: string; w
     const allow = server || options.permissiveActor === actor;
     const body = typeof init.body === "string" ? init.body : "";
     const data = headers.get("content-type") === "application/json" ? JSON.parse(body || "{}") : {};
+    if ((options.hostedAnonymous && actor === "anonymous" || options.anonymousErrorActor === actor) && init.method === "POST") return json({ code: "InvalidRequest", message: "headers must have required property 'authorization'", error: "Error", statusCode: "400" }, 400);
     if (url.pathname === "/auth/v1/settings") return json({ external: { email: true } });
     if (url.pathname === "/auth/v1/user") return options.identityExpires && ++userChecks > 1 ? forbidden() : json({ id: options.wrongIdentity ? "other-user" : config.syntheticUserId, role: "authenticated", is_anonymous: false });
     if (url.pathname.includes("/bucket/")) return json({ id: config.bucket, public: !!options.publicBucket, file_size_limit: BUCKET_MAX_BYTES, allowed_mime_types: BUCKET_MIME_TYPES });
@@ -47,7 +48,7 @@ function provider(options: { publicBucket?: boolean; permissiveActor?: string; w
         signedKey = url.pathname.split(`/object/sign/${config.bucket}/`)[1];
         return json({ signedURL: `${options.foreignSigning ? "https://evil.example" : ""}/object/sign/${config.bucket}/${signedKey}?token=synthetic.signed.token` });
       }
-      if (!options.expirationBroken && timestamp >= signedAt + 2000) return forbidden();
+      if (!options.expirationBroken && timestamp >= signedAt + 5000) return options.expiryError ? json(options.expiryError.data, options.expiryError.status) : forbidden();
       return new Response(objects.get(signedKey) || "missing");
     }
     const key = url.pathname.split(`/object/${config.bucket}/`)[1];
@@ -133,6 +134,34 @@ describe("synthetic storage activation operator probe", () => {
   it("recognizes documented legacy duplicate and access-denial codes without displaying their bodies", async () => {
     const result = await verifySupabaseStorage(config, provider({ legacyErrors: true }));
     expect(result.status).toBe("PASS");
+  });
+
+  it.each(["jwt expired", "JWT expired", '"exp" claim timestamp check failed'])("accepts the observed hosted anonymous schema error and exact expiry message %s", async message => {
+    const remote = provider({ hostedAnonymous: true, expiryError: { status: 400, data: { code: "InvalidJWT", error: "InvalidJWT", statusCode: "400", message } } });
+    const result = await verifySupabaseStorage(config, remote);
+    expect(result.status).toBe("PASS");
+    expect(result.checks.find(c => c.name === "anonymous.upload_denied")?.status).toBe("PASS");
+    expect(result.checks.find(c => c.name === "server.expired_link_denied")?.status).toBe("PASS");
+    const signing = remote.calls.find(c => c.init.method === "POST" && c.url.pathname.includes("/object/sign/") && c.headers.get("apikey") === config.secretKey);
+    expect(JSON.parse(signing!.init.body as string).expiresIn).toBe(5);
+    expect(remote.objects.size).toBe(0);
+  });
+
+  it.each(["publishable", "authenticated"])("never treats missing authorization as verified denial for %s", async anonymousErrorActor => {
+    const result = await verifySupabaseStorage(config, provider({ anonymousErrorActor }));
+    expect(result.status).toBe("PARTIAL");
+    expect(result.checks.find(c => c.name === `${anonymousErrorActor}.upload_denied`)?.status).toBe("NOT_VERIFIED");
+  });
+
+  it.each([
+    { status: 400, data: { code: "InvalidJWT", error: "InvalidJWT", statusCode: "400", message: "invalid signature" } },
+    { status: 400, data: { code: "InvalidRequest", error: "Error", statusCode: "400", message: "jwt expired" } },
+    { status: 429, data: { code: "InvalidJWT", error: "InvalidJWT", statusCode: "400", message: "jwt expired" } },
+    { status: 500, data: { code: "InvalidJWT", error: "InvalidJWT", statusCode: "400", message: "jwt expired" } },
+  ])("does not misclassify an arbitrary JWT, malformed, rate-limit or server error as expiry", async expiryError => {
+    const result = await verifySupabaseStorage(config, provider({ expiryError }));
+    expect(result.status).toBe("PARTIAL");
+    expect(result.checks.find(c => c.name === "server.expired_link_denied")?.status).toBe("NOT_VERIFIED");
   });
 
   it.each([{ networkFailure: true }, { oversizeBody: true }, { duplicateAllowed: true }, { foreignSigning: true }])("cleans exact synthetic keys after uncertain or invalid upload/signing result", async options => {

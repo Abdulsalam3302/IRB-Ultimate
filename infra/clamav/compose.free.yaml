@@ -1,0 +1,80 @@
+# Free self-hosting on an existing trusted machine. The machine must stay awake.
+# The fallback container shares host/power/network with primary; a second trusted
+# host using its own token is required for host-outage redundancy.
+name: irb-private-scanner
+x-clamav: &clamav
+  image: irb-clamav:1.5.4
+  restart: unless-stopped
+  mem_limit: 3g
+  cpus: 1
+  pids_limit: 128
+  tmpfs:
+    - /run/clamav:rw,noexec,nosuid,size=256m
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "2"}
+x-worker: &worker
+  image: irb-private-scanner-worker:2.4.0
+  restart: unless-stopped
+  read_only: true
+  init: true
+  mem_limit: 192m
+  cpus: 0.5
+  pids_limit: 32
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  environment:
+    NODE_ENV: production
+    TZ: UTC
+    SCANNER_BACKEND_URL: https://irb-saudi-arabia.onrender.com
+    SCANNER_EXPECTED_ENGINE: 1.5.4
+    CLAMAV_HOST: clamav
+    CLAMAV_PORT: "3310"
+  logging:
+    driver: json-file
+    options: {max-size: "2m", max-file: "2"}
+services:
+  clamav-primary:
+    <<: *clamav
+    build:
+      context: .
+    networks:
+      primary: {aliases: [clamav]}
+      updates: {}
+    volumes:
+      - signatures-primary:/var/lib/clamav
+      - ./clamd-free.conf:/etc/clamav/clamd.conf:ro
+  worker-primary:
+    <<: *worker
+    build:
+      context: ../..
+      dockerfile: infra/scanner-worker/Dockerfile
+    env_file: ["${IRB_SCANNER_PRIMARY_ENV:?Set the absolute private primary credentials file}"]
+    networks: [primary, worker-egress]
+    depends_on:
+      clamav-primary: {condition: service_healthy}
+  clamav-fallback:
+    <<: *clamav
+    networks:
+      fallback: {aliases: [clamav]}
+      updates: {}
+    volumes:
+      - signatures-fallback:/var/lib/clamav
+      - ./clamd-free.conf:/etc/clamav/clamd.conf:ro
+  worker-fallback:
+    <<: *worker
+    env_file: ["${IRB_SCANNER_FALLBACK_ENV:?Set the absolute private fallback credentials file}"]
+    networks: [fallback, worker-egress]
+    depends_on:
+      clamav-fallback: {condition: service_healthy}
+networks:
+  primary: {internal: true}
+  fallback: {internal: true}
+  updates: {}
+  worker-egress: {}
+volumes:
+  signatures-primary: {}
+  signatures-fallback: {}

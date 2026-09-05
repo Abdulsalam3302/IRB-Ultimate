@@ -9,7 +9,7 @@ import { registerDevLoginRoutes } from "./devLogin";
 import { registerSupabaseAuthRoutes } from "./supabaseAuth";
 import { registerNativeAuthRoutes } from "./nativeAuth";
 import { registerAuthRedirectRoutes } from "./authRedirects";
-import { registerSecurity, registerApiGuards, registerErrorHandler } from "./security";
+import { registerSecurity, registerApiGuards, registerErrorHandler, createUploadAdmission } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -23,8 +23,10 @@ import { startCertificateBackupScheduler } from "../services/certificateBackup";
 import { ensureDefaultCommittee } from "../services/committeeAutoEnroll";
 import * as db from "../db";
 import * as fsSync from "node:fs";
-import { sql } from "drizzle-orm";
+import { verifyDatabaseReadiness } from "./readiness";
 import { assertStaffMfa } from "./staffAuth";
+import { attachRemoteScanner } from "../services/remoteScanner";
+import { startStorageDeletionWorker } from "../services/storageDeletion";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -58,21 +60,16 @@ async function startServer() {
   }
   const app = express();
   const server = createServer(app);
+  const closeRemoteScanner = attachRemoteScanner(server);
+  const stopStorageDeletionWorker = startStorageDeletionWorker();
   server.headersTimeout = 15_000;
   server.requestTimeout = 120_000;
   server.keepAliveTimeout = 5000;
   server.maxRequestsPerSocket = 1000;
   server.maxConnections = 200;
-  let activeUploads = 0;
-  app.use((req, res, next) => {
-    if (req.path !== "/api/trpc/application.uploadFile") return next();
-    if (activeUploads >= 2) return res.status(503).set("Retry-After", "5").json({ error: "Upload service is busy" });
-    activeUploads++;
-    res.once("close", () => { activeUploads--; });
-    next();
-  });
-  // Security headers + naive rate limit on /api/*
+  // Shared rate limiting runs before upload authentication and body allocation.
   registerSecurity(app);
+  app.use(createUploadAdmission(req => sdk.authenticateRequest(req)));
   // Body parser sizing — the 21 MB cap covers a 15 MB upload + base64 +
   // wrapping JSON, but only for the upload route. Everything else is
   // capped at 1 MB so attackers can't exhaust RAM via auth / tRPC.
@@ -118,12 +115,7 @@ async function startServer() {
   app.get("/api/ready", async (_req, res) => {
     if (!readiness || readiness.until < Date.now()) {
       try {
-        const database = await db.getDb();
-        if (!database) throw new Error("Database unavailable");
-        await database.execute(sql`SELECT bucketKey FROM request_limits LIMIT 1`);
-        await database.execute(sql`SELECT tokenHash FROM session_revocations LIMIT 1`);
-        await database.execute(sql`SELECT appointedAt FROM committee_members LIMIT 1`);
-        await database.execute(sql`SELECT humanDecisionAt FROM applications LIMIT 1`);
+        await verifyDatabaseReadiness(await db.getDb());
         readiness = { ok: true, until: Date.now() + 5000 };
       } catch { readiness = { ok: false, until: Date.now() + 5000 }; }
     }
@@ -279,8 +271,9 @@ async function startServer() {
 
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.once(signal, () => {
+      closeRemoteScanner();
       const timer = setTimeout(() => process.exit(1), 15_000).unref();
-      server.close(() => { void db.closeDatabase().finally(() => { clearTimeout(timer); process.exit(0); }); });
+      server.close(() => { void stopStorageDeletionWorker().finally(() => db.closeDatabase()).finally(() => { clearTimeout(timer); process.exit(0); }); });
       server.closeIdleConnections();
     });
   }

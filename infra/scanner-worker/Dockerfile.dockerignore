@@ -1,0 +1,9 @@
+**
+!infra
+!infra/scanner-worker
+!infra/scanner-worker/Dockerfile
+!infra/scanner-worker/package.json
+!infra/scanner-worker/package-lock.json
+!scripts
+!scripts/scanner-worker.mjs
+!scripts/scanner-worker-core.mjs

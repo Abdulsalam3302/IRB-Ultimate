@@ -135,10 +135,17 @@ export function registerIrbAgentRoutes(app: Express) {
       const id = parseApplicationId(req.params.id);
       const file = id ? await db.getFileUploadById(id) : null;
       if (!file) throw new TRPCError({ code: "NOT_FOUND" });
-      if (file.userId !== auth.user.id) assertStaffMfa(auth.user);
-      if (file.userId !== auth.user.id && auth.user.role !== "admin") {
-        if (!file.applicationId) throw new TRPCError({ code: "FORBIDDEN" });
-        await auth.caller.application.getById({ id: file.applicationId });
+      if (file.userId !== auth.user.id) {
+        if (file.applicationId) {
+          // Application ownership is independent of who uploaded its document.
+          // The shared viewer check permits the applicant and requires staff
+          // MFA plus a current assignment for cross-application reviewer access.
+          await auth.caller.application.getById({ id: file.applicationId });
+        } else if (auth.user.role === "admin") {
+          assertStaffMfa(auth.user);
+        } else {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
       }
       const { url } = await storageGet(file.fileKey, 300);
       res.redirect(302, url);

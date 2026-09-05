@@ -141,6 +141,20 @@
       "when": 1788573000000,
       "tag": "0019_human_decision_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1788574000000,
+      "tag": "0020_storage_deletion_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1788575000000,
+      "tag": "0021_identity_erasure",
+      "breakpoints": true
     }
   ]
 }

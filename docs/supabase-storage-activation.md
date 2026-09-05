@@ -1,6 +1,6 @@
 # Activate and verify private Supabase Storage
 
-This runbook prepares the IRB platform's private object storage in the new Supabase project. It does not migrate the MySQL application database, provision an ethics committee, enable certificate issuance, or establish regulatory compliance. The activation probe is ready to run; no live account or bucket verification is claimed by this document.
+This runbook describes the IRB platform's private object storage in the new Supabase project. Activation and private-access verification were completed on 5 September 2026; see the [2.4 release record](release-2.4-readiness.md) and its source-bound live receipts. This does not migrate the MySQL application database, provision an ethics committee, enable certificate issuance, or establish regulatory compliance.
 
 Use the project origin `https://yimtuqerflrqminsujfn.supabase.co` only after confirming that the operator has selected that project. Store research documents only after the institution has approved the hosting region, processor contracts, retention rules, and incident procedures. The platform's existing upload malware scanner remains required.
 
@@ -100,7 +100,7 @@ The probe performs these checks sequentially:
 3. Refuse a duplicate write, sign a short download, and compare the downloaded bytes with the original synthetic content.
 4. Attempt direct download, public-path download, listing, upload, and signing with no credentials and then with the verified publishable key. A filtered empty list counts as no object disclosure; malformed requests, transport errors, and rate limits do not count as successful denial.
 5. Perform the same negative checks with a validated synthetic-user bearer when both optional variables are supplied. Verify the publishable key and synthetic identity again after their checks so revocation or expiry cannot masquerade as permission denial. Missing or invalid identity evidence produces `NOT_VERIFIED`.
-6. Check that the short-lived test URL stops working after expiry. The probe uses a two-second test signature and waits up to five seconds; application download TTLs remain 60–300 seconds.
+6. Check that the short-lived test URL stops working after expiry. The probe uses a five-second test signature and waits up to eight seconds after receiving it; application download TTLs remain 60–300 seconds. A hosted HTTP 400 counts as expiry only for the previously successful, unchanged URL and an exact recognized expiry error. The observed missing-authorization schema error counts as denial only for the intentionally credential-free actor.
 7. In `finally`, delete only exact keys attempted by this run, including any uploads unexpectedly permitted during negative tests. Verify that this run's prefix is empty through a bounded server-side listing.
 
 The main phase is bounded to 60 seconds, cleanup to 20 seconds, each request to eight seconds, and the entire run to 30 requests. Responses are capped at 64 KiB. There are no retries, whole-bucket listings, recursive deletes, bucket-empty operations, or research-record queries. A process kill or provider outage can interrupt cleanup; the receipt's synthetic prefix identifies the only scope requiring manual inspection. Never delete the bucket or another run's prefix to resolve a cleanup failure.

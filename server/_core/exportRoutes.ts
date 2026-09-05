@@ -243,7 +243,7 @@ export function registerExportRoutes(app: Express) {
           res.send(buf);
           return;
         } catch (docxErr) {
-          console.warn("[Export Cert] DOCX failed; HTML fallback", docxErr);
+          console.warn("[Export Cert] DOCX failed; HTML fallback", safeLogError(docxErr));
         }
       }
       const artifact = await renderCertificateArtifact(payload);
@@ -264,7 +264,7 @@ export function registerExportRoutes(app: Express) {
           res.send(renderCertificateHtml(eligiblePayload));
           return;
         } catch (htmlErr) {
-          console.error("[Export Cert] HTML fallback failed", htmlErr);
+          console.error("[Export Cert] HTML fallback failed", safeLogError(htmlErr));
         }
       }
       res.status(500).type("text/html; charset=utf-8").send(

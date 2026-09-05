@@ -289,7 +289,7 @@ async function startServer() {
     startCertificateBackupScheduler();
     void ensureDefaultCommittee()
       .then(r => console.log("[committee] auto-enroll", r))
-      .catch(err => console.warn("[committee] auto-enroll failed", err));
+      .catch(err => console.warn("[committee] auto-enroll failed", safeLogError(err)));
   });
 }
 

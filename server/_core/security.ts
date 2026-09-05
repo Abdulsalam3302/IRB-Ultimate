@@ -1,3 +1,4 @@
+import { safeLogError } from "./safeLog";
 import type { Express, Request, Response, NextFunction } from "express";
 import { ENV } from "./env";
 import { consumeRateLimit } from "./requestLimits";
@@ -275,7 +276,7 @@ function errorHandler(
   _next: NextFunction
 ) {
   captureException(err, { request: { method: req.method, url: req.path } });
-  console.error("[Server error]", err instanceof Error ? err.name : "UnknownError");
+  console.error("[Server error]", safeLogError(err));
   if (res.headersSent) return _next(err);
   const code = (err as { type?: string; status?: number })?.type;
   const status = code === "entity.too.large" ? 413 : code === "entity.parse.failed" ? 400 : 500;

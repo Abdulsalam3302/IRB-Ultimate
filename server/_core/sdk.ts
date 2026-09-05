@@ -241,11 +241,11 @@ class SDKServer {
       // against the same shared secret (you shouldn't, but belt+braces).
       const expectedAud = ENV.appId || "irb-platform";
       if (iss !== undefined && iss !== "irb-platform") {
-        console.warn("[Auth] Session iss mismatch", iss);
+        console.warn("[Auth] Session issuer mismatch");
         return null;
       }
       if (aud !== undefined && aud !== expectedAud) {
-        console.warn("[Auth] Session aud mismatch", aud);
+        console.warn("[Auth] Session audience mismatch");
         return null;
       }
 

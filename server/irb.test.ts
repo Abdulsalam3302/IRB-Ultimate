@@ -141,11 +141,10 @@ describe("application.saveStage2 input validation", () => {
   it("accepts short methodology (char limits removed)", async () => {
     const ctx = createUserContext();
     const caller = appRouter.createCaller(ctx);
-    // Character limits were removed, so short values should be accepted at validation level
-    // The actual DB call may fail but validation should pass
-    try {
-      await caller.application.saveStage2({
-        id: 1,
+    // Own the draft: a shared numeric fixture can be locked by another suite.
+    const created = await caller.application.create();
+    const result = await caller.application.saveStage2({
+        id: created.id,
         researchObjectives: "Valid objectives text here",
         methodology: "short",
         sampleSize: "100",
@@ -159,10 +158,8 @@ describe("application.saveStage2 input validation", () => {
         confidentialityMeasures: "Data encryption and anonymization",
         conflictOfInterest: "None declared",
       });
-    } catch (e: any) {
-      // Should not be a BAD_REQUEST (validation error) — may be NOT_FOUND (app doesn't exist)
-      expect(e.code).not.toBe("BAD_REQUEST");
-    }
+    expect(result.success).toBe(true);
+    expect((await caller.application.getById({ id: created.id })).methodology).toBe("short");
   });
 });
 

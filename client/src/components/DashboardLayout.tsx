@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -44,13 +45,12 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
+    try { const width = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)); return Number.isFinite(width) && width >= MIN_WIDTH && width <= MAX_WIDTH ? width : DEFAULT_WIDTH; } catch { return DEFAULT_WIDTH; }
   });
   const { loading, user } = useAuth();
 
   useEffect(() => {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
+    try { localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString()); } catch { /* storage unavailable */ }
   }, [sidebarWidth]);
 
   if (loading) {
@@ -263,7 +263,7 @@ function DashboardLayoutContent({
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={async () => {
-                    try { await logout(); } finally { window.location.href = "/"; }
+                    try { await logout(); window.location.href = "/"; } catch { toast.error("Sign-out could not be confirmed. Please retry."); }
                   }}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >

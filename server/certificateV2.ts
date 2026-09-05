@@ -1,335 +1,180 @@
-// Formal NCBE-style certificate — loads design template from
-// server/templates/certificate.html (white paper, guilloché frame).
-//
-//   renderCertificateHtml(data)  — HTML for PDF generator & preview
-//   renderCertificatePdf(data)   — A4 PDF via Playwright Chromium
-
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium, type Browser } from "playwright";
 import QRCode from "qrcode";
 import type { Application } from "../drizzle/schema";
 import { storagePut } from "./storage";
-import { AUTHOR } from "@shared/branding";
+import { PLATFORM } from "@shared/branding";
 import { backupCertificateArtifact } from "./services/certificateBackup";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const escapeHtml = (value: unknown): string => String(value ?? "")
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-function escapeHtml(s: string | null | undefined): string {
-  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function loadTemplate(): string {
-  return readFileSync(join(__dir, "templates", "certificate.html"), "utf8");
-}
-
-interface CertData {
+export interface CertData {
   app: Application;
   applicantName: string | null;
   applicantEmail: string | null;
-  // When true the certificate is the publicly-downloadable artifact reached
-  // by anyone via the verify link, so it must redact the same fields
-  // verify.verifyIrb withholds: applicant email, department, funding source,
-  // and the internal AI scores. The stored PDF always sets this.
   redactForPublic?: boolean;
 }
 
-function verifyBaseUrl(): string {
-  const base = (process.env.VITE_PUBLIC_SITE_URL ?? process.env.PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
-  return base || "https://irb-saudi-arabia.vercel.app";
-}
-
-/**
- * Real, scannable QR encoding the public verification URL for this IRB
- * number. Uses the synchronous QRCode.create() (renderCertificateHtml is
- * sync) and emits a single SVG path. Falls back to a static placeholder
- * only if generation fails, so certificate rendering never throws here.
- */
-function qrSvg(verifyUrl: string, code: string): string {
-  try {
-    const qr = QRCode.create(verifyUrl, { errorCorrectionLevel: "M" });
-    const size = qr.modules.size;
-    const data = qr.modules.data;
-    const margin = 2;
-    const total = size + margin * 2;
-    let path = "";
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        if (data[y * size + x]) {
-          path += `M${x + margin} ${y + margin}h1v1h-1z`;
-        }
-      }
-    }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" shape-rendering="crispEdges" style="width:100%;height:100%"><rect width="${total}" height="${total}" fill="#ffffff"/><path d="${path}" fill="#064e3b"/></svg>`;
-  } catch (err) {
-    console.warn("[Certificate] QR generation failed, using placeholder:", err);
-  }
-  const short = escapeHtml(code.replace(/^IRB-/, "").slice(-12));
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 84" shape-rendering="crispEdges" style="width:100%;height:100%">
-    <rect width="84" height="84" fill="#ffffff"/>
-    <rect x="4" y="4" width="76" height="76" fill="none" stroke="#064e3b" stroke-width="1.5"/>
-    <text x="42" y="48" text-anchor="middle" font-family="ui-monospace,monospace" font-size="6.5" fill="#064e3b">${short}</text>
-  </svg>`;
-}
-
-function buildAiScoresHtml(app: Application): string {
-  const s1 = app.stage1AiScore;
-  const s2 = app.stage2AiScore;
-  if (s1 == null && s2 == null) {
-    return `<div class="scores" style="grid-template-columns: 1fr; padding: 14px 0; margin-bottom: 28px;">
-      <div style="display:flex; align-items:center; gap: 18px; padding: 12px 18px; background: var(--paper-2); border: 1px dashed var(--rule); border-radius: 6px;">
-        <div style="flex:1;">
-          <div class="k" style="font-family:ui-monospace,monospace; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color: var(--ink-muted);">AI assessment</div>
-          <div style="font-family:Inter,system-ui; font-size:12.5px; color: var(--ink-soft); margin-top: 2px;">Stage 1 compliance and Stage 2 ethics scores are pending; assessment will appear on the registry record when finalised.</div>
-        </div>
-        <span style="font-family:ui-monospace,monospace; font-size:10.5px; color: var(--ink-muted); letter-spacing:.16em; text-transform:uppercase;">Pending</span>
-      </div>
-    </div>`;
-  }
-  return `<div class="scores" style="margin-bottom: 28px;">
-    <div class="score"><div class="k">AI compliance · Stage 1</div><div class="ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#e5e7eb" stroke-width="3"/><circle cx="18" cy="18" r="15" fill="none" stroke="#10b981" stroke-width="3" stroke-dasharray="${s1 ?? 0} 100" transform="rotate(-90 18 18)"/></svg><span class="n">${s1 ?? "—"}</span></div></div>
-    <div class="score"><div class="k">AI ethics · Stage 2</div><div class="ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#e5e7eb" stroke-width="3"/><circle cx="18" cy="18" r="15" fill="none" stroke="#10b981" stroke-width="3" stroke-dasharray="${s2 ?? 0} 100" transform="rotate(-90 18 18)"/></svg><span class="n">${s2 ?? "—"}</span></div></div>
-  </div>`;
-}
-
-const OVERLAY_STAMP_CSS = `
-  .decision-stamp { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-  .decision-stamp .stamp-inner { transform: rotate(-18deg); border: 6px solid #dc2626; border-radius: 8px; padding: 18px 28px; background: rgba(254,242,242,.92); box-shadow: 0 0 0 4px rgba(220,38,38,.15); }
-  .decision-stamp .stamp-text { font-size: 42px; font-weight: 900; letter-spacing: 4px; color: #dc2626; text-transform: uppercase; text-align: center; line-height: 1; font-family: Inter, system-ui, sans-serif; }
-  .decision-stamp .stamp-sub { font-size: 11px; font-weight: 600; color: #991b1b; text-align: center; margin-top: 8px; letter-spacing: 1px; font-family: Inter, system-ui, sans-serif; }
-`;
-
-export function renderCertificateHtml(data: CertData): string {
-  const { app, applicantName, redactForPublic } = data;
-  // Drop the email entirely on the public artifact (don't leak PII to anon
-  // verifiers); keep it only on internal copies.
-  const applicantEmail = redactForPublic ? null : data.applicantEmail;
-  const approvedAt = app.approvedAt ? new Date(app.approvedAt) : new Date();
-  const approvalDate = approvedAt.toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
-  const approvalTime = approvedAt.toISOString().slice(0, 19).replace("T", " ") + " UTC";
-  const expiryDate = new Date(approvedAt.getTime() + 365 * 24 * 60 * 60 * 1000)
-    .toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
-  let hijriDate = "";
-  try {
-    hijriDate = approvedAt.toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "long", day: "numeric" });
-  } catch { /* ignore */ }
-
-  const irbNumber = app.irbNumber || `IRB-PENDING-${app.id}`;
-  const reviewCategory = String(app.irbCategory || "full_board").replace(/_/g, " ");
-  const researchType = String(app.researchType || "—").replace(/_/g, " ");
-  const isRetracted = app.status === "retracted";
-  const isRejected = app.status === "rejected" || app.status === "permanently_rejected";
-  const statusLabel = isRetracted ? "RETRACTED" : isRejected ? "REJECTED" : "APPROVED";
-  const statusColor = isRetracted || isRejected ? "#dc2626" : "var(--jade)";
-  const verifyUrl = `${verifyBaseUrl()}/verify/${encodeURIComponent(irbNumber)}`;
-  const verifyHost = verifyBaseUrl().replace(/^https?:\/\//, "");
-  const submittedBy = applicantName
-    ? `${escapeHtml(applicantName)}${applicantEmail ? ` <span class="sub mono" style="font-size:11px;">&lt;${escapeHtml(applicantEmail)}&gt;</span>` : ""}`
-    : "—";
-  const stampMonth = String(approvedAt.getMonth() + 1).padStart(2, "0");
-  const stampYear = approvedAt.getFullYear();
-  const standingLabel = isRetracted
-    ? "Retracted · Inactive"
-    : isRejected
-      ? "Rejected · Inactive"
-      : "Approved · Active";
-  const standingColor = isRetracted || isRejected ? "#dc2626" : "var(--jade)";
-
-  let html = loadTemplate();
-  html = html.replace("</style>", `${isRetracted || isRejected ? OVERLAY_STAMP_CSS : ""}</style>`);
-
-  if (isRetracted) {
-    html = html.replace(
-      "<body>",
-      `<body><div class="decision-stamp"><div class="stamp-inner"><div class="stamp-text">[ Retracted ]</div><div class="stamp-sub">${escapeHtml(app.retractionReason || "Approval withdrawn")} · سحب</div></div></div>`,
-    );
-  } else if (isRejected) {
-    html = html.replace(
-      "<body>",
-      `<body><div class="decision-stamp"><div class="stamp-inner"><div class="stamp-text">[ Rejected ]</div><div class="stamp-sub">${escapeHtml(app.rejectionReason || "Application rejected")} · رفض</div></div></div>`,
-    );
-  }
-
-  // On the public artifact, replace the internal AI score panel with a
-  // neutral standing note rather than exposing compliance/ethics numbers.
-  const aiScoresHtml = redactForPublic
-    ? `<div class="scores" style="grid-template-columns: 1fr; padding: 14px 0; margin-bottom: 28px;">
-      <div style="display:flex; align-items:center; gap: 18px; padding: 12px 18px; background: var(--paper-2); border: 1px dashed var(--rule); border-radius: 6px;">
-        <div style="flex:1;">
-          <div class="k" style="font-family:ui-monospace,monospace; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color: var(--ink-muted);">Ethics standing</div>
-          <div style="font-family:Inter,system-ui; font-size:12.5px; color: var(--ink-soft); margin-top: 2px;">This study completed the platform's two-stage AI compliance and committee ethics review and was approved. Detailed scores are retained on the confidential institutional record.</div>
-        </div>
-        <span style="font-family:ui-monospace,monospace; font-size:10.5px; color: var(--jade); letter-spacing:.16em; text-transform:uppercase;">Reviewed</span>
-      </div>
-    </div>`
-    : buildAiScoresHtml(app);
-  const pendingBlock = html.match(/<div class="scores" style="grid-template-columns: 1fr;[\s\S]*?<\/div>\s*<\/div>/)?.[0];
-  if (pendingBlock) html = html.replace(pendingBlock, aiScoresHtml);
-
-  const replacements: Record<string, string> = {
-    "{{IRB_NUMBER}}": escapeHtml(irbNumber),
-    "{{VERIFY_URL}}": escapeHtml(verifyUrl),
-    "{{VERIFY_HOST}}": escapeHtml(verifyHost),
-    "{{QR_SVG}}": qrSvg(verifyUrl, irbNumber),
-    "IRB-SA-2026-00024": escapeHtml(irbNumber),
-    "Dr. Test": escapeHtml(app.principalInvestigator || "—"),
-    "University": escapeHtml(app.piInstitution || "—"),
-    "Medicine": redactForPublic ? "—" : escapeHtml(app.piDepartment || "—"),
-    "Clinical Trial": escapeHtml(researchType),
-    "Full Board": escapeHtml(reviewCategory),
-    "Not disclosed": redactForPublic ? "Not disclosed" : escapeHtml(app.fundingSource || "Not disclosed"),
-    "Not specified": escapeHtml(app.estimatedDuration || "Not specified"),
-    "Dr. Abdulsalam Aleid <span class=\"sub mono\" style=\"font-size:11px;\">&lt;owner@irb-ultimate.local&gt;</span>": submittedBy,
-    "22 May 2026 · 10:54 UTC": escapeHtml(`${approvalDate} · ${approvalTime.split(" ")[1]} UTC`),
-    "22 May 2027": escapeHtml(expiryDate),
-    "2026-05-22 10:54:30 UTC": escapeHtml(approvalTime),
-    "2026 · 05": escapeHtml(`${stampYear} · ${stampMonth}`),
-    "AHSS · 2026": escapeHtml(`AHSS · ${stampYear}`),
-    "Approved · Active": escapeHtml(standingLabel),
-  };
-
-  for (const [from, to] of Object.entries(replacements)) {
-    html = html.split(from).join(to);
-  }
-
-  html = html.replace(
-    `<span class="v" style="color: var(--jade); display:inline-flex; align-items:center; gap:6px;">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4.5 4.5L19 7"/></svg>
-        APPROVED
-      </span>`,
-    `<span class="v" style="color: ${statusColor}; display:inline-flex; align-items:center; gap:6px;">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4.5 4.5L19 7"/></svg>
-        ${statusLabel}
-      </span>`,
-  );
-
-  if (hijriDate) {
-    html = html.replace("٦ ذو الحجة ١٤٤٧ هـ", escapeHtml(hijriDate));
-  }
-
-  html = html.replace(
-    `<div class="v" style="color: var(--jade);">Approved · Active</div>`,
-    `<div class="v" style="color: ${standingColor};">${escapeHtml(standingLabel)}</div>`,
-  );
-
-  if (isRetracted) {
-    html = html.replace("APPROVED", "RETRACTED");
-    html = html.replace('<div class="stamp-approved">', '<div class="stamp-approved" style="border-color:#dc2626;color:#dc2626;">');
-  } else if (isRejected) {
-    html = html.replace("APPROVED", "REJECTED");
-    html = html.replace('<div class="stamp-approved">', '<div class="stamp-approved" style="border-color:#dc2626;color:#dc2626;">');
-  }
-
-  // Signature block uses AUTHOR from branding
-  html = html.replace("Dr. Abdulsalam Aleid, MBBS, MBA, MIM", escapeHtml(AUTHOR.nameEn + ", MBBS, MBA, MIM"));
-
-  return html;
-}
-
-let _browserPromise: Promise<import("playwright").Browser> | null = null;
-async function getBrowser() {
-  if (!_browserPromise) {
-    _browserPromise = chromium.launch({ headless: true });
-    _browserPromise.catch(() => { _browserPromise = null; });
-  }
-  return _browserPromise;
-}
-
-export async function renderCertificatePdf(data: CertData): Promise<Buffer> {
-  const { pdfSemaphore } = await import("./_core/concurrency");
-  return pdfSemaphore.run(async () => {
-    const html = renderCertificateHtml(data);
-    const browser = await getBrowser();
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    await page.route("**/*", async route => {
-      const url = route.request().url();
-      if (url.startsWith("data:")) return route.continue();
-      return route.abort();
-    });
-    try {
-      await page.setContent(html, { waitUntil: "load", timeout: 15000 });
-      const pdf = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "0", bottom: "0", left: "0", right: "0" },
-      });
-      return Buffer.from(pdf);
-    } finally {
-      await ctx.close();
-    }
-  });
-}
-
-export const CERTIFICATE_ELIGIBLE_STATUSES = [
-  "approved",
-  "rejected",
-  "retracted",
-  "permanently_rejected",
-] as const;
-
+export const CERTIFICATE_ELIGIBLE_STATUSES = ["approved", "rejected", "retracted", "permanently_rejected"] as const;
 export function isCertificateEligibleStatus(status: string | null | undefined): boolean {
   return (CERTIFICATE_ELIGIBLE_STATUSES as readonly string[]).includes(String(status ?? ""));
 }
 
-export type CertificateArtifact = {
-  buffer: Buffer;
-  contentType: string;
-  extension: "pdf" | "html";
-};
+function verifyBaseUrl(): string {
+  const configured = process.env.PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL;
+  if (!configured && process.env.NODE_ENV === "production") throw new Error("A canonical PUBLIC_SITE_URL is required for certificate verification");
+  const url = new URL(configured || "http://localhost:3000");
+  if (url.username || url.password || url.search || url.hash ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname)))) {
+    throw new Error("Invalid certificate verification origin");
+  }
+  return url.origin;
+}
 
-/** Playwright PDF, or HTML-print fallback when Chromium is missing / OOM (Render free). */
+function certificateRecord(data: CertData) {
+  const { app, redactForPublic } = data;
+  if (!isCertificateEligibleStatus(app.status)) throw new Error("A recorded final decision is required before generating a decision document");
+  if (!Number.isSafeInteger(app.humanDecisionByUserId) || (app.humanDecisionByUserId ?? 0) <= 0 ||
+      !app.humanDecisionAt || !Number.isFinite(new Date(app.humanDecisionAt).getTime())) {
+    throw new Error("Verified human decision provenance is required; legacy automated approvals need committee review");
+  }
+  const rejected = app.status === "rejected" || app.status === "permanently_rejected";
+  const retracted = app.status === "retracted";
+  const approvedAt = app.approvedAt ? new Date(app.approvedAt) : null;
+  if (!rejected && (!app.irbNumber || !approvedAt || !Number.isFinite(approvedAt.getTime()))) {
+    throw new Error("Approval number and recorded approval date are required");
+  }
+  const number = app.irbNumber || `APPLICATION-${app.id}`;
+  const date = approvedAt && Number.isFinite(approvedAt.getTime()) ? approvedAt.toISOString().replace("T", " ").replace(".000Z", " UTC") : "Not applicable — no approval recorded";
+  const status = retracted ? "RETRACTED" : rejected ? "REJECTED" : "APPROVED";
+  const reason = redactForPublic ? "" : retracted ? app.retractionReason : rejected ? app.rejectionReason : "";
+  return {
+    number, date, status, reason,
+    title: retracted ? "Retraction notice" : rejected ? "Decision notice — rejection" : "Research ethics decision record",
+    statusLabel: retracted ? "[ Retracted ] · سحب · RETRACTED" : rejected ? "[ Rejected ] · رفض · REJECTED" : "APPROVED · موافقة مسجّلة",
+    standing: retracted ? "Retracted · Inactive" : rejected ? "Rejected · No approval" : "Approved — verify current conditions",
+    notice: retracted ? "The previously recorded approval has been withdrawn. This notice does not authorize research activity."
+      : rejected ? "The application was rejected. No authorization to conduct the proposed research is conferred by this document."
+      : "The platform records an approval decision for the protocol identified above. Conduct is subject to the authorized committee's conditions and applicable local requirements.",
+    validity: "No expiry date is inferred by this platform. Confirm the approved duration, renewal requirements, and decision conditions in the authorized committee record.",
+    verifyUrl: `${verifyBaseUrl()}/verify/${encodeURIComponent(number)}`,
+  };
+}
+
+function qrSvg(url: string): string {
+  // Failure is explicit: a decorative image must never masquerade as a QR code.
+  const qr = QRCode.create(url, { errorCorrectionLevel: "M" });
+  const size = qr.modules.size;
+  let path = "";
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    if (qr.modules.data[y * size + x]) path += `M${x + 4} ${y + 4}h1v1h-1z`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size + 8} ${size + 8}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="white"/><path d="${path}" fill="#174d39"/></svg>`;
+}
+
+export function renderCertificateHtml(data: CertData): string {
+  const record = certificateRecord(data);
+  const app = data.app;
+  const rows = data.redactForPublic ? [] : [
+    ["Department", app.piDepartment], ["Funding source", app.fundingSource],
+    ["Applicant", data.applicantName], ["Applicant email", data.applicantEmail],
+    ["AI Stage 1 (advisory)", app.stage1AiScore], ["AI Stage 2 (advisory)", app.stage2AiScore],
+  ];
+  const replacements: Record<string, string> = {
+    DOCUMENT_TITLE: escapeHtml(record.title), PLATFORM_NAME: escapeHtml(PLATFORM.nameEn),
+    IRB_NUMBER: escapeHtml(record.number), STATUS_COLOR: record.status === "APPROVED" ? "#174d39" : "#991b1b",
+    STATUS_LABEL: escapeHtml(record.statusLabel), RESEARCH_TITLE: escapeHtml(app.researchTitle || "Not provided"),
+    PRINCIPAL_INVESTIGATOR: escapeHtml(app.principalInvestigator || "Not provided"),
+    INSTITUTION: escapeHtml(app.piInstitution || "Not provided"),
+    INTERNAL_ROWS: rows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value ?? "Not available")}</td></tr>`).join(""),
+    RESEARCH_TYPE: escapeHtml(app.researchType?.replace(/_/g, " ") || "Not provided"),
+    REVIEW_CATEGORY: escapeHtml(app.irbCategory?.replace(/_/g, " ") || "Not provided"),
+    APPROVAL_DATE: escapeHtml(record.date), STANDING: escapeHtml(record.standing),
+    DECISION_NOTICE: escapeHtml(record.notice), VALIDITY_NOTICE: escapeHtml(record.validity),
+    REASON: record.reason ? `<p>${escapeHtml(record.reason)}</p>` : "",
+    QR_SVG: qrSvg(record.verifyUrl), VERIFY_URL: escapeHtml(record.verifyUrl),
+    GENERATED_AT: escapeHtml(new Date().toISOString().slice(0, 19).replace("T", " ")),
+  };
+  // Single pass: applicant text that resembles another template token stays data.
+  return readFileSync(join(__dir, "templates", "certificate.html"), "utf8")
+    .replace(/\{\{([A-Z_]+)\}\}/g, (_match, key: string) => {
+      if (!(key in replacements)) throw new Error(`Unknown certificate template token: ${key}`);
+      return replacements[key];
+    });
+}
+
+let browserPromise: Promise<Browser> | null = null;
+async function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    browserPromise = chromium.launch({ headless: true }).then(browser => {
+      browser.once("disconnected", () => { browserPromise = null; });
+      return browser;
+    });
+    browserPromise.catch(() => { browserPromise = null; });
+  }
+  return browserPromise;
+}
+
+export async function renderCertificatePdf(data: CertData): Promise<Buffer> {
+  const html = renderCertificateHtml(data);
+  const { pdfSemaphore } = await import("./_core/concurrency");
+  return pdfSemaphore.run(async () => {
+    const browser = await getBrowser();
+    const ctx = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
+    const timeout = setTimeout(() => { void ctx.close().catch(() => undefined); }, 20000);
+    try {
+      await ctx.route("**/*", route => route.abort());
+      const page = await ctx.newPage();
+      await page.setContent(html, { waitUntil: "load", timeout: 15000 });
+      return Buffer.from(await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true }));
+    } finally { clearTimeout(timeout); await ctx.close().catch(() => undefined); }
+  });
+}
+
+export type CertificateArtifact = { buffer: Buffer; contentType: string; extension: "pdf" | "html" };
 export async function renderCertificateArtifact(data: CertData): Promise<CertificateArtifact> {
+  // Validate before fallback: invalid decisions are never rendered as approved.
+  certificateRecord(data);
   try {
-    const pdf = await renderCertificatePdf(data);
-    return { buffer: pdf, contentType: "application/pdf", extension: "pdf" };
-  } catch (err) {
-    console.warn("[Certificate] Playwright PDF unavailable; HTML print fallback", err);
-    const html = renderCertificateHtml(data);
-    return {
-      buffer: Buffer.from(html, "utf8"),
-      contentType: "text/html; charset=utf-8",
-      extension: "html",
-    };
+    return { buffer: await renderCertificatePdf(data), contentType: "application/pdf", extension: "pdf" };
+  } catch {
+    console.warn("[Certificate] PDF renderer unavailable; returning explicitly typed printable HTML");
+    return { buffer: Buffer.from(renderCertificateHtml(data), "utf8"), contentType: "text/html; charset=utf-8", extension: "html" };
   }
 }
 
 export async function generateAndStoreCertificatePdf(data: CertData): Promise<string> {
-  // The stored artifact is fetched by anyone with the verify link — force the
-  // public redaction regardless of what the caller passed.
-  const payload = { ...data, redactForPublic: true };
-  const artifact = await renderCertificateArtifact(payload);
+  const artifact = await renderCertificateArtifact({ ...data, redactForPublic: true });
   const key = `certificates/${(data.app.irbNumber || `app-${data.app.id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}-${Date.now()}.${artifact.extension}`;
   const { url } = await storagePut(key, artifact.buffer, artifact.contentType);
-  void backupCertificateArtifact(key, artifact.buffer, artifact.contentType).catch(err => {
-    console.warn("[Certificate] backup copy failed", err);
+  await backupCertificateArtifact(key, artifact.buffer, artifact.contentType).catch(() => {
+    console.warn("[Certificate] backup copy failed; stored primary artifact retained");
   });
   return url;
 }
 
 export async function renderCertificateDocx(data: CertData): Promise<Buffer> {
   const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
-  const { app, applicantName } = data;
-  const irb = app.irbNumber || `IRB-PENDING-${app.id}`;
-  const status = app.status === "retracted" ? "RETRACTED" : (app.status === "rejected" || app.status === "permanently_rejected") ? "REJECTED" : "APPROVED";
-  const verify = `${verifyBaseUrl()}/verify/${encodeURIComponent(irb)}`;
-  const doc = new Document({
-    sections: [{
-      children: [
-        new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("NBCE Digital IRB — Saudi Arabia")] }),
-        new Paragraph({ children: [new TextRun({ text: status, bold: true })] }),
-        new Paragraph({ children: [new TextRun(`IRB number: ${irb}`)] }),
-        new Paragraph({ children: [new TextRun(`Principal investigator: ${app.principalInvestigator || "—"}`)] }),
-        new Paragraph({ children: [new TextRun(`Institution: ${app.piInstitution || "—"}`)] }),
-        new Paragraph({ children: [new TextRun(`Applicant: ${applicantName || "—"}`)] }),
-        new Paragraph({ children: [new TextRun(`Title: ${app.researchTitle || "—"}`)] }),
-        new Paragraph({ children: [new TextRun(`Approving authority: Dr. Abdulsalam Aleid`)] }),
-        new Paragraph({ children: [new TextRun(`Verify: ${verify}`)] }),
-      ],
-    }],
-  });
+  const record = certificateRecord(data);
+  const entries: Array<[string, unknown]> = [
+    ["Standing", record.standing], ["IRB number / record", record.number],
+    ["Research title", data.app.researchTitle], ["Principal investigator", data.app.principalInvestigator],
+    ["Institution", data.app.piInstitution], ["Study type", data.app.researchType],
+    ["Review category", data.app.irbCategory], ["Recorded approval date", record.date],
+    ...(!data.redactForPublic ? [["Applicant", data.applicantName], ["Applicant email", data.applicantEmail], ["Department", data.app.piDepartment], ["Funding source", data.app.fundingSource]] as Array<[string, unknown]> : []),
+  ];
+  const doc = new Document({ creator: PLATFORM.nameEn, title: record.title, sections: [{ children: [
+    new Paragraph({ heading: HeadingLevel.HEADING_1, text: `${PLATFORM.nameEn} — ${record.title}` }),
+    new Paragraph({ children: [new TextRun({ text: record.statusLabel, bold: true })] }),
+    ...entries.map(([key, value]) => new Paragraph(`${key}: ${value ?? "Not available"}`)),
+    new Paragraph(record.notice), ...(record.reason ? [new Paragraph(record.reason)] : []),
+    new Paragraph(record.validity), new Paragraph(`Verify current standing: ${record.verifyUrl}`),
+    new Paragraph("AI analyses are advisory. This is a platform decision record, not a handwritten or cryptographic signature or a claim of government accreditation."),
+  ] }] });
   return Buffer.from(await Packer.toBuffer(doc));
 }

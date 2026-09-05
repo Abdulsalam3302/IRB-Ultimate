@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+node_modules
+dist
+uploads
+backups
+.manus
+.manus-logs
+.vercel
+.planning
+*.log
+.DS_Store

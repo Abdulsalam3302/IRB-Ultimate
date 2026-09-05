@@ -4,7 +4,7 @@ import type { LiteratureItem } from "./types";
 // We need this to filter out items that the search APIs returned but
 // that aren't actually relevant to the applicant's protocol. A real
 // search-engine reranker is overkill; a token-overlap score with
-// medical-stopword removal does ~90% of the job for free.
+// medical-stopword removal is an inexpensive lexical heuristic, not validated semantic relevance.
 
 const STOPWORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "been", "but", "by", "for", "from",
@@ -18,14 +18,17 @@ const STOPWORDS = new Set([
   "including", "such", "also", "however", "thus", "than", "may", "can", "could",
   "would", "should", "if", "when", "where", "all", "any", "some", "more", "most",
   "new", "two", "one", "three", "four", "five",
+  "دراسة", "بحث", "على", "في", "من", "الى", "إلى", "عن", "بين", "التي", "الذي", "هذه", "هذا", "المرضى", "نتائج",
 ]);
 
 function tokenize(s: string): Set<string> {
   if (!s) return new Set();
   return new Set(
     s
+      .normalize("NFKC")
       .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\p{M}/gu, "")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
       .split(/\s+/)
       .filter(t => t.length >= 3 && !STOPWORDS.has(t))
   );
@@ -81,7 +84,7 @@ export function scoreRelevance(query: string, items: LiteratureItem[]): Literatu
     let overlap = 0;
     qTokens.forEach(t => { if (dTokens.has(t)) overlap++; });
     const jaccard = overlap / Math.max(qTokens.size, 1);
-    const abstractBonus = it.abstract && it.abstract.length > 50 ? 0.1 : 0;
+    const abstractBonus = overlap > 0 && it.abstract && it.abstract.length > 50 ? 0.1 : 0;
     const relevance = Math.min(1, jaccard + abstractBonus);
     return { ...it, relevance: Number(relevance.toFixed(3)) };
   });
@@ -105,7 +108,7 @@ export function verifyAccessibility(items: LiteratureItem[]): LiteratureItem[] {
     if (it.url) {
       try {
         const u = new URL(it.url);
-        if (!u.protocol.startsWith("http")) issues.push("non-http URL");
+        if (u.protocol !== "https:" || u.username || u.password) issues.push("unsafe URL");
       } catch {
         issues.push("malformed URL");
       }
@@ -113,7 +116,8 @@ export function verifyAccessibility(items: LiteratureItem[]): LiteratureItem[] {
       issues.push("no URL");
     }
     if (it.source === "clinicaltrials" && !it.trialStatus) issues.push("trial missing status");
-    return { ...it, accessibilityIssues: issues.length > 0 ? issues : undefined };
+    const unsafe = issues.some(issue => ["unsafe URL", "malformed URL"].includes(issue));
+    return { ...it, ...(unsafe ? { url: undefined } : {}), accessibilityIssues: issues.length > 0 ? issues : undefined };
   });
 }
 

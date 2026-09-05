@@ -1,4 +1,8 @@
-import { and, eq, desc, sql, ne, count, avg, inArray, isNull, or, lte } from "drizzle-orm";
+import { safeLogError } from "./_core/safeLog";
+import { randomBytes } from "node:crypto";
+import { TRPCError } from "@trpc/server";
+import { listMissingRequirements, STAGE1_FIELDS, STAGE2_FIELDS } from "./services/irb.validation";
+import { and, eq, desc, sql, ne, count, avg, inArray, isNull, or, lte, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -19,30 +23,35 @@ import {
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
+import { boundedInt } from "./_core/limits";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: ReturnType<typeof createMysqlPool> | null = null;
 
 // Capture the owner openId ONCE at module load (SA-26). Subsequent edits
 // to process.env or ENV.ownerOpenId won't change who gets auto-promoted —
 // a filesystem-write attack against the running container's .env can no
 // longer silently re-attribute admin on next login.
 const BOOT_OWNER_OPEN_ID = ENV.ownerOpenId;
-const BOOT_OWNER_EMAIL = ENV.ownerEmail;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      if (ENV.isProduction) {
-        _db = drizzle(createMysqlPool(process.env.DATABASE_URL));
-      } else {
-        _db = drizzle(process.env.DATABASE_URL);
-      }
+      _pool = createMysqlPool(process.env.DATABASE_URL);
+      _db = drizzle(_pool);
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      console.warn("[Database] Failed to connect:", safeLogError(error));
       _db = null;
     }
   }
   return _db;
+}
+
+export async function closeDatabase(): Promise<void> {
+  const pool = _pool;
+  _pool = null;
+  _db = null;
+  if (pool) await pool.promise().end();
 }
 
 // ─── User helpers ───────────────────────────────────────────────────────────
@@ -84,22 +93,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = 'admin';
       updateSet.role = 'admin';
     }
-    else if (BOOT_OWNER_EMAIL && user.email?.toLowerCase() === BOOT_OWNER_EMAIL) {
-      // Email-based promotion is a ONE-TIME bootstrap, same policy as the
-      // native-register and Supabase paths: once any admin exists, an
-      // unverified email claim on a legacy-OAuth login can never mint a
-      // new admin. The genuine owner keeps admin because the role is
-      // already persisted on their row.
-      if (!(await adminExists())) {
-        values.role = 'admin';
-        updateSet.role = 'admin';
-      }
-    }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
+    console.error("[Database] Failed to upsert user:", safeLogError(error));
     throw error;
   }
 }
@@ -165,12 +163,7 @@ export async function adminExists(): Promise<boolean> {
 /**
  * Create a new email/password user. Email is normalised to lowercase.
  *
- * SECURITY (admin bootstrap): the platform owner email (BOOT_OWNER_EMAIL) is
- * promoted to admin ONLY when no admin account exists yet — a one-time
- * bootstrap during initial setup. Once an admin exists the path is closed,
- * so an attacker cannot self-register the owner email later to seize admin.
- * Native registration is otherwise never auto-promoted; subsequent admins are
- * granted by an existing admin via updateUserRole or by OWNER_OPEN_ID match.
+ * Registration never grants administrator authority from a claimed email.
  * Returns the persisted row.
  */
 export async function createLocalUser(input: {
@@ -182,8 +175,9 @@ export async function createLocalUser(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const normalizedEmail = input.email.trim().toLowerCase();
-  const isOwnerEmail = Boolean(BOOT_OWNER_EMAIL) && normalizedEmail === BOOT_OWNER_EMAIL;
-  const role: "user" | "admin" = isOwnerEmail && !(await adminExists()) ? "admin" : "user";
+  // A claimed email address is not a verified identity. Provision the first
+  // administrator through an authenticated operator or verified identity flow.
+  const role = "user" as const;
   await db.insert(users).values({
     openId: input.openId,
     name: input.name,
@@ -205,6 +199,8 @@ export async function createLocalUser(input: {
 export async function purgeExampleTestAccounts(): Promise<{ users: number; applications: number }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const db = tx;
   const targets = await db
     .select({ id: users.id, email: users.email })
     .from(users)
@@ -237,6 +233,7 @@ export async function purgeExampleTestAccounts(): Promise<{ users: number; appli
   await db.delete(users).where(inArray(users.id, userIds));
 
   return { users: userIds.length, applications: appIds.length };
+  });
 }
 
 export async function getAllUsers() {
@@ -313,15 +310,17 @@ export async function eraseUserAccount(userId: number): Promise<{
 }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const db = tx;
 
-  const apps = await db.select({ id: applications.id, status: applications.status })
+  const apps = await db.select({ id: applications.id, status: applications.status, submittedAt: applications.submittedAt })
     .from(applications).where(eq(applications.applicantId, userId));
   const NEVER_SUBMITTED = new Set([
     "draft", "declaration_pending",
     "stage1_pending", "stage1_failed",
     "stage2_pending", "stage2_failed",
   ]);
-  const draftIds = apps.filter(a => NEVER_SUBMITTED.has(a.status as string)).map(a => a.id);
+  const draftIds = apps.filter(a => !a.submittedAt && NEVER_SUBMITTED.has(a.status as string)).map(a => a.id);
   const retained = apps.length - draftIds.length;
 
   if (draftIds.length) {
@@ -354,6 +353,7 @@ export async function eraseUserAccount(userId: number): Promise<{
   }).where(eq(users.id, userId));
 
   return { deletedDraftApplications: draftIds.length, retainedRegulatoryApplications: retained };
+  });
 }
 
 // ─── Application helpers ────────────────────────────────────────────────────
@@ -361,8 +361,13 @@ export async function eraseUserAccount(userId: number): Promise<{
 export async function createApplication(data: InsertApplication) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(applications).values(data);
-  return result[0].insertId;
+  return db.transaction(async tx => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, data.applicantId)).for("update");
+    const [drafts] = await tx.select({ count: count() }).from(applications).where(and(eq(applications.applicantId, data.applicantId), inArray(applications.status, ["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"])));
+    if (drafts.count >= boundedInt(process.env.MAX_OPEN_DRAFTS_PER_USER, 25, 1, 1000)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Open application limit reached. Complete an existing application first." });
+    const result = await tx.insert(applications).values(data);
+    return result[0].insertId;
+  });
 }
 
 export async function getApplicationById(id: number) {
@@ -409,6 +414,138 @@ export async function updateApplication(id: number, data: Partial<InsertApplicat
   await db.update(applications).set(data).where(eq(applications.id, id));
 }
 
+export async function transitionApplicationStatus(id: number, expected: Application["status"][], data: Partial<InsertApplication>) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const result = await dbi.update(applications).set(data).where(and(eq(applications.id, id), inArray(applications.status, expected)));
+  return result[0].affectedRows === 1;
+}
+
+/** Attach only to the exact decision whose PDF was generated. */
+export async function attachDecisionCertificate(expected: Application, certificateUrl: string) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const result = await dbi.update(applications).set({ certificateUrl }).where(and(
+    eq(applications.id, expected.id), eq(applications.status, expected.status),
+    eq(applications.submissionCount, expected.submissionCount),
+    expected.humanDecisionAt ? eq(applications.humanDecisionAt, expected.humanDecisionAt) : sql`FALSE`,
+    expected.irbNumber ? eq(applications.irbNumber, expected.irbNumber) : isNull(applications.irbNumber),
+  ));
+  return result[0].affectedRows === 1;
+}
+
+const EDITABLE_STATUSES = new Set([
+  "draft", "declaration_pending", "stage1_pending", "stage1_failed",
+  "stage2_pending", "stage2_failed", "resubmission_required",
+]);
+const GATEWAY_FIELDS = [...STAGE1_FIELDS, "fundingSource", "estimatedDuration", "questionnaireFileUrl", "retrospectiveDataSource", "clinicalTrialDetails", "supplementaryFilesJson", "labHeadApproval", "labHeadName", "labHeadEmail", "labHeadPhone"] as const;
+
+/** Serialize edits with submission/decision and reject stale AI results. */
+export async function updateEditableApplication(
+  id: number, userId: number, data: Partial<InsertApplication>, expected?: Application,
+) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  return dbi.transaction(async tx => {
+    const [current] = await tx.select().from(applications).where(eq(applications.id, id)).for("update");
+    if (!current) throw new TRPCError({ code: "NOT_FOUND" });
+    if (current.applicantId !== userId) throw new TRPCError({ code: "FORBIDDEN" });
+    if (!EDITABLE_STATUSES.has(current.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable. Refresh to view its current status." });
+    if (expected && Object.keys(expected).some(k => JSON.stringify(current[k as keyof Application]) !== JSON.stringify(expected[k as keyof Application]))) {
+      throw new TRPCError({ code: "CONFLICT", message: "Application changed during this request. Refresh and try again." });
+    }
+    const changes = { ...data };
+    const changed = (field: keyof Application) => data[field] !== undefined && data[field] !== current[field];
+    const gatewayChanged = GATEWAY_FIELDS.some(changed);
+    const protocolChanged = STAGE2_FIELDS.some(changed) || changed("rejectionFileUrl");
+    if (gatewayChanged) Object.assign(changes, {
+      stage1Passed: false, stage1AiScore: null, stage1AiFeedback: null,
+      proceedDespiteStage1: false, proceedDespiteStage1Reason: null,
+      status: "stage1_pending",
+    });
+    if (gatewayChanged || protocolChanged) Object.assign(changes, {
+      stage2Passed: false, stage2AiScore: null, stage2AiFeedback: null, stage2AiFieldScores: null,
+      proceedDespiteStage2: false, proceedDespiteStage2Reason: null,
+      ...(!gatewayChanged ? { status: "stage2_pending" } : {}),
+    });
+    await tx.update(applications).set(changes).where(eq(applications.id, id));
+    const [updated] = await tx.select().from(applications).where(eq(applications.id, id));
+    return updated;
+  });
+}
+
+/** One durable submission claim, assignments, counters, audit and snapshot. */
+export async function submitApplicationForReview(applicationId: number, applicantId: number) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  return dbi.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
+    if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+    if (app.applicantId !== applicantId) throw new TRPCError({ code: "FORBIDDEN" });
+    if (app.status !== "submitted") throw new TRPCError({ code: "CONFLICT", message: "Application is not ready or has already been submitted." });
+    const missing = listMissingRequirements(app);
+    if (missing.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Complete the application before submission: ${missing.join(", ")}` });
+    const rows = await tx.select({ member: committeeMembers }).from(committeeMembers)
+      .innerJoin(users, eq(users.id, committeeMembers.userId))
+      .where(and(eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`, ne(committeeMembers.userId, applicantId), sql`COALESCE(${users.loginMethod}, '') NOT IN ('digital_reviewer', 'deleted')`, sql`${users.openId} NOT LIKE 'digital-reviewer:%'`))
+      .orderBy(committeeMembers.totalAssignments, committeeMembers.id);
+    const selected = Array.from(new Map(rows.map(r => [r.member.userId, r.member])).values()).slice(0, 5);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    // Previous-round votes must never count towards a revised protocol.
+    await tx.update(reviewAssignments).set({ status: "expired" }).where(eq(reviewAssignments.applicationId, applicationId));
+    for (const member of selected) {
+      await tx.insert(reviewAssignments).values({ applicationId, committeeMemberId: member.id, assignedBy: "system", status: "pending", expiresAt });
+      await tx.update(committeeMembers).set({ totalAssignments: sql`${committeeMembers.totalAssignments} + 1` }).where(eq(committeeMembers.id, member.id));
+    }
+    const nextStatus = selected.length >= 5 ? "under_review" : "pending_admin";
+    await tx.update(applications).set({ status: nextStatus, submittedAt: now, ...(app.submittedAt ? { submissionCount: sql`${applications.submissionCount} + 1` } : {}) }).where(eq(applications.id, applicationId));
+    const [version] = await tx.select({ max: sql<number>`COALESCE(MAX(${applicationVersions.version}), 0)` }).from(applicationVersions).where(eq(applicationVersions.applicationId, applicationId));
+    const snapshot = Object.fromEntries([...GATEWAY_FIELDS, ...STAGE2_FIELDS].map(k => [k, app[k]]));
+    await tx.insert(applicationVersions).values({ applicationId, version: Number(version.max) + 1, snapshot: JSON.stringify(snapshot), status: nextStatus, stage1AiScore: app.stage1AiScore, stage2AiScore: app.stage2AiScore });
+    await tx.insert(auditLog).values({ applicationId, userId: applicantId, action: "application_submitted", details: `Assigned to ${selected.length} human committee members; qualified human decision required.` });
+    return { app, selected, nextStatus, activeMemberCount: rows.length };
+  });
+}
+
+/** Final decisions require an explicitly appointed independent human signer. */
+export async function finalizeApplicationDecision(input: {
+  applicationId: number; actorUserId: number; decision: "approved" | "rejected"; notes?: string; direct?: boolean;
+}) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  return dbi.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, input.applicationId)).for("update");
+    if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+    const [actor] = await tx.select({ user: users, member: committeeMembers }).from(users)
+      .innerJoin(committeeMembers, eq(committeeMembers.userId, users.id))
+      .where(and(eq(users.id, input.actorUserId), eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`)).limit(1);
+    if (!actor || actor.user.role !== "admin" || actor.user.loginMethod === "digital_reviewer" || actor.user.openId.startsWith("digital-reviewer:") || actor.user.id === app.applicantId) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "An independent, appointed human committee administrator must record the decision." });
+    }
+    if (!["under_review", "pending_admin"].includes(app.status) || !app.submittedAt) throw new TRPCError({ code: "CONFLICT", message: "A decision can only be made on a submitted application awaiting human review." });
+    if (input.decision === "approved") {
+      if (process.env.IRB_ISSUANCE_ENABLED !== "true") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certificate issuance is disabled pending institutional authority and qualified committee activation." });
+      const missing = listMissingRequirements(app);
+      if (missing.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Application requirements remain incomplete: ${missing.join(", ")}` });
+      const votes = await tx.select({ userId: users.id, status: reviewAssignments.status }).from(reviewAssignments)
+        .innerJoin(committeeMembers, eq(committeeMembers.id, reviewAssignments.committeeMemberId))
+        .innerJoin(users, eq(users.id, committeeMembers.userId))
+        .where(and(eq(reviewAssignments.applicationId, app.id), eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`, ne(users.id, app.applicantId), sql`COALESCE(${users.loginMethod}, '') NOT IN ('digital_reviewer', 'deleted')`, sql`${users.openId} NOT LIKE 'digital-reviewer:%'`));
+      const approvals = new Set(votes.filter(v => v.status === "approved").map(v => v.userId)).size;
+      const required = app.irbCategory === "full_board" ? 3 : 1;
+      if (approvals < required || votes.some(v => v.status === "rejected")) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `At least ${required} independent human approval(s) and resolution of committee rejections are required.` });
+    }
+    const status = input.decision === "approved" ? "approved" : app.submissionCount >= 2 ? "permanently_rejected" : "rejected";
+    const irbNumber = input.decision === "approved" ? `IRB-SA-${new Date().getUTCFullYear()}-${randomBytes(10).toString("hex").toUpperCase()}` : null;
+    await tx.update(applications).set({ status, irbNumber, humanDecisionAt: new Date(), humanDecisionByUserId: input.actorUserId, adminNotes: input.notes || null, approvedAt: input.decision === "approved" ? new Date() : null, rejectionReason: input.decision === "rejected" ? input.notes || "Application rejected by the human committee" : null, certificateUrl: null }).where(eq(applications.id, app.id));
+    await tx.update(reviewAssignments).set({ status: "expired" }).where(and(eq(reviewAssignments.applicationId, app.id), eq(reviewAssignments.status, "pending")));
+    await tx.insert(auditLog).values({ applicationId: app.id, userId: input.actorUserId, action: input.decision === "approved" ? input.direct ? "admin_direct_approval" : "admin_approved" : "admin_rejected", details: `Human committee decision. ${input.notes || ""}${irbNumber ? ` IRB Number: ${irbNumber}` : ""}` });
+    const [updated] = await tx.select().from(applications).where(eq(applications.id, app.id));
+    return updated;
+  });
+}
+
 /**
  * SA-08: atomic resubmit. Updates application status + submittedAt and
  * (when isResubmission) increments submissionCount in a single SQL
@@ -433,48 +570,28 @@ export async function applyResubmission(
 export async function generateIrbNumber(): Promise<string> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const year = new Date().getFullYear();
-  const result = await db.select({ cnt: count() }).from(applications).where(sql`YEAR(${applications.createdAt}) = ${year}`);
-  const num = (result[0]?.cnt ?? 0) + 1;
-  return `IRB-SA-${year}-${String(num).padStart(5, "0")}`;
+  // Counts are not a sequence: deletes and concurrent decisions can collide.
+  return `IRB-SA-${new Date().getUTCFullYear()}-${randomBytes(10).toString("hex").toUpperCase()}`;
 }
 
 export async function getApplicationStats() {
-  const empty = {
-    total: 0, approved: 0, rejected: 0, pending: 0, retracted: 0,
-    submissions: 0, chatbot: 0, traditional: 0, avgProcessingDays: 0,
-  };
-  const db = await getDb();
-  if (!db) return empty;
-  const total = await db.select({ cnt: count() }).from(applications);
-  const approved = await db.select({ cnt: count() }).from(applications).where(eq(applications.status, "approved"));
-  const rejected = await db.select({ cnt: count() }).from(applications).where(
-    or(eq(applications.status, "rejected"), eq(applications.status, "permanently_rejected"))
-  );
-  const pending = await db.select({ cnt: count() }).from(applications).where(
-    and(
-      ne(applications.status, "approved"),
-      ne(applications.status, "rejected"),
-      ne(applications.status, "permanently_rejected"),
-      ne(applications.status, "draft"),
-      ne(applications.status, "retracted"),
-      ne(applications.status, "hidden"),
-    )
-  );
-  const retracted = await db.select({ cnt: count() }).from(applications).where(eq(applications.status, "retracted"));
-  const submissions = await db.select({ cnt: count() }).from(applications).where(sql`${applications.submittedAt} IS NOT NULL`);
-  const chatbot = await db.select({ cnt: count() }).from(applications).where(eq(applications.intakeChannel, "chatbot"));
-  const traditional = await db.select({ cnt: count() }).from(applications).where(eq(applications.intakeChannel, "traditional"));
+  const database = await getDb();
+  if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Statistics are temporarily unavailable." });
+  const [row] = await database.select({
+    total: count(),
+    approved: sql<number>`COALESCE(SUM(${applications.status} = 'approved' AND ${applications.humanDecisionAt} IS NOT NULL), 0)`,
+    rejected: sql<number>`COALESCE(SUM(${applications.status} IN ('rejected', 'permanently_rejected')), 0)`,
+    pending: sql<number>`COALESCE(SUM(${applications.status} NOT IN ('approved', 'rejected', 'permanently_rejected', 'draft', 'retracted', 'hidden')), 0)`,
+    retracted: sql<number>`COALESCE(SUM(${applications.status} = 'retracted'), 0)`,
+    submissions: sql<number>`COALESCE(SUM(${applications.submittedAt} IS NOT NULL), 0)`,
+    chatbot: sql<number>`COALESCE(SUM(${applications.intakeChannel} = 'chatbot'), 0)`,
+    traditional: sql<number>`COALESCE(SUM(${applications.intakeChannel} = 'traditional'), 0)`,
+    avgProcessingDays: sql<number | null>`AVG(CASE WHEN ${applications.status} = 'approved' AND ${applications.humanDecisionAt} IS NOT NULL AND ${applications.submittedAt} IS NOT NULL THEN TIMESTAMPDIFF(SECOND, ${applications.submittedAt}, ${applications.approvedAt}) / 86400.0 ELSE NULL END)`,
+  }).from(applications);
   return {
-    total: total[0]?.cnt ?? 0,
-    approved: approved[0]?.cnt ?? 0,
-    rejected: rejected[0]?.cnt ?? 0,
-    pending: pending[0]?.cnt ?? 0,
-    retracted: retracted[0]?.cnt ?? 0,
-    submissions: submissions[0]?.cnt ?? 0,
-    chatbot: chatbot[0]?.cnt ?? 0,
-    traditional: traditional[0]?.cnt ?? 0,
-    avgProcessingDays: 0,
+    total: Number(row.total), approved: Number(row.approved), rejected: Number(row.rejected), pending: Number(row.pending),
+    retracted: Number(row.retracted), submissions: Number(row.submissions), chatbot: Number(row.chatbot), traditional: Number(row.traditional),
+    avgProcessingDays: row.avgProcessingDays == null ? null : Number(row.avgProcessingDays),
   };
 }
 
@@ -483,8 +600,14 @@ export async function getApplicationStats() {
 export async function addResearchAuthor(data: InsertResearchAuthor) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(researchAuthors).values(data);
-  return result[0].insertId;
+  return db.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, data.applicationId)).for("update");
+    if (!app || !EDITABLE_STATUSES.has(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable." });
+    const [total] = await tx.select({ count: count() }).from(researchAuthors).where(eq(researchAuthors.applicationId, data.applicationId));
+    if (total.count >= 25) throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum number of co-investigators reached." });
+    const result = await tx.insert(researchAuthors).values(data);
+    return result[0].insertId;
+  });
 }
 
 export async function getAuthorsByApplication(applicationId: number) {
@@ -499,9 +622,11 @@ export async function removeAuthor(id: number, applicationId: number) {
   // Scope the delete to the owning application so a caller authorised on
   // application A cannot delete an author row belonging to application B
   // by passing a foreign author id (cross-tenant IDOR).
-  await db
-    .delete(researchAuthors)
-    .where(and(eq(researchAuthors.id, id), eq(researchAuthors.applicationId, applicationId)));
+  await db.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
+    if (!app || !EDITABLE_STATUSES.has(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable." });
+    await tx.delete(researchAuthors).where(and(eq(researchAuthors.id, id), eq(researchAuthors.applicationId, applicationId)));
+  });
 }
 
 export async function removeAllAuthorsByApplication(applicationId: number) {
@@ -556,7 +681,10 @@ export async function getAllCommitteeMembers() {
 export async function getActiveCommitteeMembers() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(committeeMembers).where(eq(committeeMembers.isActive, true));
+  const rows = await db.select({ member: committeeMembers }).from(committeeMembers)
+    .innerJoin(users, eq(users.id, committeeMembers.userId))
+    .where(and(eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`, sql`COALESCE(${users.loginMethod}, '') NOT IN ('digital_reviewer', 'deleted')`, sql`${users.openId} NOT LIKE 'digital-reviewer:%'`));
+  return rows.map(r => r.member);
 }
 
 export async function updateCommitteeMember(id: number, data: Partial<InsertCommitteeMember>) {
@@ -578,6 +706,58 @@ export async function createReviewAssignment(data: InsertReviewAssignment) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(reviewAssignments).values(data);
   return result[0].insertId;
+}
+
+/** Lock the parent before assigning to serialize assignments with final decisions. */
+export async function assignHumanReviewer(applicationId: number, committeeMemberId: number) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  return dbi.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
+    if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!["under_review", "pending_admin"].includes(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is not awaiting committee review." });
+    const [record] = await tx.select({ member: committeeMembers, user: users }).from(committeeMembers).innerJoin(users, eq(users.id, committeeMembers.userId)).where(eq(committeeMembers.id, committeeMemberId));
+    if (!record || !record.member.isActive || !record.member.appointedAt || !record.member.qualificationReference || record.user.loginMethod === "digital_reviewer" || record.user.openId.startsWith("digital-reviewer:") || record.user.id === app.applicantId) throw new TRPCError({ code: "BAD_REQUEST", message: "Select an independently appointed human reviewer." });
+    const existing = await tx.select().from(reviewAssignments).where(and(eq(reviewAssignments.applicationId, applicationId), eq(reviewAssignments.committeeMemberId, committeeMemberId), ne(reviewAssignments.status, "expired")));
+    if (existing.length) throw new TRPCError({ code: "CONFLICT", message: "Reviewer already assigned to this submission." });
+    const inserted = await tx.insert(reviewAssignments).values({ applicationId, committeeMemberId, assignedBy: "admin", status: "pending", expiresAt: new Date(Date.now() + 86_400_000) });
+    await tx.update(committeeMembers).set({ totalAssignments: sql`${committeeMembers.totalAssignments} + 1` }).where(eq(committeeMembers.id, committeeMemberId));
+    return inserted[0].insertId;
+  });
+}
+
+/** A single vote and its counters are committed together, exactly once. */
+export async function recordHumanReview(input: { reviewId: number; userId: number; decision: "approved" | "rejected"; comments?: string }) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const [lookup] = await dbi.select().from(reviewAssignments).where(eq(reviewAssignments.id, input.reviewId));
+  if (!lookup) throw new TRPCError({ code: "NOT_FOUND" });
+  return dbi.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, lookup.applicationId)).for("update");
+    if (!app || !["under_review", "pending_admin"].includes(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer accepting committee votes." });
+    const [review] = await tx.select().from(reviewAssignments).where(eq(reviewAssignments.id, input.reviewId)).for("update");
+    const [record] = await tx.select({ member: committeeMembers, user: users }).from(committeeMembers).innerJoin(users, eq(users.id, committeeMembers.userId)).where(eq(committeeMembers.id, review.committeeMemberId));
+    if (!record || record.user.id !== input.userId || !record.member.isActive || !record.member.appointedAt || !record.member.qualificationReference || record.user.loginMethod === "digital_reviewer" || record.user.openId.startsWith("digital-reviewer:") || record.user.id === app.applicantId) throw new TRPCError({ code: "FORBIDDEN", message: "Only the independent appointed human reviewer may vote." });
+    const now = new Date();
+    if (review.status !== "pending" || review.expiresAt.getTime() <= now.getTime()) throw new TRPCError({ code: "CONFLICT", message: "Review is already completed or expired." });
+    await tx.update(reviewAssignments).set({ status: input.decision, comments: input.comments || null, respondedAt: now }).where(eq(reviewAssignments.id, input.reviewId));
+    const responseMs = Math.max(0, Math.min(2_147_483_647, now.getTime() - review.assignedAt.getTime()));
+    await tx.update(committeeMembers).set({
+      averageResponseTimeMs: sql`ROUND((COALESCE(${committeeMembers.averageResponseTimeMs}, 0) * ${committeeMembers.totalResponses} + ${responseMs}) / (${committeeMembers.totalResponses} + 1))`,
+      totalResponses: sql`${committeeMembers.totalResponses} + 1`,
+      ...(input.decision === "approved" ? { totalApprovals: sql`${committeeMembers.totalApprovals} + 1` } : { totalRejections: sql`${committeeMembers.totalRejections} + 1` }),
+    }).where(eq(committeeMembers.id, record.member.id));
+    const votes = await tx.select({ status: reviewAssignments.status, userId: users.id }).from(reviewAssignments)
+      .innerJoin(committeeMembers, eq(committeeMembers.id, reviewAssignments.committeeMemberId)).innerJoin(users, eq(users.id, committeeMembers.userId))
+      .where(and(eq(reviewAssignments.applicationId, app.id), eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, ne(users.id, app.applicantId), sql`COALESCE(${users.loginMethod}, '') NOT IN ('digital_reviewer', 'deleted')`, sql`${users.openId} NOT LIKE 'digital-reviewer:%'`));
+    const approvals = new Set(votes.filter(v => v.status === "approved").map(v => v.userId)).size;
+    const rejections = new Set(votes.filter(v => v.status === "rejected").map(v => v.userId)).size;
+    // Escalate consensus either way to the human decision authority. A vote
+    // recorded after another transaction's final decision cannot reopen it.
+    if (approvals >= 3 || rejections >= 3) await tx.update(applications).set({ status: "pending_admin" }).where(eq(applications.id, app.id));
+    await tx.insert(auditLog).values({ applicationId: app.id, userId: input.userId, action: `review_${input.decision}`, details: input.comments || `Human committee reviewer ${input.decision} the application.` });
+    return { success: true, approvals, rejections, applicationId: app.id, applicantId: app.applicantId };
+  });
 }
 
 export async function getReviewsByApplication(applicationId: number) {
@@ -666,8 +846,47 @@ export async function getFullAuditLog() {
 export async function addFileUpload(data: InsertFileUpload) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(fileUploads).values(data);
-  return result[0].insertId;
+  return db.transaction(async tx => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, data.userId)).for("update");
+    const [usage] = await tx.select({ bytes: sql<number>`COALESCE(SUM(${fileUploads.fileSize}), 0)`, count: count() }).from(fileUploads).where(eq(fileUploads.userId, data.userId));
+    if (usage.count >= 500 || Number(usage.bytes) + (data.fileSize || 0) > 250 * 1024 * 1024) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Upload allowance exceeded." });
+    if (data.applicationId) {
+      const [app] = await tx.select().from(applications).where(eq(applications.id, data.applicationId)).for("update");
+      if (!app || !EDITABLE_STATUSES.has(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer accepting uploads." });
+    }
+    const result = await tx.insert(fileUploads).values(data);
+    const id = result[0].insertId;
+    await tx.update(fileUploads).set({ fileUrl: `/api/irb/files/${id}` }).where(eq(fileUploads.id, id));
+    return id;
+  });
+}
+
+export async function getFileUploadById(id: number) {
+  const dbi = await getDb();
+  if (!dbi) return null;
+  const [row] = await dbi.select().from(fileUploads).where(eq(fileUploads.id, id)).limit(1);
+  return row ?? null;
+}
+
+export async function getFileUploadByUrl(fileUrl: string) {
+  const dbi = await getDb();
+  if (!dbi) return null;
+  const [row] = await dbi.select().from(fileUploads).where(eq(fileUploads.fileUrl, fileUrl)).limit(1);
+  return row ?? null;
+}
+
+export async function bindOwnedUpload(id: number, userId: number, applicationId: number) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const result = await dbi.update(fileUploads).set({ applicationId }).where(and(eq(fileUploads.id, id), eq(fileUploads.userId, userId), or(isNull(fileUploads.applicationId), eq(fileUploads.applicationId, applicationId))));
+  return result[0].affectedRows === 1;
+}
+
+export async function getUserUploadUsage(userId: number) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  const [row] = await dbi.select({ bytes: sql<number>`COALESCE(SUM(${fileUploads.fileSize}), 0)`, count: count() }).from(fileUploads).where(eq(fileUploads.userId, userId));
+  return { bytes: Number(row.bytes), count: Number(row.count) };
 }
 
 export async function getFilesByApplication(applicationId: number) {
@@ -783,7 +1002,7 @@ export async function getResearchTypeDistribution() {
 export async function getReviewerPerformance() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(committeeMembers).where(eq(committeeMembers.isActive, true));
+  return db.select().from(committeeMembers).where(and(eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`));
 }
 
 // ─── Application Version History helpers ─────────────────────────────────
@@ -817,10 +1036,11 @@ export async function getLatestVersionNumber(applicationId: number): Promise<num
 export async function searchUsersByEmail(query: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(users)
+  const rows = await db.select().from(users)
     .where(sql`${users.email} LIKE ${`%${query}%`}`)
     .orderBy(desc(users.createdAt))
     .limit(50);
+  return rows.map(withoutPassword);
 }
 
 export async function updateUserRole(userId: number, role: "user" | "admin") {
@@ -840,14 +1060,14 @@ export async function getUserCount() {
 
 export async function getPublicStats() {
   const db = await getDb();
-  if (!db) return { totalApproved: 0, totalApplications: 0, avgProcessingHours: 0, researchTypes: [], monthlyTrends: [] };
+  if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Statistics are temporarily unavailable." });
   
-  const totalApproved = await db.select({ cnt: count() }).from(applications).where(eq(applications.status, "approved"));
+  const totalApproved = await db.select({ cnt: count() }).from(applications).where(and(eq(applications.status, "approved"), sql`${applications.humanDecisionAt} IS NOT NULL`, sql`${applications.humanDecisionByUserId} IS NOT NULL`));
   const totalApplications = await db.select({ cnt: count() }).from(applications).where(ne(applications.status, "draft"));
   
   const avgTime = await db.execute(sql`
     SELECT AVG(TIMESTAMPDIFF(HOUR, submittedAt, approvedAt)) as avgHours
-    FROM applications WHERE approvedAt IS NOT NULL AND submittedAt IS NOT NULL
+    FROM applications WHERE approvedAt IS NOT NULL AND submittedAt IS NOT NULL AND humanDecisionAt IS NOT NULL
   `);
   
   const researchTypes = await db.execute(sql`
@@ -859,7 +1079,7 @@ export async function getPublicStats() {
   const monthlyTrends = await db.execute(sql`
     SELECT DATE_FORMAT(createdAt, '%Y-%m') as month,
       COUNT(*) as total,
-      SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved
+      SUM(CASE WHEN status = 'approved' AND humanDecisionAt IS NOT NULL THEN 1 ELSE 0 END) as approved
     FROM applications WHERE status != 'draft'
     AND createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
     GROUP BY DATE_FORMAT(createdAt, '%Y-%m') ORDER BY month ASC
@@ -868,7 +1088,7 @@ export async function getPublicStats() {
   return {
     totalApproved: totalApproved[0]?.cnt ?? 0,
     totalApplications: totalApplications[0]?.cnt ?? 0,
-    avgProcessingHours: (avgTime as any)[0]?.[0]?.avgHours ?? 0,
+    avgProcessingHours: (avgTime as any)[0]?.[0]?.avgHours == null ? null : Number((avgTime as any)[0][0].avgHours),
     researchTypes: (researchTypes as any)[0] || [],
     monthlyTrends: (monthlyTrends as any)[0] || [],
   };
@@ -876,7 +1096,7 @@ export async function getPublicStats() {
 
 // ─── Public Registry helpers ─────────────────────────────────────────────
 //
-// Approved IRBs are public information. Hidden / retracted apps are
+// The public registry exposes only the approved-record projection. Hidden / retracted apps are
 // excluded from the registry entirely (the verify route handles those
 // separately). PII-light projection only — no email, no internal IDs.
 
@@ -889,13 +1109,14 @@ export interface RegistrySearchInput {
 }
 
 export async function searchPublicRegistry(input: RegistrySearchInput) {
+  if (ENV.isProduction && process.env.PUBLIC_REGISTRY_ENABLED !== "true") throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Public registry publication has not been enabled by the operator." });
   const dbi = await getDb();
-  if (!dbi) return { items: [], total: 0, page: 1, pageSize: 20 };
+  if (!dbi) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Registry is temporarily unavailable." });
   const page = Math.max(1, input.page ?? 1);
   const pageSize = Math.min(50, Math.max(1, input.pageSize ?? 20));
   const offset = (page - 1) * pageSize;
 
-  const conds: any[] = [eq(applications.status, "approved")];
+  const conds: any[] = [eq(applications.status, "approved"), sql`${applications.humanDecisionAt} IS NOT NULL`, sql`${applications.humanDecisionByUserId} IS NOT NULL`];
   if (input.researchType) {
     conds.push(eq(applications.researchType, input.researchType as any));
   }
@@ -923,7 +1144,6 @@ export async function searchPublicRegistry(input: RegistrySearchInput) {
   // public surfaces don't disagree about what's exposable.
   const rows = await dbi
     .select({
-      id: applications.id,
       irbNumber: applications.irbNumber,
       researchTitle: applications.researchTitle,
       principalInvestigator: applications.principalInvestigator,
@@ -931,7 +1151,7 @@ export async function searchPublicRegistry(input: RegistrySearchInput) {
       researchType: applications.researchType,
       irbCategory: applications.irbCategory,
       approvedAt: applications.approvedAt,
-      certificateUrl: applications.certificateUrl,
+      hasCertificate: sql<boolean>`${applications.certificateUrl} IS NOT NULL`,
     })
     .from(applications)
     .where(whereClause)
@@ -949,21 +1169,22 @@ export async function searchPublicRegistry(input: RegistrySearchInput) {
 
 /** Lightweight aggregate counts used to populate the registry page header. */
 export async function getRegistryStats() {
+  if (ENV.isProduction && process.env.PUBLIC_REGISTRY_ENABLED !== "true") throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Public registry publication has not been enabled by the operator." });
   const dbi = await getDb();
-  if (!dbi) return { byType: [], byYear: [], byInstitution: [] };
+  if (!dbi) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Registry statistics are temporarily unavailable." });
   const byType = await dbi.execute(sql`
     SELECT COALESCE(researchType, 'other') AS type, COUNT(*) AS count
-    FROM applications WHERE status='approved'
+    FROM applications WHERE status='approved' AND humanDecisionAt IS NOT NULL AND humanDecisionByUserId IS NOT NULL
     GROUP BY researchType ORDER BY count DESC
   `);
   const byYear = await dbi.execute(sql`
     SELECT YEAR(approvedAt) AS year, COUNT(*) AS count
-    FROM applications WHERE status='approved' AND approvedAt IS NOT NULL
+    FROM applications WHERE status='approved' AND humanDecisionAt IS NOT NULL AND humanDecisionByUserId IS NOT NULL AND approvedAt IS NOT NULL
     GROUP BY YEAR(approvedAt) ORDER BY year DESC
   `);
   const byInstitution = await dbi.execute(sql`
     SELECT piInstitution AS institution, COUNT(*) AS count
-    FROM applications WHERE status='approved' AND piInstitution IS NOT NULL
+    FROM applications WHERE status='approved' AND humanDecisionAt IS NOT NULL AND humanDecisionByUserId IS NOT NULL AND piInstitution IS NOT NULL
     GROUP BY piInstitution ORDER BY count DESC LIMIT 10
   `);
   return {
@@ -1031,6 +1252,41 @@ export async function updateAmendment(id: number, data: Partial<InsertAmendment>
   await dbi.update(amendments).set(data).where(eq(amendments.id, id));
 }
 
+export async function decideAmendment(input: { id: number; actorUserId: number; decision: "approved" | "rejected"; adminNotes?: string }) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  return dbi.transaction(async tx => {
+    const [amendment] = await tx.select().from(amendments).where(eq(amendments.id, input.id)).for("update");
+    if (!amendment) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!["submitted", "under_review"].includes(amendment.status)) throw new TRPCError({ code: "CONFLICT", message: "This amendment has already been decided." });
+    const [app] = await tx.select().from(applications).where(eq(applications.id, amendment.applicationId)).for("update");
+    const [actor] = await tx.select({ user: users, member: committeeMembers }).from(users).innerJoin(committeeMembers, eq(committeeMembers.userId, users.id)).where(and(eq(users.id, input.actorUserId), eq(committeeMembers.isActive, true))).limit(1);
+    if (!app || !actor || actor.user.role !== "admin" || !actor.member.appointedAt || !actor.member.qualificationReference || actor.user.loginMethod === "digital_reviewer" || actor.user.id === app.applicantId || actor.user.id === amendment.requestedByUserId) throw new TRPCError({ code: "FORBIDDEN", message: "An independent appointed human committee administrator must decide the amendment." });
+    if (!["under_review", "pending_admin", "approved"].includes(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Parent application is not active." });
+    if (input.decision === "approved" && (process.env.IRB_ISSUANCE_ENABLED !== "true" || (app.status === "approved" && !app.humanDecisionAt))) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Institutional authority and a verified parent approval are required." });
+    await tx.update(amendments).set({ status: input.decision, adminNotes: input.adminNotes || null, decidedAt: new Date() }).where(eq(amendments.id, input.id));
+    await tx.insert(auditLog).values({ applicationId: app.id, userId: input.actorUserId, action: "amendment_decided", details: `Human committee decision on amendment #${input.id}: ${input.decision}. ${input.adminNotes || ""}` });
+  });
+}
+
+/** A seven-day deduplicated annual review reminder, durable with its audit. */
+export async function enqueueContinuingReviewReminder(applicationId: number, actorUserId: number, daysAhead: number) {
+  const dbi = await getDb();
+  if (!dbi) throw new Error("Database not available");
+  return dbi.transaction(async tx => {
+    const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
+    if (!app || app.status !== "approved" || !app.approvedAt || !app.humanDecisionAt) return false;
+    const recent = await tx.select({ id: auditLog.id }).from(auditLog).where(and(eq(auditLog.applicationId, applicationId), eq(auditLog.action, "continuing_review_reminder_sent"), gt(auditLog.createdAt, new Date(Date.now() - 7 * 86_400_000)))).limit(1);
+    if (recent.length) return false;
+    const anniversary = new Date(app.approvedAt);
+    anniversary.setUTCFullYear(anniversary.getUTCFullYear() + 1);
+    if (anniversary.getTime() - Date.now() > daysAhead * 86_400_000) return false;
+    await tx.insert(notifications).values({ userId: app.applicantId, applicationId, type: "general", title: "Annual continuing review reminder", message: `The annual review anniversary of ${app.irbNumber || `application #${app.id}`} is approaching or overdue. Contact the responsible committee about its continuing-review requirements and approval conditions.` });
+    await tx.insert(auditLog).values({ applicationId, userId: actorUserId, action: "continuing_review_reminder_sent", details: `Annual anniversary ${anniversary.toISOString()}; ${daysAhead}-day reminder window. This reminder is not a renewal decision.` });
+    return true;
+  });
+}
+
 // ─── ORCID linking ───────────────────────────────────────────────────────
 //
 // Stub: OAuth dance is gated on registering with ORCID's developer
@@ -1087,13 +1343,14 @@ export async function insertChatApplicationMessage(data: InsertChatApplicationMe
 export async function getChatApplicationMessages(applicationId: number, userId: number) {
   const dbi = await getDb();
   if (!dbi) return [];
-  return dbi.select().from(chatApplicationMessages)
+  const rows = await dbi.select().from(chatApplicationMessages)
     .where(and(
       eq(chatApplicationMessages.applicationId, applicationId),
       eq(chatApplicationMessages.userId, userId),
     ))
-    .orderBy(chatApplicationMessages.id)
+    .orderBy(desc(chatApplicationMessages.id))
     .limit(200);
+  return rows.reverse();
 }
 
 // ─── First-party analytics (owner observability) ─────────────────────────
@@ -1153,33 +1410,12 @@ export async function ingestAnalyticsEvent(input: {
 
 export async function getObservabilityMetrics() {
   const dbi = await getDb();
-  if (!dbi) {
-    return {
-      sessions: 0,
-      pageviews: 0,
-      avgDwellMs: 0,
-      accountsTotal: 0,
-      accounts7d: 0,
-      accounts24h: 0,
-      activeUsers7d: 0,
-      applicationsTotal: 0,
-      applicationsByStatus: [] as { status: string; count: number }[],
-      topPaths: [] as { path: string; count: number }[],
-      geo: [] as { country: string; sessions: number }[],
-      visitsByDay: [] as { day: string; sessions: number; pageviews: number }[],
-      llmToday: 0,
-      llmByDay: [] as { day: string; count: number }[],
-      applicationsByIntake: [] as { channel: string; count: number }[],
-      submissions7d: 0,
-      approvals7d: 0,
-      retractions: 0,
-    };
-  }
+  if (!dbi) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Observability data is temporarily unavailable." });
 
   const [sessionAgg] = await dbi.select({
     sessions: count(),
     pageviews: sql<number>`COALESCE(SUM(${analyticsSessions.pageviews}), 0)`,
-    avgDwellMs: sql<number>`COALESCE(AVG(${analyticsSessions.dwellMs}), 0)`,
+    avgDwellMs: sql<number | null>`AVG(${analyticsSessions.dwellMs})`,
   }).from(analyticsSessions);
 
   const accountsTotal = await getUserCount();
@@ -1219,10 +1455,10 @@ export async function getObservabilityMetrics() {
   const today = new Date().toISOString().slice(0, 10);
   const [llmRow] = await dbi.select({ cnt: sql<number>`COALESCE(SUM(${llmUsageDaily.count}), 0)` })
     .from(llmUsageDaily)
-    .where(eq(llmUsageDaily.day, today));
+    .where(and(eq(llmUsageDaily.day, today), sql`${llmUsageDaily.scope} LIKE 'user:%'`));
   const llmDayRows = await dbi.execute(sql`
     SELECT day, COALESCE(SUM(count), 0) as count FROM llm_usage_daily
-    WHERE day >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 14 DAY), '%Y-%m-%d')
+    WHERE scope LIKE 'user:%' AND day >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 14 DAY), '%Y-%m-%d')
     GROUP BY day ORDER BY day ASC
   `);
   const intakeRows = await dbi.execute(sql`
@@ -1253,7 +1489,7 @@ export async function getObservabilityMetrics() {
   return {
     sessions: Number(sessionAgg?.sessions ?? 0),
     pageviews: Number(sessionAgg?.pageviews ?? 0),
-    avgDwellMs: Math.round(Number(sessionAgg?.avgDwellMs ?? 0)),
+    avgDwellMs: sessionAgg?.avgDwellMs == null ? null : Math.round(Number(sessionAgg.avgDwellMs)),
     accountsTotal,
     accounts7d: Number(accounts7dRow?.cnt ?? 0),
     accounts24h: Number(accounts24hRow?.cnt ?? 0),

@@ -300,12 +300,14 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         bodyEn: [
           "To process IRB applications, conduct AI-assisted pre-screening, and facilitate committee review.",
           "To issue and verify IRB certificates and maintain regulatory audit trails.",
-          "We do not sell personal data. AI processing is limited to application review and document generation you request.",
+          "AI assistance sends relevant request content to the model provider configured by the operator. Protocol text and chat may contain confidential information; use de-identified examples and review what you share.",
+          "Browser analytics is disabled by default. If the operator enables first-party public page counts, only approved public path names are recorded; application and verification routes are excluded. Third-party analytics scripts are not loaded in the workspace.",
         ],
         bodyAr: [
           "لمعالجة طلبات IRB، وإجراء الفحص المسبق بمساعدة الذكاء الاصطناعي، وتسهيل مراجعة اللجنة.",
           "لإصدار شهادات IRB والتحقق منها والحفاظ على سجلات التدقيق التنظيمية.",
-          "لا نبيع البيانات الشخصية. معالجة الذكاء الاصطناعي محدودة بمراجعة الطلبات وإنشاء المستندات التي تطلبها.",
+          "ترسل المساعدة بالذكاء الاصطناعي المحتوى اللازم للطلب إلى مزود النموذج الذي يضبطه المشغل. قد تتضمن نصوص البروتوكول والمحادثة معلومات سرية؛ استخدم أمثلة منزوعة الهوية وراجع ما تشاركه.",
+          "تُعطل تحليلات المتصفح افتراضياً. عند تفعيل المشغل إحصاء زيارات الصفحات العامة، تُسجل أسماء المسارات المسموحة فقط وتُستثنى مسارات الطلبات والتحقق. لا تُحمّل برامج تحليلات خارجية في مساحة العمل.",
         ],
       },
       {
@@ -313,11 +315,13 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
         titleAr: "حقوقك",
         bodyEn: [
           "Under PDPL, you may request access, correction, or deletion of personal data subject to legal and research retention requirements.",
-          "Contact platform administration for privacy inquiries. Approved IRB records may be retained as required by NCBE regulations.",
+          "Use the Support page for privacy requests. Account deletion may preserve decision and audit records where retention is required. Do not assume that deleting an account removes every historical research record.",
+          "Before accepting sensitive production data, the operator must publish the legal controller identity and contact details, processing purposes and lawful bases, provider/subprocessor list and locations, transfer safeguards, and the approved retention schedule. These operational facts cannot be established by this software alone.",
         ],
         bodyAr: [
           "بموجب PDPL، يمكنك طلب الوصول أو التصحيح أو الحذف للبيانات الشخصية وفق متطلبات الاحتفاظ القانونية والبحثية.",
-          "تواصل مع إدارة المنصة لاستفسارات الخصوصية. قد تُحفظ سجلات IRB المعتمدة كما تتطلب لوائح NCBE.",
+          "استخدم صفحة الدعم لطلبات الخصوصية. قد تُحفظ سجلات القرارات والتدقيق بعد حذف الحساب إذا وجب الاحتفاظ بها. لا تفترض أن حذف الحساب يمحو جميع السجلات البحثية السابقة.",
+          "قبل استقبال البيانات الحساسة في التشغيل الفعلي، يجب على المشغل نشر هوية جهة التحكم القانونية وبيانات التواصل وأغراض المعالجة ومسوغاتها وقائمة المزودين ومواقعهم وضمانات النقل وجدول الاحتفاظ المعتمد. لا يمكن إثبات هذه الحقائق التشغيلية من البرنامج وحده.",
         ],
       },
     ],

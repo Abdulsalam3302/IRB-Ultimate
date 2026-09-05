@@ -3,7 +3,7 @@ import { Logo } from "./Logo";
 import { Stamp } from "./Stamp";
 import { Linkedin, Heart } from "lucide-react";
 import { AUTHOR, PLATFORM } from "@shared/branding";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 
 const LINKEDIN = AUTHOR.linkedin;
 const NCBE_URL = PLATFORM.nbceUrl;
@@ -31,7 +31,6 @@ const COMPLIANCE_STAMPS = [
 
 export function SiteFooter() {
   const { t, lang } = useT();
-  const [, setLocation] = useLocation();
   const isAr = lang === "ar";
 
   return (
@@ -70,9 +69,9 @@ export function SiteFooter() {
             <ul className="space-y-2 text-[13.5px] text-cream-50/85">
               {QUICK_LINKS.map(([href, key]) => (
                 <li key={href}>
-                  <button type="button" className="hover:text-white transition-colors" onClick={() => setLocation(href)}>
+                  <Link href={href} className="hover:text-white transition-colors">
                     {t(key)}
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>

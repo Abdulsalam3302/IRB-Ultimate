@@ -11,28 +11,24 @@ export const isSupabaseAuthEnabled =
   typeof anonKey === "string" &&
   anonKey.length > 0;
 
-/**
- * Probe whether the configured Supabase project actually exists and responds.
- * Used to decide whether to show the Google/Apple buttons — a deleted/paused
- * project (or a typo'd ref) should never render a dead-end social button. The
- * project's /auth/v1/health endpoint is public; a `no-cors` GET resolves for a
- * live host and rejects (DNS/network) for a dead one.
- */
-export async function isSupabaseReachable(timeoutMs = 3500): Promise<boolean> {
-  if (!isSupabaseAuthEnabled) return false;
+export type SocialAuthProvider = "google" | "apple" | "linkedin_oidc";
+
+/** A reachable host does not prove an OAuth provider is enabled. */
+export async function getAvailableAuthProviders(timeoutMs = 3500): Promise<SocialAuthProvider[]> {
+  if (!isSupabaseAuthEnabled) return [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/health`, {
-      method: "GET",
-      mode: "no-cors",
-      signal: ctrl.signal,
+    const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/settings`, {
+      headers: { apikey: anonKey! },
+      signal: controller.signal,
+      credentials: "omit",
     });
-    clearTimeout(timer);
-    return true;
-  } catch {
-    return false;
-  }
+    if (!response.ok) return [];
+    const settings = await response.json() as { external?: Record<string, unknown> };
+    return (["google", "apple", "linkedin_oidc"] as const).filter(provider => settings.external?.[provider] === true);
+  } catch { return []; }
+  finally { clearTimeout(timer); }
 }
 
 let client: SupabaseClient | null = null;

@@ -3,19 +3,18 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
+import { getPageMetadata } from "@shared/seo";
 
 export async function setupVite(app: Express, server: Server) {
+  const { createServer: createViteServer } = await import("vite");
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true as const,
+    allowedHosts: ["localhost", "127.0.0.1"],
   };
 
   const vite = await createViteServer({
-    ...viteConfig,
-    configFile: false,
+    configFile: path.resolve(process.cwd(), "vite.config.ts"),
     server: serverOptions,
     appType: "custom",
   });
@@ -58,10 +57,16 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use("/assets", express.static(path.join(distPath, "assets"), { maxAge: "1y", immutable: true, fallthrough: false }));
+  app.use(express.static(distPath, { index: false, redirect: false, maxAge: 0 }));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.get("*", (req, res) => {
+    const metadata = getPageMetadata(req.path);
+    res.setHeader("Cache-Control", metadata.indexable ? "public, max-age=0, must-revalidate" : "private, no-store");
+    if (!metadata.indexable) res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    const staticPage = path.join(distPath, req.path, "index.html");
+    if (metadata.indexable && fs.existsSync(staticPage)) return res.sendFile(staticPage);
+    res.sendFile(path.resolve(distPath, "workspace.html"));
   });
 }

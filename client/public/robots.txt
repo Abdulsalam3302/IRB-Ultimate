@@ -1,11 +1,10 @@
 User-agent: *
 Allow: /
-Disallow: /admin
-Disallow: /dashboard
-Disallow: /chat-apply
-Disallow: /apply
-Disallow: /application
-Disallow: /reviews
-Disallow: /profile
+Disallow: /api/
+Disallow: /uploads/
+Disallow: /mcp
+Disallow: /.well-known/mcp.json
+Disallow: /__manus__/
 
-Sitemap: https://irb-saudi-arabia.vercel.app/sitemap.xml
+# The build generates a sitemap for the configured HTTPS public origin.
+# Private application routes carry noindex; authentication, not robots.txt, protects data.

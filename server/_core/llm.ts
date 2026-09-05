@@ -1,4 +1,10 @@
 import { ENV } from "./env";
+import { Semaphore } from "./concurrency";
+import { boundedInt } from "./limits";
+import { assertSafeEgress } from "./ssrfGuard";
+import { readBoundedText } from "./httpSafety";
+
+const llmSemaphore = new Semaphore(boundedInt(process.env.LLM_MAX_CONCURRENCY, 6, 1, 24), 12, 5000);
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -227,7 +233,8 @@ const resolveApiUrl = () => {
   // Allow callers to provide either a base ("https://api.minimax.io")
   // or a full path ("https://…/v1/chat/completions"). Normalise both.
   if (/\/v\d+\/chat\/completions$/.test(raw)) return raw;
-  return `${raw.replace(/\/$/, "")}/v1/chat/completions`;
+  const base = raw.replace(/\/$/, "");
+  return `${base}${/\/v\d+$/.test(base) ? "" : "/v1"}/chat/completions`;
 };
 
 const assertApiKey = () => {
@@ -300,7 +307,18 @@ function isMinimaxModel(model: string): boolean {
 }
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  return llmSemaphore.run(() => invokeBoundedLLM(params));
+}
+
+async function invokeBoundedLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
+  if (process.env.AI_ENABLED === "0") throw new Error("AI processing is disabled by the operator");
+  if (!params.messages.length || params.messages.length > 64 || Buffer.byteLength(JSON.stringify(params.messages)) > 128_000) {
+    throw new Error("AI input exceeds the allowed context size");
+  }
+  if (ENV.llmProvider === "anthropic" || ENV.llmProvider === "claude") {
+    throw new Error("Native Anthropic transport is not supported. Configure an approved OpenAI-compatible gateway.");
+  }
 
   const {
     messages,
@@ -321,7 +339,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const maxTokens =
     profile === "fast"
       ? Math.min(requestedMax, Math.max(512, ENV.llmFastMaxTokens))
-      : requestedMax;
+      : Math.min(requestedMax, ENV.llmMaxTokens);
+  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1) throw new Error("Invalid AI token limit");
 
   const payload: Record<string, unknown> = {
     model,
@@ -383,87 +402,40 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const timeoutMs =
     profile === "fast"
       ? Math.min(ENV.llmTimeoutMs || 90_000, 90_000)
-      : Math.max(ENV.llmTimeoutMs || 120_000, 120_000);
+      : Math.min(Math.max(ENV.llmTimeoutMs, 90_000), 120_000);
 
-  const started = Date.now();
-  const attempt = async (): Promise<InvokeResult> => {
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-
-    let response: Response;
-    try {
-      response = await fetch(resolveApiUrl(), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${ENV.llmApiKey}`,
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      clearTimeout(timeoutHandle);
-      if ((err as any)?.name === "AbortError") {
-        throw new Error(`LLM invoke timed out after ${timeoutMs}ms`);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutHandle);
-    }
-
+  const apiUrl = resolveApiUrl();
+  await assertSafeEgress(apiUrl);
+  if (ENV.isProduction && new URL(apiUrl).protocol !== "https:") throw new Error("AI transport requires HTTPS");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      redirect: "error",
+      headers: { "content-type": "application/json", authorization: `Bearer ${ENV.llmApiKey}` },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-      );
+      await response.body?.cancel();
+      // Provider bodies can contain echoed prompts, PHI and credentials. Never log/return them.
+      throw new Error(`LLM provider unavailable (HTTP ${response.status})`);
     }
-
-    const result = (await response.json()) as InvokeResult;
-    // Reasoning models (MiniMax M2, DeepSeek R1, …) emit <think>...</think>
-    // blocks before the real answer. Strip them so downstream JSON.parse works.
-    for (const choice of result.choices ?? []) {
-      const msg = choice?.message;
-      if (msg && typeof msg.content === "string") {
-        const before = msg.content;
-        msg.content = stripReasoningTags(msg.content);
-        if (process.env.LLM_DEBUG === "1") {
-          console.log(
-            "[LLM] finish=%s before-len=%d after-len=%d head=%j",
-            choice.finish_reason,
-            before.length,
-            msg.content.length,
-            msg.content.slice(0, 120)
-          );
-        }
-      }
+    const result = JSON.parse(await readBoundedText(response, 1_000_000)) as InvokeResult;
+    if (!Array.isArray(result.choices) || !result.choices.length) throw new Error("LLM returned no valid choices");
+    for (const choice of result.choices) {
+      if (choice.finish_reason === "length" || choice.finish_reason === "content_filter") throw new Error("LLM response incomplete or withheld");
+      if (!choice.message || typeof choice.message.content !== "string") throw new Error("LLM returned invalid content");
+      choice.message.content = stripReasoningTags(choice.message.content);
     }
+    // One paid request per reservation. Never silently retry malformed generations.
     return result;
-  };
-
-  const result = await attempt();
-
-  // Deep / thinking-enabled calls can emit unparseable first samples — retry once.
-  // Fast path skips the expensive double-call (thinking is off; JSON is usually clean).
-  if (profile === "deep" && normalizedResponseFormat?.type === "json_schema") {
-    const content = result.choices?.[0]?.message?.content;
-    const parsed = safeJsonParse(typeof content === "string" ? content : "");
-    if (!parsed || typeof parsed !== "object" || Object.keys(parsed).length === 0) {
-      console.warn("[LLM] schema-bound response unparseable — retrying once");
-      return attempt();
-    }
-  }
-
-  if (process.env.LLM_DEBUG === "1") {
-    console.log(
-      "[LLM] profile=%s model=%s max_tokens=%d elapsed=%dms",
-      profile,
-      model,
-      maxTokens,
-      Date.now() - started
-    );
-  }
-
-  return result;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("LLM request timed out");
+    if (error instanceof SyntaxError) throw new Error("LLM returned invalid JSON");
+    throw error;
+  } finally { clearTimeout(timer); }
 }
 
 const REASONING_TAG_RE = /<think>[\s\S]*?<\/think>\s*/gi;
@@ -503,44 +475,7 @@ export function safeJsonParse(s: string): any {
         /* keep trying */
       }
     }
-    // 2) walk from the end, dropping the last char until we get a parse
-    if (first !== -1) {
-      const head = s.slice(first);
-      let trimmed = head;
-      // try closing unclosed strings/objects/arrays — append closers up to 8 levels
-      for (let attempts = 0; attempts < 8; attempts++) {
-        try {
-          return JSON.parse(trimmed);
-        } catch {
-          // strip trailing comma/whitespace, append a closer
-          trimmed = trimmed.replace(/[,\s]+$/, "");
-          // count unbalanced braces/brackets
-          let braces = 0,
-            brackets = 0;
-          let inStr = false,
-            esc = false;
-          for (const c of trimmed) {
-            if (esc) {
-              esc = false;
-              continue;
-            }
-            if (c === "\\") {
-              esc = true;
-              continue;
-            }
-            if (c === '"') inStr = !inStr;
-            if (inStr) continue;
-            if (c === "{") braces++;
-            else if (c === "}") braces--;
-            else if (c === "[") brackets++;
-            else if (c === "]") brackets--;
-          }
-          if (inStr) trimmed += '"';
-          while (brackets-- > 0) trimmed += "]";
-          while (braces-- > 0) trimmed += "}";
-        }
-      }
-    }
+    // Truncated responses are never repaired into apparently complete evidence.
     return {};
   }
 }

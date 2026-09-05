@@ -17,8 +17,7 @@ import {
 /**
  * Owner-only AI Swarm Review console.
  *
- * Runs two fully independent AI panels — each simulating 510 expert
- * reviewers across six specialty clusters — against a selected
+ * Runs two advisory model panels with six actual domain analyses each — against a selected
  * application, then renders both verdicts side by side with the full
  * cluster-level evidence. Rendered only when `aiSwarm.amOwner` is true;
  * every endpoint behind it is owner-gated server-side as well.
@@ -57,7 +56,13 @@ function parseReport(raw: string | null): PanelReport | null {
   if (!raw) return null;
   try {
     const r = JSON.parse(raw);
-    return r && typeof r === "object" ? (r as PanelReport) : null;
+    const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string");
+    const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+    if (!r || typeof r !== "object" || !finite(r.score) || !finite(r.totalAgents) || typeof r.panelName !== "string" || typeof r.summary !== "string" || !["pass", "fail"].includes(r.verdict)) return null;
+    if (![r.verdictBasis, r.strengths, r.weaknesses, r.requiredChanges, r.redFlags].every(strings)) return null;
+    if (!r.votes || ![r.votes.approve, r.votes.revise, r.votes.reject].every(finite) || !Array.isArray(r.clusters)) return null;
+    if (!r.clusters.every((c: ClusterReport) => c && typeof c.cluster === "string" && [c.score, c.agentCount, c.votesApprove, c.votesRevise, c.votesReject].every(finite) && [c.keyFindings, c.redFlags, c.requiredChanges, c.dissentingOpinions].every(strings))) return null;
+    return r as PanelReport;
   } catch {
     return null;
   }
@@ -71,7 +76,7 @@ function scoreColor(score: number): string {
 
 function VoteBar({ approve, revise, reject, total }: { approve: number; revise: number; reject: number; total: number }) {
   if (total <= 0) return null;
-  const pct = (n: number) => Math.round((n / total) * 100);
+  const pct = (n: number) => Math.max(0, Math.min(100, Math.round((n / total) * 100)));
   return (
     <div>
       <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" role="img"
@@ -84,7 +89,7 @@ function VoteBar({ approve, revise, reject, total }: { approve: number; revise: 
         <span><span className="font-medium text-emerald-600 dark:text-emerald-400">{approve}</span> approve</span>
         <span><span className="font-medium text-amber-600 dark:text-amber-400">{revise}</span> revise</span>
         <span><span className="font-medium text-red-600 dark:text-red-400">{reject}</span> reject</span>
-        <span>· {total} simulated reviewers</span>
+        <span>· {total} AI recommendations, not human votes</span>
       </div>
     </div>
   );
@@ -117,7 +122,7 @@ function PanelCard({ report }: { report: PanelReport }) {
               <Bot className="h-4 w-4" /> {report.panelName}
             </CardTitle>
             <CardDescription className="mt-1 flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" /> {report.totalAgents} simulated expert reviewers · {report.clusters.length} specialty clusters
+              <Users className="h-3.5 w-3.5" /> {report.clusters.length} reported domain analyses · {report.clusters.length} specialty clusters
             </CardDescription>
           </div>
           <div className="text-end">
@@ -130,7 +135,7 @@ function PanelCard({ report }: { report: PanelReport }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <VoteBar {...report.votes} total={report.totalAgents} />
+        {report.totalAgents === report.clusters.length ? <VoteBar {...report.votes} total={report.totalAgents} /> : <p className="text-sm text-amber-700">Legacy simulated vote totals are omitted. This record contains AI findings, not human committee votes.</p>}
 
         <div className="rounded-lg border bg-muted/40 p-3">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -181,7 +186,7 @@ function PanelCard({ report }: { report: PanelReport }) {
                     <p className="text-sm font-semibold">{c.cluster}</p>
                     <span className={`text-sm font-bold ${scoreColor(c.score)}`}>{c.score}/100</span>
                   </div>
-                  <VoteBar approve={c.votesApprove} revise={c.votesRevise} reject={c.votesReject} total={c.agentCount} />
+                  {c.agentCount === 1 && <VoteBar approve={c.votesApprove} revise={c.votesRevise} reject={c.votesReject} total={c.agentCount} />}
                   {c.keyFindings.length > 0 && (
                     <div className="mt-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Findings</p>
@@ -285,12 +290,12 @@ export function AiSwarmConsole() {
             <FlaskConical className="h-5 w-5" />
             {isAr ? "سرب الذكاء الاصطناعي" : "AI Swarm Review"}
             <Badge variant="outline" className="ms-2"><Lock className="h-3 w-3 me-1" /> {isAr ? "للمالك فقط" : "Owner only"}</Badge>
-            <Badge className="bg-emerald-600 hover:bg-emerald-600">{isAr ? "مسار رسمي معتمد" : "Authorized official pathway"}</Badge>
+            <Badge className="bg-emerald-600 hover:bg-emerald-600">{isAr ? "تقييم استشاري" : "Advisory assessment"}</Badge>
           </CardTitle>
           <CardDescription>
             {isAr
-              ? "مسار القرار الرسمي المعتمد: نجاح السرب يعتمد الطلب ويصدر الشهادة باسم د. عبدالسلام العيد. إذا لم يجتز السرب، يراجع أربعة مراجعون رقميون. نجاح الإجماع يعتمد الطلب. فشل المسارين ينبّه المالك للتدخل البشري."
-              : "Authorized official decision pathway: a swarm pass auto-approves and issues a certificate under Dr. Abdulsalam Aleid. If the swarm does not pass, four designated digital reviewers decide. Unanimous pass still auto-approves. If both paths fail, the owner is alerted that human intervention is required."}
+              ? "تجري نماذج الذكاء الاصطناعي تحليلات للمجالات الأخلاقية وتجمع الملاحظات والنواقص للمراجعة البشرية. اجتياز التقييم لا يمنح موافقة أخلاقية ولا يصدر شهادة."
+              : "AI models analyze ethics domains and consolidate findings and gaps for human review. Passing the assessment does not grant ethics approval or issue a certificate."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -321,8 +326,8 @@ export function AiSwarmConsole() {
                   <AlertDialogTitle>{isAr ? "تشغيل تدقيق السرب المزدوج؟" : "Run the dual-panel swarm audit?"}</AlertDialogTitle>
                   <AlertDialogDescription>
                     {isAr
-                      ? "سيتم تشغيل لجنتين مستقلتين. النتيجة مسار قرار رسمي: النجاح يعتمد الطلب ويصدر شهادة؛ الفشل يشغّل المراجعين الرقميين الأربعة أو ينبّه المالك."
-                      : "This launches two independent panels. The result is an official decision pathway: a pass auto-approves and issues a certificate; a fail runs the four digital reviewers or alerts the owner."}
+                      ? "سيُشغّل مساران لتحليل مجالات أخلاقيات البحث بمساعدة الذكاء الاصطناعي. تُعرض النتائج الاستشارية على المراجعين البشريين ولا تصدر موافقة أو شهادة تلقائية."
+                      : "This runs two panels of AI domain analyses. Advisory findings support human reviewers and do not issue an automatic approval or certificate."}
                     {budget && (
                       <span className="mt-2 block text-xs">
                         {isAr ? "المتبقي اليوم:" : "Remaining today:"} {Math.max(0, budget.userLimit - budget.userUsed)} {isAr ? "استدعاء" : "calls"}

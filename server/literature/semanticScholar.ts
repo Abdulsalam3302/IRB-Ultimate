@@ -1,5 +1,5 @@
 import type { LiteratureItem } from "./types";
-import { fetchWithTimeout, trim } from "./http";
+import { fetchWithTimeout, trim, sourceTotal } from "./http";
 
 /**
  * Semantic Scholar Graph API. Strong abstract search + citation counts.
@@ -9,7 +9,7 @@ export async function searchSemanticScholar(
   query: string,
   limit: number,
   apiKey?: string
-): Promise<{ items: LiteratureItem[]; total: number }> {
+): Promise<{ items: LiteratureItem[]; total?: number }> {
   const fields = [
     "title",
     "abstract",
@@ -30,12 +30,13 @@ export async function searchSemanticScholar(
   const res = await fetchWithTimeout(url, { timeoutMs: 8000, headers });
   if (!res.ok) throw new Error(`Semantic Scholar ${res.status}`);
   const json = (await res.json()) as any;
-  const data: any[] = json?.data ?? [];
+  if (!Array.isArray(json?.data)) throw new Error("Invalid Semantic Scholar search response");
+  const data: any[] = Array.isArray(json?.data) ? json.data.slice(0, limit) : [];
 
   const items: LiteratureItem[] = data
     .map((p: any): LiteratureItem | null => {
       const id = p.paperId;
-      if (!id) return null;
+      if (typeof id !== "string" || !/^[A-Za-z0-9-]{1,128}$/.test(id)) return null;
       return {
         source: "semanticscholar" as const,
         id,
@@ -55,5 +56,5 @@ export async function searchSemanticScholar(
     })
     .filter((x): x is LiteratureItem => Boolean(x));
 
-  return { items, total: typeof json.total === "number" ? json.total : items.length };
+  return { items, total: sourceTotal(json.total) };
 }

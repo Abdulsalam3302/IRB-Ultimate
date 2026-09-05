@@ -1,104 +1,60 @@
-# Production readiness — IRB Saudi Arabia (open beta)
+# Production readiness — 2.2.0
 
-Last updated: 2026-07-20
+Updated 5 September 2026. Status: **engineering hardening for a controlled pilot; public operational acceptance pending**. This document tracks source controls and required evidence. It does not assert that the current release is deployed, accredited, clinically validated or approved to receive real research data.
 
-## 1. Repository overview
+## Current configuration baseline
 
-IRB Saudi Arabia is an Express + tRPC + React (Vite) monolith for NCBE-style IRB applications with Stage 1/2 AI review, certificates, committee workflows, and owner observability.
+| Area              | Source configuration                                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Runtime           | Node 24.x; pnpm 10.34.5; React/Vite + Express/tRPC                                                                             |
+| Database          | Drizzle/MySQL-compatible; CI MariaDB 11; verified TLS in production                                                            |
+| Hosting blueprint | Render free Frankfurt; optional Vercel frontend/API proxy; automatic deployment disabled                                       |
+| Authentication    | Native applicant login and optional identity providers; production staff require signed Supabase `aal2` assurance by default   |
+| Decisions         | Qualified human committee, authoritative decision provenance; issuance disabled by default                                     |
+| Abuse controls    | Shared database request counters and daily AI budgets; bounded per-process queues and input/output sizes                       |
+| Uploads           | Production ClamAV scanning required by default; private durable storage required                                               |
+| Documents         | Provenance-gated redacted public decisions; status-aware HTML/PDF/DOCX; explicitly labelled proposal drafts                    |
+| Discovery         | Static public pages/metadata, read-only browser WebMCP and authenticated server MCP mutations; private routes noindex/no-store |
 
-## 2. Current architecture
+The release coordinator also inspected the Render configuration read-only on 5 September 2026. It showed free Frankfurt hosting and an EU-central TiDB database. S3 credentials/bucket, Forge storage, `CLAMAV_HOST`, `OWNER_OPEN_ID` and `SENTRY_DSN` were not configured; Supabase and LLM connection settings were present and the database pool was 5. Secret values were not included in the receipt. Configuration presence does not prove provider availability or entitlements.
 
-| Layer | Choice |
-|-------|--------|
-| Package manager | pnpm (lockfile enforced) |
-| Runtime | Node 20.x |
-| API | Express + tRPC |
-| SPA | Vite React → Vercel |
-| API host | Render free Web Service (`irb-saudi-arabia`, Frankfurt) |
-| Database | TiDB Cloud Serverless MySQL (`irb_platform`, eu-central-1, TLS) |
-| Auth | Native email/password + optional Supabase; JWT cookie sessions |
-| AI | MiniMax OpenAI-compatible API (`MiniMax-M3`) |
-| CI | GitHub Actions `ci.yml` (secret scan → MariaDB migrate → typecheck/tests/build → e2e) |
-| Deploy | Render Git auto-deploy + Vercel production deploy workflow |
+**Current infrastructure blockers:** production uploads will correctly reject with unavailable scanning/storage until private durable storage and ClamAV are provisioned. The explicit owner subject and institutional staff MFA setup must be completed. Issuance remains disabled pending institutional authority. These prerequisites must be resolved before real applicants or advertising traffic are invited; turning off the safeguards is not a remedy. The final deployment/build identity and workflow checks still need their own release receipt.
 
-## 3. Baseline verification (local, 2026-07-20)
+## Evidence register
 
-See the final agent report for exact pass/fail of the latest run. Expected commands:
+| Evidence                                            | Current record and scope                                                                                                                                        |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI/chat/document review                             | [AI/document audit](audit-ai-documents.md): strict parsing, bounded editable fields, advisory decisions, document privacy and truthful generation               |
+| External integrations review                        | [External services audit](audit-external-services.md): literature, owner push, notifications, maps and independent runtime review                               |
+| Synthetic real document generation                  | [Generator receipt](validation/ai-documents/generator-validation.json): local PDF/DOCX artifacts, text/ZIP checks and visual inspection; no real IRB authority  |
+| Consolidated tests/typecheck/build/dependency audit | [Engineering receipt](validation/release-2.2.0/engineering-acceptance.json): Node24,330tests/42files,typecheck/build/frozeninstall pass; registry audit0 knownvulnerabilities.                         |
+| Browser and bounded load acceptance                 | [HTTP/browser](validation/release-2.2.0/http-browser.json), [load](validation/release-2.2.0/local-load.json), and [browser reports](audit-frontend-gtm.md) pass locally; production topology requires a separate measured run.                                                           |
+| Encrypted database/object restoration               | Operational receipt must identify target, backup integrity, recovered records, timing and limitations; synthetic drills alone do not prove production recovery. |
+| Git/hosting release                                 | Commit/push/deployment identity and actual-host verification pending consolidated release receipt.                                                              |
 
-```bash
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test
-pnpm build
-PORT=3010 node scripts/check-ai.mjs   # requires local server + LLM key
-curl -sS https://irb-saudi-arabia.onrender.com/api/health
-curl -sS https://irb-saudi-arabia.vercel.app/api/health
-```
+The reproducible verification commands are in [README.md](../README.md), CI and [the runbook](operations-runbook.md). Existing audit counts describe their own bounded test groups only.
 
-## 4. Risk register (condensed)
+## Launch gates
 
-| ID | Priority | Risk | Mitigation status |
-|----|----------|------|-------------------|
-| R1 | P0 | LLM API key leaked in chat/tickets | Keys only in Render/.env; rotate if exposed; CI secret scan |
-| R2 | P0 | Auth/API down when host sleeps | Keep-warm Action; clear outage messaging |
-| R3 | P1 | TiDB stored-proc migrations | Rewritten to IF NOT EXISTS DDL |
-| R4 | P1 | Free-tier cold starts / PDF RAM | Documented; certs may skip on free plan |
-| R5 | P1 | MiniMax quota exhaustion | `[AI_UNAVAILABLE]` degrade path |
-| R6 | P2 | No dedicated staging env | Recommended next milestone |
-| R7 | P2 | Branch protection not enforced in GitHub settings | Admin action required |
-| R8 | P2 | PHI / PDPL hosting residency | Open beta disclaimer; no real PHI until KSA hosting review |
+| Gate                     | Required evidence before real public use                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Institutional authority  | Verified operating entity, applicable committee registration/authority, named qualified reviewers, conflicts/quorum, decision and appeal procedures                |
+| Saudi data handling      | Reviewed lawful processing, sensitive-data controls, all processor/subprocessor locations and cross-border flows; contracts and retention/deletion policy          |
+| Staff identity           | Owner subject configured, MFA enrolled, `aal1` denied and verified `aal2` accepted on staff API, file and export paths                                             |
+| Durable records          | Private encrypted database/storage, backup scheduling and alerting, object lifecycle/versioning, tested restoration and recovery objectives                        |
+| Uploads and egress       | Real scanner integration/signature updates, clean/malicious/unavailable tests, private scanner network and trusted ingress/egress verification                     |
+| AI suitability           | Provider contract/residency/spend controls; representative Arabic/English calibration, injection/non-fabrication/bias/uncertainty evaluations and human escalation |
+| Capacity and reliability | Measured host-specific latency/error/memory/concurrency under anticipated load, overload behavior, restart persistence and rollback                                |
+| Public operation         | Domain/TLS, actual build identity, bilingual onboarding/support/privacy, incident roster, truthful claims/pricing, limited-cohort acceptance                       |
 
-## 5. Changes implemented (recent)
+Do not turn on approval issuance until the institution records the activation decision and these applicable gates are closed. The 2027 global roadmap needs new jurisdiction-specific evidence; it is not an automatic extension of Saudi authority.
 
-- MiniMax default model → `MiniMax-M3`
-- Reasoning-tag strip coverage for M3 `<think>` blocks
-- CI: Node 20, concurrency, minimal permissions, heuristic secret scan
-- TiDB-compatible migrations; Render pnpm install without corepack EROFS
-- Owner AI status probe + observability card
-- Production deploy docs (`PUBLIC_DEPLOY.md`)
+## Known operational limits
 
-## 6. Remaining risks
+Free Frankfurt hosting is not evidence of Saudi residency, continuous availability or durable disk. The frontend API proxy is part of the confidential data path. Persistent rate/budget accounting survives process restarts, while concurrency queues are per process and overall capacity changes with replica count. Provider call caps are not exact currency budgets; set provider-side financial ceilings.
 
-- No automated staging promotion gate
-- Vercel GH token may still be stale (CLI deploy works)
-- Free Render spin-down remains (mitigated by keep-warm)
-- AI quality depends on MiniMax plan/credits
-- Certificate PDF generation may OOM on free RAM
+Prompt-injection defenses and secret redaction are incomplete DLP. Source searches are partial discovery rather than verified full-text evidence. Model panels do not constitute independent reviewers. ClamAV does not prove uploaded documents harmless. Document fallback must remain labelled HTML or unavailable rather than falsely reporting PDF success.
 
-## 7. CI/CD design
+Recovery can restore outdated session/abuse state; rotate signing secrets and review counters during disaster recovery. Legacy decisions without actual human provenance require reassessment. No SMTP mail transport or guaranteed external delivery exists in the code.
 
-1. PR / push → `secret-scan` → `verify` (migrate, `pnpm check`, `pnpm test`, `pnpm build`, bundle budgets) → `e2e`
-2. Merge to `main` → Render auto-deploy + optional deploy hook + Vercel workflow
-3. Keep-warm pings `/api/health` every 12 minutes
-
-## 8. Testing strategy
-
-- Unit/integration: Vitest (`pnpm test`) — authz, AI outage copy, migrations helpers, routers
-- E2E: `scripts/e2e-*.mjs` + Playwright screenshots in CI
-- Live AI: `scripts/check-ai.mjs` (owner session)
-
-## 9. Deployment and rollback
-
-**Deploy:** push to `main` (Render) / `vercel --prod` or deploy workflow (Vercel).
-
-**Rollback:**
-1. Render Dashboard → Deploys → Redeploy previous live deploy
-2. Or `git revert` + push
-3. Vercel → Promote previous production deployment
-
-**Migrations:** prefer expand-and-contract; TiDB cannot run MySQL stored procedures.
-
-## 10. Recommended GitHub settings (admin)
-
-- Protect `main`: require PR, 1 approval, require status checks `secret-scan`, `verify` (and `e2e` when stable)
-- Disallow force-push / deletion on `main`
-- Restrict Actions secrets to this repo; never expose production secrets to fork PRs
-- Rotate any API key that appeared in chat
-
-## 11. Prioritized next steps
-
-1. Enable branch protection with required CI checks
-2. Add a Render staging service + TiDB branch for pre-prod smoke
-3. Fix/refresh `VERCEL_TOKEN` GitHub secret
-4. Upgrade Render plan when certificate PDF reliability matters
-5. Rotate MiniMax key if it was shared outside secret storage
+Public registry enumeration is disabled by default in production. Set `PUBLIC_REGISTRY_ENABLED=true` only after reviewing the exact publication fields, institutional policy and privacy basis.

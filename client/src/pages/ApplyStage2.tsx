@@ -1,3 +1,4 @@
+import { readUploadBase64 } from "@/lib/files";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -209,16 +210,12 @@ export default function ApplyStage2() {
     if (file.size > 15 * 1024 * 1024) { toast.error(isAr ? "حجم الملف يجب أن يكون أقل من 15 ميجابايت" : "File size must be under 15MB"); return; }
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const result = await uploadFile.mutateAsync({ fileName: file.name, fileData: base64, contentType: file.type });
-        setRejectionFileUrl(result.url);
-        toast.success(isAr ? "تم رفع الملف بنجاح" : "File uploaded successfully");
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (error) { toast.error(isAr ? "فشل الرفع" : "Upload failed"); setUploading(false); }
+      const base64 = await readUploadBase64(file);
+      const result = await uploadFile.mutateAsync({ fileName: file.name, fileData: base64, contentType: file.type, applicationId: appId, category: "rejection_file" });
+      setRejectionFileUrl(result.url);
+      toast.success(isAr ? "تم رفع الملف بنجاح" : "File uploaded successfully");
+    } catch { toast.error(isAr ? "فشل الرفع" : "Upload failed"); }
+    finally { setUploading(false); }
   };
 
   // Stepped-progress message during the AI auto-complete call.

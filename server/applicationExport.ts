@@ -109,7 +109,7 @@ export function renderApplicationHtml(data: ExportData): string {
 <body>
 <header>
   <h1>IRB Research Application</h1>
-  <div class="sub">National Committee of BioEthics (NCBE) of Saudi Arabia · Advanced Healthcare Systems Society</div>
+  <div class="sub">IRB Saudi Arabia · Research ethics application record</div>
 </header>
 
 <div class="meta">
@@ -192,17 +192,18 @@ ${stage1Score !== null || stage2Score !== null ? `
  */
 export function buildInspectorZip(data: ExportData): { stream: PassThrough; filename: string } {
   const html = renderApplicationHtml(data);
+  // Spreadsheet applications execute formula-like CSV cells, even when quoted.
+  const csvCell = (value: string) => `"${(/^[\s]*[=+@\-\t\r]/.test(value) ? "'" + value : value).replace(/"/g, '\"\"')}"`;
   const auditCsv = [
     "timestamp,action,details",
     ...data.audit.map(a => {
       const ts = new Date(a.createdAt).toISOString();
-      const details = (a.details || "").replace(/"/g, '""');
-      return `"${ts}","${a.action.replace(/"/g, '""')}","${details}"`;
+      return [ts, a.action, a.details || ""].map(csvCell).join(",");
     }),
   ].join("\n");
 
-  // Manifest with SHA-256 hashes — proves the bundle hasn't been
-  // tampered with after the fact.
+  // Checksums detect accidental changes; without an external signed digest
+  // they do not prove authenticity or protect against intentional replacement.
   const hash = (buf: Buffer | string) =>
     createHash("sha256").update(typeof buf === "string" ? Buffer.from(buf, "utf8") : buf).digest("hex");
   const manifest = JSON.stringify(
@@ -224,10 +225,11 @@ export function buildInspectorZip(data: ExportData): { stream: PassThrough; file
     2
   );
 
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  const archive = archiver("zip", { zlib: { level: 6 } });
   const stream = new PassThrough();
   archive.pipe(stream);
-  archive.on("error", err => stream.emit("error", err));
+  archive.on("error", err => stream.destroy(err));
+  stream.on("close", () => { if (!stream.readableEnded) archive.abort(); });
 
   archive.append(html, { name: "application.html" });
   archive.append(auditCsv, { name: "audit-log.csv" });
@@ -237,8 +239,9 @@ export function buildInspectorZip(data: ExportData): { stream: PassThrough; file
     `IRB Ultimate — Inspector Export
 ================================
 
-This archive contains a tamper-evident snapshot of an IRB application
-suitable for regulatory inspection.
+This archive contains a checksum-indexed snapshot of an IRB application.
+The embedded manifest is not an independent signature or authenticity proof.
+Regulatory acceptance requires the responsible institution's review.
 
 Files
   application.html  Full Stage 1 + Stage 2 + authors + audit-trail HTML
@@ -253,6 +256,6 @@ Verification
   );
 
   const filename = `irb-${(data.app.irbNumber || `app-${data.app.id}`).replace(/[^a-zA-Z0-9_-]/g, "-")}-inspector.zip`;
-  archive.finalize();
+  void archive.finalize().catch(err => stream.destroy(err));
   return { stream, filename };
 }

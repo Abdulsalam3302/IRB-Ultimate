@@ -1,85 +1,26 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { analyticsPath } from "@/lib/privacy";
 
-const SESSION_KEY = "irb-analytics-session";
-
-function getSessionId(): string {
-  try {
-    let id = sessionStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      sessionStorage.setItem(SESSION_KEY, id);
-    }
-    return id;
-  } catch {
-    return crypto.randomUUID();
-  }
-}
-
-function prefersDnt(): boolean {
-  try {
-    return navigator.doNotTrack === "1" || (window as unknown as { doNotTrack?: string }).doNotTrack === "1";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Lightweight first-party pageview + heartbeat tracker.
- * Skips DNT browsers and the owner observability page.
- */
 export function AnalyticsBeacon() {
   const [location] = useLocation();
   const ingest = trpc.analytics.ingest.useMutation();
-  const pathEnteredAt = useRef(Date.now());
-  const sessionId = useRef(getSessionId());
   const mutateRef = useRef(ingest.mutate);
+  const sessionId = useRef<string | null>(null);
+  useEffect(() => { mutateRef.current = ingest.mutate; }, [ingest.mutate]);
 
   useEffect(() => {
-    mutateRef.current = ingest.mutate;
-  }, [ingest.mutate]);
-
-  useEffect(() => {
-    if (prefersDnt()) return;
-    if (location.startsWith("/admin/observability")) return;
-
-    pathEnteredAt.current = Date.now();
-    mutateRef.current({
-      sessionId: sessionId.current,
-      path: location || "/",
-      eventType: "pageview",
-      dwellMs: 0,
-    });
-
-    const heartbeat = window.setInterval(() => {
-      const dwell = Math.min(Date.now() - pathEnteredAt.current, 30_000);
-      pathEnteredAt.current = Date.now();
-      mutateRef.current({
-        sessionId: sessionId.current,
-        path: location || "/",
-        eventType: "heartbeat",
-        dwellMs: dwell,
-      });
-    }, 30_000);
-
-    const onLeave = () => {
-      const dwell = Math.min(Date.now() - pathEnteredAt.current, 120_000);
-      mutateRef.current({
-        sessionId: sessionId.current,
-        path: location || "/",
-        eventType: "leave",
-        dwellMs: dwell,
-      });
-    };
-    window.addEventListener("pagehide", onLeave);
-
-    return () => {
-      window.clearInterval(heartbeat);
-      window.removeEventListener("pagehide", onLeave);
-      onLeave();
-    };
+    // Explicit opt-in deployment switch; no third-party scripts or cookies.
+    if (import.meta.env.VITE_PUBLIC_ANALYTICS_ENABLED !== "1") return;
+    const privacy = navigator as Navigator & { globalPrivacyControl?: boolean };
+    if (privacy.doNotTrack === "1" || privacy.globalPrivacyControl) return;
+    const path = analyticsPath(location);
+    if (!path || document.visibilityState !== "visible") return;
+    if (!sessionId.current) sessionId.current = crypto.randomUUID();
+    mutateRef.current({ sessionId: sessionId.current, path, eventType: "pageview", dwellMs: 0 });
+    // No heartbeat or leave mutations: avoid retaining interaction histories
+    // or adding network work to every research workflow transition.
   }, [location]);
-
   return null;
 }

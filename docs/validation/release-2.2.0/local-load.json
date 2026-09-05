@@ -1,0 +1,49 @@
+{
+  "testedAt": "2026-09-05T01:38:44.193Z",
+  "scope": "single local instance; synthetic read-only traffic; not a production capacity guarantee",
+  "phases": [
+    {
+      "name": "public-page-concurrency",
+      "path": "/",
+      "requests": 300,
+      "concurrency": 30,
+      "elapsedMs": 78,
+      "requestsPerSecond": 3835,
+      "p50Ms": 5,
+      "p95Ms": 14,
+      "p99Ms": 16,
+      "statuses": {
+        "200": 300
+      }
+    },
+    {
+      "name": "database-readiness",
+      "path": "/api/ready",
+      "requests": 150,
+      "concurrency": 15,
+      "elapsedMs": 28,
+      "requestsPerSecond": 5423,
+      "p50Ms": 2,
+      "p95Ms": 10,
+      "p99Ms": 11,
+      "statuses": {
+        "200": 150
+      }
+    },
+    {
+      "name": "expensive-public-api-abuse-bound",
+      "path": "/api/irb/meta/requirements",
+      "requests": 60,
+      "concurrency": 10,
+      "elapsedMs": 20,
+      "requestsPerSecond": 2934,
+      "p50Ms": 3,
+      "p95Ms": 5,
+      "p99Ms": 6,
+      "statuses": {
+        "200": 30,
+        "429": 30
+      }
+    }
+  ]
+}

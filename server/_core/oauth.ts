@@ -1,3 +1,4 @@
+import { safeLogError } from "./safeLog";
 import {
   COOKIE_NAME,
   SESSION_TTL_MS,
@@ -64,7 +65,7 @@ export function registerOAuthRoutes(app: Express) {
     }
     const nonce = randomBytes(32).toString("hex");
     const dest = getQueryParam(req, "next") || "/";
-    const safeDest = /^\/(?!\/)/.test(dest) ? dest : "/";
+    const safeDest = /^\/(?![\/\\])[^\\\x00-\x1f]*$/.test(dest) ? dest : "/";
 
     const secure = isSecure(req);
     res.cookie(stateCookieName(req), nonce, {
@@ -151,11 +152,11 @@ export function registerOAuthRoutes(app: Express) {
 
       // Recover the post-login destination from oauth_dest, then clear it.
       const dest = cookies["oauth_dest"] ?? "/";
-      const safeDest = /^\/(?!\/)/.test(dest) ? dest : "/";
+      const safeDest = /^\/(?![\/\\])[^\\\x00-\x1f]*$/.test(dest) ? dest : "/";
       res.clearCookie("oauth_dest", { path: "/" });
       res.redirect(302, safeDest);
     } catch (error) {
-      console.error("[OAuth] Callback failed", error);
+      console.error("[OAuth] Callback failed", safeLogError(error));
       res.status(500).json({ error: "OAuth callback failed" });
     }
   });

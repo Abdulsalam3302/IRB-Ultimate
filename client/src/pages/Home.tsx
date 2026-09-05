@@ -1,3 +1,6 @@
+import { PLATFORM_FAQS } from "@shared/seo";
+import { Link } from "wouter";
+import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
@@ -51,7 +54,7 @@ export default function Home() {
                   variant="ghost"
                   size="sm"
                   title={t("nav.logout")}
-                  onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+                  onClick={async () => { try { await logout(); window.location.href = "/"; } catch { toast.error(isRtl ? "تعذر تأكيد تسجيل الخروج. حاول مرة أخرى." : "Sign-out could not be confirmed. Please retry."); } }}
                 >
                   <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
                 </Button>
@@ -94,7 +97,7 @@ export default function Home() {
           <div className="lg:col-span-5">
             <div className="irb-card p-8 shadow-lift relative">
               <div className="absolute -top-4 -start-4 z-10">
-                <div className="seal">{isRtl ? "مختوم · معتمد" : "Stamped · Approved"}</div>
+                <div className="seal">{isRtl ? "نموذج توضيحي" : "Illustration only"}</div>
               </div>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -109,16 +112,16 @@ export default function Home() {
               <dl className="grid grid-cols-2 gap-y-2 text-[12.5px]">
                 <dt className="text-ink-muted">{isRtl ? "القرار" : "Decision"}</dt>
                 <dd className="text-jade-700 font-semibold flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5" /> {isRtl ? "موافق" : "Approved"}
+                  <Check className="h-3.5 w-3.5" /> {isRtl ? "بانتظار المراجعة" : "Awaiting review"}
                 </dd>
-                <dt className="text-ink-muted">{isRtl ? "الجهة المعتمدة" : "Authority"}</dt>
-                <dd className="text-forest-900 font-medium">Dr. Abdulsalam Aleid</dd>
+                <dt className="text-ink-muted">{isRtl ? "صاحب القرار" : "Decision maker"}</dt>
+                <dd className="text-forest-900 font-medium">{isRtl ? "اللجنة البشرية المختصة" : "Responsible human committee"}</dd>
               </dl>
             </div>
             <p className="mt-4 text-[12.5px] text-ink-soft leading-relaxed text-center px-2">
               {isRtl
-                ? "تُصدَر شهادات IRB من هذه المنصة وفق الممارسات الأخلاقية الدولية المعتمدة — إعلان هلسنكي وICH-GCP وإرشادات CIOMS — ويمكن التحقق منها إلكترونيًا من أي مكان في العالم."
-                : "IRB certificates from this platform are issued on internationally recognized ethical practices — the Declaration of Helsinki, ICH-GCP, and CIOMS — and are verifiable online worldwide."}
+                ? "تُصدر السجلات بعد القرار المخول. يؤكد التحقق الإلكتروني سجل المنصة، ويعتمد قبوله لدى مؤسسة أخرى أو دولة أخرى على المتطلبات المنطبقة."
+                : "Records follow an authorized decision. Online verification confirms the platform record; acceptance by another institution or country depends on applicable requirements."}
             </p>
           </div>
         </div>
@@ -262,6 +265,11 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="container py-16 max-w-4xl" aria-labelledby="faq-heading">
+        <h2 id="faq-heading" className="text-3xl font-bold mb-6">{isRtl ? "أسئلة شائعة" : "Common questions"}</h2>
+        <div className="space-y-4">{PLATFORM_FAQS.map(faq => <details key={faq.qEn} className="rounded-xl border p-5 bg-white"><summary className="cursor-pointer font-semibold">{isRtl ? faq.qAr : faq.qEn}</summary><p className="mt-3 text-ink-soft leading-relaxed">{isRtl ? faq.aAr : faq.aEn}</p></details>)}</div>
+        <p className="mt-6 text-sm"><Link href="/policy" className="underline">{t("nav.policy")}</Link> · <Link href="/resources/guideline/privacy-policy" className="underline">{t("footer.privacy")}</Link> · <Link href="/support" className="underline">{t("nav.support")}</Link></p>
+      </section>
       <SiteFooter />
     </div>
   );

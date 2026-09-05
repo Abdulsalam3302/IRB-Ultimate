@@ -23,15 +23,16 @@ export default function Registry() {
   const { t, lang } = useT();
   const isAr = lang === "ar";
   const [query, setQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [researchType, setResearchType] = useState<string>("");
   const [year, setYear] = useState<string>("");
   const [page, setPage] = useState(1);
   const pageSize = 12;
 
   const { data: stats } = trpc.publicStats.registryStats.useQuery();
-  const { data, isLoading } = trpc.publicStats.registrySearch.useQuery(
+  const { data, isLoading, isError, refetch } = trpc.publicStats.registrySearch.useQuery(
     {
-      query: query || undefined,
+      query: searchQuery || undefined,
       researchType: researchType || undefined,
       year: year ? parseInt(year, 10) : undefined,
       page,
@@ -46,10 +47,11 @@ export default function Registry() {
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setSearchQuery(query.trim());
     setPage(1);
   };
   const clearAll = () => {
-    setQuery(""); setResearchType(""); setYear(""); setPage(1);
+    setQuery(""); setSearchQuery(""); setResearchType(""); setYear(""); setPage(1);
   };
 
   const yearOptions = (stats?.byYear ?? [])
@@ -63,7 +65,7 @@ export default function Registry() {
       <div className="container py-10 max-w-6xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-            <Link href="/"><a className="hover:text-primary inline-flex items-center gap-1"><ArrowLeft className="h-3 w-3" /> {t("nav.home")}</a></Link>
+            <Link href="/" className="hover:text-primary inline-flex items-center gap-1"><ArrowLeft className="h-3 w-3" /> {t("nav.home")}</Link>
             <span>·</span>
             <span>{isAr ? "السجل العام" : "Public Registry"}</span>
           </div>
@@ -73,23 +75,23 @@ export default function Registry() {
           </h1>
           <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed">
             {isAr
-              ? "استعرض الأبحاث التي تم اعتمادها أخلاقيًا من قبل المنصة. متاح للجميع، قابل للبحث، قابل للاستشهاد."
-              : "Browse research protocols ethically approved through this platform. Open, searchable, and citable."}
+              ? "استعرض سجلات القرارات العامة في المنصة. تحقق من الحالة الحالية لكل سجل وقبوله لدى مؤسستك."
+              : "Browse public decision records held by the platform. Check each record’s current status and your institution’s acceptance."}
           </p>
         </div>
 
         {/* Aggregate header — feel of "infrastructure" */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           <Card><CardContent className="py-4 text-center">
-            <div className="text-2xl font-bold text-primary">{total.toLocaleString(isAr ? "ar-SA" : "en-US")}</div>
+            <div className="text-2xl font-bold text-primary">{data ? total.toLocaleString(isAr ? "ar-SA" : "en-US") : "—"}</div>
             <div className="text-xs text-muted-foreground">{isAr ? "إجمالي السجل" : "Total in registry"}</div>
           </CardContent></Card>
           <Card><CardContent className="py-4 text-center">
-            <div className="text-2xl font-bold text-emerald-600">{(stats?.byInstitution ?? []).length}</div>
+            <div className="text-2xl font-bold text-emerald-600">{stats ? stats.byInstitution.length : "—"}</div>
             <div className="text-xs text-muted-foreground">{isAr ? "مؤسسات" : "Institutions"}</div>
           </CardContent></Card>
           <Card><CardContent className="py-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{(stats?.byType ?? []).length}</div>
+            <div className="text-2xl font-bold text-blue-600">{stats ? stats.byType.length : "—"}</div>
             <div className="text-xs text-muted-foreground">{isAr ? "أنواع البحث" : "Research types"}</div>
           </CardContent></Card>
           <Card><CardContent className="py-4 text-center">
@@ -105,6 +107,7 @@ export default function Registry() {
               <div className="relative">
                 <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  maxLength={200}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder={isAr ? "ابحث بالعنوان، المحقق، المؤسسة، IRB#..." : "Search by title, PI, institution, IRB number..."}
@@ -141,6 +144,8 @@ export default function Registry() {
         {/* Results */}
         {isLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        ) : isError ? (
+          <Card><CardContent className="py-12 text-center" role="alert"><p>{isAr ? "السجل غير متاح حالياً؛ تعذر تحميل النتائج." : "The registry is temporarily unavailable; results could not be loaded."}</p><Button variant="outline" onClick={() => refetch()}>{isAr ? "إعادة المحاولة" : "Retry"}</Button></CardContent></Card>
         ) : items.length === 0 ? (
           <Card>
             <CardContent className="py-16 text-center">
@@ -151,8 +156,8 @@ export default function Registry() {
           </Card>
         ) : (
           <div className="grid sm:grid-cols-2 gap-4">
-            {items.map((it: any) => (
-              <Card key={it.id} className="hover:shadow-md transition-shadow">
+            {items.map((it) => (
+              <Card key={it.irbNumber} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <Badge variant="outline" className="font-mono text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
@@ -163,7 +168,7 @@ export default function Registry() {
                     </span>
                   </div>
                   <CardTitle className="text-base leading-snug mt-2">
-                    {it.researchTitle || `Application #${it.id}`}
+                    {it.researchTitle || (isAr ? "سجل IRB" : "IRB record")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 space-y-1.5 text-xs text-muted-foreground">
@@ -171,25 +176,18 @@ export default function Registry() {
                     <div className="flex items-center gap-1.5"><Award className="h-3 w-3 shrink-0" /><span className="truncate">{it.principalInvestigator}</span></div>
                   )}
                   {it.piInstitution && (
-                    <div className="flex items-center gap-1.5"><Building2 className="h-3 w-3 shrink-0" /><span className="truncate">{it.piInstitution}{it.piDepartment ? ` · ${it.piDepartment}` : ""}</span></div>
+                    <div className="flex items-center gap-1.5"><Building2 className="h-3 w-3 shrink-0" /><span className="truncate">{it.piInstitution}</span></div>
                   )}
                   {it.researchType && (
                     <div className="flex items-center gap-1.5"><Calendar className="h-3 w-3 shrink-0" /><span className="capitalize">{String(it.researchType).replace(/_/g, " ")}</span></div>
                   )}
                   <div className="flex items-center gap-2 pt-2">
                     {it.irbNumber && (
-                      <Link href={`/verify?n=${encodeURIComponent(it.irbNumber)}`}>
-                        <a className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <Link href={`/verify?n=${encodeURIComponent(it.irbNumber)}`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                           {isAr ? "التحقق" : "Verify"} <ExternalLink className="h-3 w-3" />
-                        </a>
                       </Link>
                     )}
-                    {it.certificateUrl && (
-                      <a href={it.certificateUrl} target="_blank" rel="noopener noreferrer"
-                         className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300 hover:underline">
-                        <Download className="h-3 w-3" /> {isAr ? "الشهادة" : "Certificate"}
-                      </a>
-                    )}
+
                   </div>
                 </CardContent>
               </Card>

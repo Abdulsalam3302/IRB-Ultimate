@@ -1,3 +1,4 @@
+import { safeNextPath } from "@/lib/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/design/Logo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useT } from "@/contexts/LanguageContext";
-import { getSupabase, isSupabaseAuthEnabled, isSupabaseReachable } from "@/lib/supabase";
+import { getSupabase, isSupabaseAuthEnabled, getAvailableAuthProviders } from "@/lib/supabase";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,7 +58,7 @@ export default function Auth() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const rawNext = params.get("next") || "/dashboard";
   // Only allow same-origin path redirects — blocks open-redirect via ?next=//evil.com
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
+  const next = safeNextPath(rawNext);
   const [mode, setMode] = useState<Mode>("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -66,18 +67,19 @@ export default function Auth() {
   // Social buttons only render once we confirm the Supabase project is live —
   // a deleted/paused project never produces a dead-end button. Self-heals the
   // moment valid, reachable Supabase credentials are configured.
-  const [socialAvailable, setSocialAvailable] = useState(false);
+  const [socialProviders, setSocialProviders] = useState<string[]>([]);
+  const socialAvailable = socialProviders.length > 0;
 
   useEffect(() => {
     const err = params.get("error");
-    if (err) toast.error(decodeURIComponent(err));
+    if (err) toast.error(t("auth.failed"));
   }, [params]);
 
   useEffect(() => {
     let active = true;
     if (isSupabaseAuthEnabled) {
-      isSupabaseReachable().then(ok => {
-        if (active) setSocialAvailable(ok);
+      getAvailableAuthProviders().then(providers => {
+        if (active) setSocialProviders(providers);
       });
     }
     return () => {
@@ -123,6 +125,7 @@ export default function Auth() {
   // session cookie in its response — no Supabase, no callback bridge needed.
   const emailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     try {
       const path = mode === "signup" ? "/api/auth/register" : "/api/auth/login";
@@ -182,6 +185,7 @@ export default function Auth() {
           {socialAvailable && (
             <>
               <div className="mt-8 space-y-3">
+                {socialProviders.includes("google") && (
                 <Button
                   type="button"
                   variant="outline"
@@ -192,6 +196,8 @@ export default function Auth() {
                   <GoogleIcon />
                   {t("auth.continueGoogle")}
                 </Button>
+                )}
+                {socialProviders.includes("apple") && (
                 <Button
                   type="button"
                   variant="outline"
@@ -202,6 +208,8 @@ export default function Auth() {
                   <AppleIcon />
                   {t("auth.continueApple")}
                 </Button>
+                )}
+                {socialProviders.includes("linkedin_oidc") && (
                 <Button
                   type="button"
                   variant="outline"
@@ -212,6 +220,7 @@ export default function Auth() {
                   <LinkedInIcon />
                   {t("auth.continueLinkedIn")}
                 </Button>
+                )}
               </div>
 
               <div className="my-6 flex items-center gap-3">
@@ -231,6 +240,7 @@ export default function Auth() {
                 <Label htmlFor="name">{t("auth.fullName")}</Label>
                 <Input
                   id="name"
+                  maxLength={200}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   autoComplete="name"
@@ -242,6 +252,7 @@ export default function Auth() {
               <Label htmlFor="email">{t("auth.email")}</Label>
               <Input
                 id="email"
+                maxLength={320}
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
@@ -257,7 +268,8 @@ export default function Auth() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                minLength={8}
+                minLength={mode === "signup" ? 12 : 1}
+                maxLength={128}
                 required
               />
             </div>

@@ -1,9 +1,11 @@
+import { safeLogError } from "./safeLog";
 import { COOKIE_NAME, SESSION_TTL_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { timingSafeEqual } from "node:crypto";
 
 function openIdFromEmail(email: string): string {
   const norm = email.trim().toLowerCase();
@@ -84,8 +86,8 @@ export function registerDevLoginRoutes(app: Express) {
   const verifyAccessToken = (req: Request, res: Response): boolean => {
     const required = pilotMode ? ENV.pilotLoginToken : ENV.devLoginToken;
     if (!required) return true; // dev mode without an extra token
-    const provided = String(req.body?.token || req.query?.token || "");
-    if (provided !== required) {
+    const provided = String(req.body?.token || "");
+    if (Buffer.byteLength(provided) !== Buffer.byteLength(required) || !timingSafeEqual(Buffer.from(provided), Buffer.from(required))) {
       res.status(401).json({ error: "login token mismatch" });
       return false;
     }
@@ -93,7 +95,7 @@ export function registerDevLoginRoutes(app: Express) {
   };
 
   const requireLoopback = (req: Request, res: Response): boolean => {
-    const ip = (req.ip || req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+    const ip = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
     if (ip === "127.0.0.1" || ip === "::1" || ip === "localhost") return true;
     res.status(403).json({ error: "dev login only available from loopback" });
     return false;
@@ -164,7 +166,7 @@ export function registerDevLoginRoutes(app: Express) {
         res.redirect(302, "/");
       }
     } catch (error) {
-      console.error("[SignIn] failed", error);
+      console.error("[SignIn] failed", safeLogError(error));
       res.status(500).json({ error: "sign in failed" });
     }
   };

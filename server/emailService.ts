@@ -1,6 +1,7 @@
+import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { notifications, users } from "../drizzle/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { notifications } from "../drizzle/schema";
+import { eq, desc, and, count } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 
 // ─── In-App Notification Helpers ────────────────────────────────────────────
@@ -13,31 +14,33 @@ export async function createNotification(data: {
   message: string;
 }) {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return false;
   try {
     await db.insert(notifications).values({
       userId: data.userId,
       applicationId: data.applicationId || null,
-      type: data.type as any,
-      title: data.title,
-      message: data.message,
+      type: (notifications.type.enumValues as readonly string[]).includes(data.type) ? data.type as typeof notifications.type.enumValues[number] : "general",
+      title: data.title.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 255),
+      message: data.message.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").slice(0, 16000),
     });
-  } catch (err) {
-    console.error("[Notification] Failed to create:", err);
+    return true;
+  } catch {
+    console.error("[Notification] Failed to persist notification");
+    return false;
   }
 }
 
 export async function getUserNotifications(userId: number, limit = 50) {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt)).limit(limit);
+  if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Notifications are temporarily unavailable" });
+  return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt)).limit(Number.isSafeInteger(limit) ? Math.max(1, Math.min(100, limit)) : 50);
 }
 
 export async function getUnreadCount(userId: number) {
   const db = await getDb();
-  if (!db) return 0;
-  const rows = await db.select().from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
-  return rows.length;
+  if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Notification count is temporarily unavailable" });
+  const rows = await db.select({ count: count() }).from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+  return rows[0]?.count ?? 0;
 }
 
 export async function markNotificationRead(id: number, userId: number) {
@@ -133,7 +136,7 @@ export async function notifyAdminApproved(applicantId: number, applicationId: nu
     applicationId,
     type: "admin_approved",
     title: "IRB Application Approved!",
-    message: `Congratulations! Your application has been approved. Your IRB number is ${irbNumber}. The certificate has been generated and is available for download from your dashboard.`,
+    message: `Congratulations! Your application has been approved. Your IRB number is ${irbNumber}. Check your dashboard for the recorded decision and current document availability.`,
   });
 }
 
@@ -155,7 +158,7 @@ export async function notifyCertificateIssued(applicantId: number, applicationId
     applicationId,
     type: "certificate_issued",
     title: "IRB Certificate Issued",
-    message: `Your IRB certificate (${irbNumber}) has been generated and is ready for download. The certificate is valid for one year from the date of issuance.`,
+    message: `Your IRB certificate (${irbNumber}) has been generated and is ready for download. Confirm the approved duration, conditions, and renewal requirements in the responsible committee record.`,
   });
 }
 
@@ -165,12 +168,12 @@ export async function notifyApplicationRetracted(applicantId: number, applicatio
     applicationId,
     type: "admin_rejected",
     title: "IRB Approval Retracted",
-    message: `Your IRB approval (${irbNumber}) has been RETRACTED. Reason: ${reason}. A retraction certificate has been issued. All ongoing research activities under this IRB number must cease immediately. The retraction is publicly visible on the verification page.`,
+    message: `Your IRB approval (${irbNumber}) has been RETRACTED. Reason: ${reason}. Check your dashboard for the retraction notice and recorded instructions. All ongoing research activities under this IRB number must cease immediately. The retraction is publicly visible on the verification page.`,
   });
 
   await notifyOwner({
     title: "IRB Approval Retracted",
-    content: `Application #${applicationId} (${irbNumber}) has been retracted. Reason: ${reason}. A retraction certificate has been generated.`,
+    content: `Application #${applicationId} (${irbNumber}) has been retracted. Reason: ${reason}. Check the authenticated decision record for notice availability.`,
   });
 }
 

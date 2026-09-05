@@ -1,3 +1,4 @@
+import { PLATFORM_FAQS } from "@shared/seo";
 import { Separator } from "@/components/ui/separator";
 import { Navbar } from "@/components/Navbar";
 import { ResourceTemplateCard } from "@/components/design/ResourceTemplateCard";
@@ -32,8 +33,8 @@ const templates: Array<{
     slug: "informed-consent",
     titleEn: "Informed Consent Form",
     titleAr: "نموذج الموافقة المستنيرة",
-    descEn: "Participant consent aligned with Saudi regulations.",
-    descAr: "موافقة المشاركين وفق اللوائح السعودية.",
+    descEn: "Draft participant consent for committee review.",
+    descAr: "مسودة موافقة المشاركين لمراجعة اللجنة.",
     icon: FileCheck,
   },
   {
@@ -69,38 +70,7 @@ const legalLinks = [
   { href: "/resources/guideline/ich-gcp", titleEn: "ICH-GCP", titleAr: "إرشادات ICH-GCP", icon: BookOpen },
 ];
 
-const faqs = [
-  {
-    qEn: "What types of research require IRB approval?", qAr: "ما أنواع البحوث التي تتطلب موافقة IRB؟",
-    aEn: "All research involving human subjects, their data, or biological specimens requires IRB review.",
-    aAr: "جميع البحوث التي تشمل البشر أو بياناتهم أو عيناتهم البيولوجية تتطلب مراجعة IRB.",
-  },
-  {
-    qEn: "How long does the IRB review process take?", qAr: "كم تستغرق عملية مراجعة IRB؟",
-    aEn: "The platform targets 24–48 hours for standard applications after AI pre-screening and committee review.",
-    aAr: "تستهدف المنصة 24–48 ساعة للطلبات القياسية بعد الفحص المسبق بالذكاء الاصطناعي ومراجعة اللجنة.",
-  },
-  {
-    qEn: "Can I resubmit a rejected application?", qAr: "هل يمكنني إعادة تقديم طلب مرفوض؟",
-    aEn: "Yes — one resubmission is allowed. A second rejection is permanent.",
-    aAr: "نعم — يُسمح بإعادة تقديم واحدة. الرفض الثاني نهائي.",
-  },
-  {
-    qEn: "What is the AI pre-screening?", qAr: "ما هو الفحص المسبق بالذكاء الاصطناعي؟",
-    aEn: "AI evaluates compliance with NCBE guidelines and ethical standards. A minimum score of 70/100 is required at each stage.",
-    aAr: "يقيّم الذكاء الاصطناعي الامتثال لإرشادات NCBE والمعايير الأخلاقية. يلزم 70/100 في كل مرحلة.",
-  },
-  {
-    qEn: "How are committee reviewers assigned?", qAr: "كيف يتم تعيين مراجعي اللجنة؟",
-    aEn: "Five committee members are randomly assigned. Each has 24 hours to respond.",
-    aAr: "يُعيَّن خمسة أعضاء عشوائياً. لدى كل عضو 24 ساعة للرد.",
-  },
-  {
-    qEn: "How do I verify an IRB certificate?", qAr: "كيف أتحقق من شهادة IRB؟",
-    aEn: "Use Verify IRB on the platform — enter the IRB number to view certificate details.",
-    aAr: "استخدم التحقق من IRB — أدخل رقم IRB لعرض تفاصيل الشهادة.",
-  },
-];
+const faqs = PLATFORM_FAQS;
 
 export default function Resources() {
   const { t, lang } = useT();

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { sdk } from "./_core/sdk";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
@@ -42,6 +43,23 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
 }
 
 describe("auth.logout", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("does not claim success or clear cookies when durable revocation fails", async () => {
+    vi.spyOn(sdk, "revokeRequestSession").mockRejectedValue(new Error("Synthetic unavailable database"));
+    const { ctx, clearedCookies } = createAuthContext();
+    await expect(appRouter.createCaller(ctx).auth.logout()).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(clearedCookies).toHaveLength(0);
+  });
+
+  it("revokes the server session before clearing the client cookie", async () => {
+    const events: string[] = [];
+    vi.spyOn(sdk, "revokeRequestSession").mockImplementation(async () => { events.push("revoked"); });
+    const { ctx } = createAuthContext();
+    ctx.res.clearCookie = (() => { events.push("cleared"); }) as TrpcContext["res"]["clearCookie"];
+    await appRouter.createCaller(ctx).auth.logout();
+    expect(events).toEqual(["revoked", "cleared"]);
+  });
   it("clears the session cookie and reports success", async () => {
     const { ctx, clearedCookies } = createAuthContext();
     const caller = appRouter.createCaller(ctx);

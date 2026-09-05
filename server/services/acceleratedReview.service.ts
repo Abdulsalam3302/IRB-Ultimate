@@ -29,23 +29,23 @@ export type SwarmReviewResult = {
 
 export const BOT_REVIEWERS = [
   {
-    email: "hanan.aldosari.ethics@irbtest.sa",
-    name: "Dr. Hanan Al-Dosari",
+    email: "ethics-checklist@automation.invalid",
+    name: "Automated ethics checklist",
     specialty: "ethics",
   },
   {
-    email: "majed.alotaibi.methods@irbtest.sa",
-    name: "Dr. Majed Al-Otaibi",
+    email: "methodology-checklist@automation.invalid",
+    name: "Automated methodology checklist",
     specialty: "methodology",
   },
   {
-    email: "reem.alshammari.clinical@irbtest.sa",
-    name: "Dr. Reem Al-Shammari",
+    email: "clinical-checklist@automation.invalid",
+    name: "Automated clinical checklist",
     specialty: "clinical",
   },
   {
-    email: "yazeed.alghamdi.privacy@irbtest.sa",
-    name: "Dr. Yazeed Al-Ghamdi",
+    email: "privacy-checklist@automation.invalid",
+    name: "Automated privacy checklist",
     specialty: "privacy",
   },
 ] as const;
@@ -64,9 +64,9 @@ export type BotPanelResult = {
   reviewers: BotReviewResult[];
 };
 
-function scoreField(value: string | null | undefined, minLen: number): number {
-  if (!value || value.trim().length < minLen) return 0;
-  if (value.trim().length < minLen * 2) return 60;
+/** Presence check only. Text length cannot establish scientific or ethical quality. */
+function scoreField(value: string | null | undefined, _legacyMinLen: number): number {
+  if (!value?.trim() || /\[(?:MISSING|STILL MISSING|NEEDS APPLICANT|ASSUMPTION|TEMPLATE|BLOCKED)\b/i.test(value)) return 0;
   return 100;
 }
 
@@ -113,7 +113,7 @@ function reviewPanel(app: Application, panel: SwarmPanelId): PanelReviewResult {
   }
 
   score = Math.max(0, Math.min(100, score));
-  const passed = score >= 75 && findings.length <= 2;
+  const passed = score >= 75 && findings.length === 0;
   return { panel, passed, score, findings };
 }
 
@@ -122,14 +122,14 @@ export function runSwarmReview(app: Application): SwarmReviewResult {
   const overallScore = Math.round(
     panels.reduce((sum, p) => sum + p.score, 0) / panels.length,
   );
-  const passed = panels.filter(p => p.passed).length >= 5;
+  const passed = listMissingRequirements(app).length === 0 && panels.every(p => p.passed);
   return {
     passed,
     overallScore,
     panels,
     summary: passed
-      ? "Digital AI Swarm: PASS (≥5/6 panels) — authorized NBCE pathway"
-      : "Digital AI Swarm: owner attention required",
+      ? "Automated completeness checks passed — qualified human committee review required; no ethics decision issued"
+      : "Automated completeness checks require attention — advisory only",
   };
 }
 
@@ -171,12 +171,12 @@ export function runBotPanelReview(app: Application): BotPanelResult {
   };
 }
 
-export type AcceleratedDecision = "auto_approve" | "run_bots" | "owner_alert";
+export type AcceleratedDecision = "human_review" | "run_bots" | "owner_alert";
 
-/** Swarm first. Bots run only if swarm fails. Unanimous bots can still auto-approve. */
+/** Heuristics can route a case to a human committee, never authorize research. */
 export function decideAcceleratedOutcome(swarmPassed: boolean, bots: BotPanelResult | null): AcceleratedDecision {
-  if (swarmPassed) return "auto_approve";
+  if (swarmPassed) return "human_review";
   if (!bots) return "run_bots";
-  if (bots.passed) return "auto_approve";
+  if (bots.passed) return "human_review";
   return "owner_alert";
 }

@@ -8,6 +8,11 @@
  */
 
 import { ENV } from "./env";
+import { assertSafeEgress } from "./ssrfGuard";
+import { readBoundedText } from "./httpSafety";
+import { Semaphore } from "./concurrency";
+const mapWork = new Semaphore(4, 8, 3000);
+const MAP_ENDPOINTS = new Set(["/maps/api/geocode/json", "/maps/api/directions/json", "/maps/api/distancematrix/json", "/maps/api/place/textsearch/json", "/maps/api/place/nearbysearch/json", "/maps/api/place/details/json", "/maps/api/elevation/json", "/maps/api/timezone/json", "/maps/api/place/autocomplete/json", "/v1/snapToRoads", "/v1/nearestRoads", "/v1/speedLimits"]);
 
 // ============================================================================
 // Configuration
@@ -56,37 +61,38 @@ export async function makeRequest<T = unknown>(
   params: Record<string, unknown> = {},
   options: RequestOptions = {}
 ): Promise<T> {
-  const { baseUrl, apiKey } = getMapsConfig();
-
-  // Construct full URL: baseUrl + /v1/maps/proxy + endpoint
-  const url = new URL(`${baseUrl}/v1/maps/proxy${endpoint}`);
-
-  // Add API key as query parameter (standard Google Maps API authentication)
-  url.searchParams.append("key", apiKey);
-
-  // Add other query parameters
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, String(value));
+  if (!MAP_ENDPOINTS.has(endpoint)) throw new Error("Unsupported maps endpoint");
+  if (Object.keys(params).length > 32 || "key" in params || "callback" in params) throw new Error("Invalid maps parameters");
+  return mapWork.run(async () => {
+    const { baseUrl, apiKey } = getMapsConfig();
+    const url = new URL(`${baseUrl}/v1/maps/proxy${endpoint}`);
+    if (url.protocol !== "https:") throw new Error("Maps transport requires HTTPS");
+    await assertSafeEgress(url.toString());
+    // This proxy expects a query key. Never return/log the credential-bearing
+    // request URL or follow redirects to another host.
+    url.searchParams.set("key", apiKey);
+    for (const [key, value] of Object.entries(params)) {
+      if (!/^[a-z_]+$/i.test(key)) throw new Error("Invalid maps parameter name");
+      if (value == null) continue;
+      const values = Array.isArray(value) ? value : [value];
+      if (values.length > 100 || values.some(v => !["string", "number", "boolean"].includes(typeof v))) throw new Error("Invalid maps parameter value");
+      const text = values.join("|");
+      if (text.length > 4000) throw new Error("Maps parameter too long");
+      url.searchParams.set(key, text);
     }
+    const body = options.body ? JSON.stringify(options.body) : undefined;
+    if (body && Buffer.byteLength(body) > 16000) throw new Error("Maps body too large");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(url, { method: options.method || "GET", redirect: "error", headers: { "Content-Type": "application/json" }, body, signal: controller.signal });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`Maps provider unavailable (HTTP ${response.status})`);
+      }
+      return JSON.parse(await readBoundedText(response, 2_000_000)) as T;
+    } finally { clearTimeout(timeout); }
   });
-
-  const response = await fetch(url.toString(), {
-    method: options.method || "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Google Maps API request failed (${response.status} ${response.statusText}): ${errorText}`
-    );
-  }
-
-  return (await response.json()) as T;
 }
 
 // ============================================================================

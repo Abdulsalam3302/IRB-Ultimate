@@ -1,3 +1,4 @@
+import { MfaSettings } from "@/components/MfaSettings";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -139,6 +140,8 @@ export default function Profile() {
           </CardContent>
         </Card>
 
+        <MfaSettings />
+
         {/* Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           <Card>
@@ -218,9 +221,9 @@ export default function Profile() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {app.certificateUrl && (
+                          {app.irbNumber && app.humanDecisionByUserId && app.humanDecisionAt && (
                             <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50" asChild>
-                              <a href={app.certificateUrl} target="_blank" rel="noopener noreferrer">
+                              <a href={`/api/export/certificate/${app.id}`} target="_blank" rel="noopener noreferrer">
                                 <Download className="h-3.5 w-3.5 me-1" /> {isAr ? "الشهادة" : "Certificate"}
                               </a>
                             </Button>

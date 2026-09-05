@@ -7,6 +7,8 @@ function fakeApp(over: Partial<Application> = {}): Application {
     id: 1,
     irbNumber: "IRB-SA-2026-00123",
     status: "approved",
+    humanDecisionByUserId: 7,
+    humanDecisionAt: new Date("2026-05-22T10:54:30Z"),
     researchType: "clinical_trial",
     irbCategory: "full_board",
     principalInvestigator: "Dr. Real PI",

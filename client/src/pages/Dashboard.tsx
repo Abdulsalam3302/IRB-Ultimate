@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -184,7 +185,7 @@ export default function Dashboard() {
       case "resubmission_required":
         return (
           <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="outline" onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank")}>
+            <Button size="sm" variant="outline" disabled={!app.humanDecisionByUserId || !app.humanDecisionAt} onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank", "noopener,noreferrer")}>
               <Download className="h-3 w-3 me-1" /> {isAr ? "شهادة الرفض" : "Rejection certificate"}
             </Button>
             {app.submissionCount < 2 ? (
@@ -198,7 +199,7 @@ export default function Dashboard() {
       case "retracted":
         return (
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank")}>
+            <Button size="sm" variant="outline" disabled={!app.humanDecisionByUserId || !app.humanDecisionAt} onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank", "noopener,noreferrer")}>
               <Download className="h-3 w-3 me-1" /> {isAr ? "الشهادة" : "Certificate"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setLocation(`/application/${app.id}`)}>
@@ -209,8 +210,8 @@ export default function Dashboard() {
       case "approved":
         return (
           <div className="flex gap-2">
-            {app.certificateUrl && (
-              <Button size="sm" variant="outline" onClick={() => window.open(app.certificateUrl, "_blank")}>
+            {app.irbNumber && app.humanDecisionByUserId && app.humanDecisionAt && (
+              <Button size="sm" variant="outline" disabled={!app.humanDecisionByUserId || !app.humanDecisionAt} onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank", "noopener,noreferrer")}>
                 <Download className="h-3 w-3 me-1" /> {isAr ? "الشهادة" : "Certificate"}
               </Button>
             )}
@@ -267,7 +268,7 @@ export default function Dashboard() {
               variant="ghost"
               size="sm"
               title={t("nav.logout")}
-              onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+              onClick={async () => { try { await logout(); window.location.href = "/"; } catch { toast.error(t("auth.networkError")); } }}
             >
               <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
             </Button>

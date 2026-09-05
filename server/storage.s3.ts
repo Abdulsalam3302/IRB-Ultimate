@@ -5,6 +5,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomBytes } from "node:crypto";
+import { normalizeStorageKey } from "./storage";
 
 let _client: S3Client | null = null;
 
@@ -25,12 +26,7 @@ function bucket(): string {
   return process.env.S3_BUCKET!;
 }
 
-function sanitiseKey(key: string): string {
-  return key
-    .replace(/^\/+/, "")
-    .replace(/\.\.+/g, "")
-    .replace(/[^a-zA-Z0-9._\-/]/g, "-");
-}
+const sanitiseKey = normalizeStorageKey;
 
 export async function s3Put(
   relKey: string,
@@ -53,6 +49,7 @@ export async function s3Put(
       Key: key,
       Body: body,
       ContentType: contentType,
+      ServerSideEncryption: "AES256",
       // SA-28: force download + defeat MIME sniffing when the object is
       // fetched via a (pre)signed URL. Certificates open inline; every
       // user upload is treated as an attachment.
@@ -68,20 +65,20 @@ export async function s3Put(
   const url = await getSignedUrl(
     client(),
     new GetObjectCommand({ Bucket: bucket(), Key: key }),
-    { expiresIn: 7 * 24 * 60 * 60 }
+    { expiresIn: 300 }
   );
   return { key, url };
 }
 
 export async function s3GetUrl(
   relKey: string,
-  expiresInSec = 7 * 24 * 60 * 60
+  expiresInSec = 300
 ): Promise<{ key: string; url: string }> {
   const key = sanitiseKey(relKey);
   const url = await getSignedUrl(
     client(),
     new GetObjectCommand({ Bucket: bucket(), Key: key }),
-    { expiresIn: Math.max(60, Math.min(expiresInSec, 7 * 24 * 60 * 60)) }
+    { expiresIn: Math.max(60, Math.min(expiresInSec, 900)) }
   );
   return { key, url };
 }

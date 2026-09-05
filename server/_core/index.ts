@@ -1,3 +1,4 @@
+import { safeLogError } from "./safeLog";
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
@@ -22,11 +23,13 @@ import { startCertificateBackupScheduler } from "../services/certificateBackup";
 import { ensureDefaultCommittee } from "../services/committeeAutoEnroll";
 import * as db from "../db";
 import * as fsSync from "node:fs";
+import { sql } from "drizzle-orm";
+import { assertStaffMfa } from "./staffAuth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
-    server.listen(port, () => {
+    server.listen(port, "127.0.0.1", () => {
       server.close(() => resolve(true));
     });
     server.on("error", () => resolve(false));
@@ -49,12 +52,25 @@ async function startServer() {
     try {
       await runMigrations();
     } catch (err) {
-      console.error("[migrate] Failed:", err);
+      console.error("[migrate] Failed:", safeLogError(err));
       throw err;
     }
   }
   const app = express();
   const server = createServer(app);
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 120_000;
+  server.keepAliveTimeout = 5000;
+  server.maxRequestsPerSocket = 1000;
+  server.maxConnections = 200;
+  let activeUploads = 0;
+  app.use((req, res, next) => {
+    if (req.path !== "/api/trpc/application.uploadFile") return next();
+    if (activeUploads >= 2) return res.status(503).set("Retry-After", "5").json({ error: "Upload service is busy" });
+    activeUploads++;
+    res.once("close", () => { activeUploads--; });
+    next();
+  });
   // Security headers + naive rate limit on /api/*
   registerSecurity(app);
   // Body parser sizing — the 21 MB cap covers a 15 MB upload + base64 +
@@ -65,8 +81,7 @@ async function startServer() {
   const urlencodedSmall = express.urlencoded({ limit: "1mb", extended: true });
   app.use((req, res, next) => {
     if (
-      req.path === "/api/trpc/application.uploadFile" ||
-      req.path.startsWith("/api/trpc/application.uploadFile")
+      req.path === "/api/trpc/application.uploadFile"
     ) {
       return jsonLarge(req, res, next);
     }
@@ -84,7 +99,7 @@ async function startServer() {
       ok: true,
       ts: Date.now(),
       appVersion: APP_VERSION,
-      official: true,
+      reviewAuthority: "qualified-human-committee",
       version:
         process.env.RELEASE ||
         process.env.RENDER_GIT_COMMIT ||
@@ -98,6 +113,21 @@ async function startServer() {
         acceleratedDigitalReview: true,
       },
     });
+  });
+  let readiness: { ok: boolean; until: number } | null = null;
+  app.get("/api/ready", async (_req, res) => {
+    if (!readiness || readiness.until < Date.now()) {
+      try {
+        const database = await db.getDb();
+        if (!database) throw new Error("Database unavailable");
+        await database.execute(sql`SELECT bucketKey FROM request_limits LIMIT 1`);
+        await database.execute(sql`SELECT tokenHash FROM session_revocations LIMIT 1`);
+        await database.execute(sql`SELECT appointedAt FROM committee_members LIMIT 1`);
+        await database.execute(sql`SELECT humanDecisionAt FROM applications LIMIT 1`);
+        readiness = { ok: true, until: Date.now() + 5000 };
+      } catch { readiness = { ok: false, until: Date.now() + 5000 }; }
+    }
+    res.status(readiness.ok ? 200 : 503).json({ ok: readiness.ok, appVersion: APP_VERSION });
   });
   // CORS + Origin allowlist for state-changing /api/* calls (SA-01, SA-20).
   // Must come AFTER body parsers (so preflight short-circuit reads no body)
@@ -140,16 +170,6 @@ async function startServer() {
           res.status(415).type("text/plain").send("unsupported"); return;
         }
         const segs = req.path.replace(/^\/+/, "").split("/");
-        // Public redacted IRB certificates are stored under certificates/ —
-        // allow short-lived anonymous download after verify.certificateDownload.
-        if (segs[0] === "certificates") {
-          res.setHeader("Content-Disposition", segs.join("/").endsWith(".pdf") ? "inline" : "attachment");
-          res.setHeader("X-Content-Type-Options", "nosniff");
-          res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-          res.setHeader("Cache-Control", "private, max-age=300");
-          next();
-          return;
-        }
         const user = await sdk.authenticateRequest(req).catch(() => null);
         if (!user) {
           res.status(401).type("text/plain").send("authentication required"); return;
@@ -159,9 +179,10 @@ async function startServer() {
         // can read their own. Everyone else must have the file row
         // attached to an application they're permitted to view.
         const uploaderIdRaw = segs[0] ?? "";
-        const uploaderId = Number.parseInt(uploaderIdRaw, 10);
+        const uploaderId = /^[1-9]\d*$/.test(uploaderIdRaw) ? Number(uploaderIdRaw) : NaN;
         if (user.role === "admin" || (Number.isFinite(uploaderId) && uploaderId === user.id)) {
-          // OK — authorised by uploader / admin.
+          if (user.id !== uploaderId) assertStaffMfa(user);
+          // Authorised by uploader or verified staff.
         } else {
           // Look up the file row by fileKey (path minus leading /)
           const fileKey = segs.join("/");
@@ -174,9 +195,10 @@ async function startServer() {
             res.status(404).type("text/plain").send("not found"); return;
           }
           if (application.applicantId !== user.id) {
+            assertStaffMfa(user);
             const member = await db.getCommitteeMemberByUserId(user.id);
             const reviews = member ? await db.getReviewsByApplication(application.id) : [];
-            const isAssignedReviewer = member && reviews.some(r => r.committeeMemberId === member.id);
+            const isAssignedReviewer = member?.isActive && member.appointedAt && member.qualificationReference && reviews.some(r => r.committeeMemberId === member.id && r.expiresAt && new Date(r.expiresAt).getTime() > Date.now());
             if (!isAssignedReviewer) {
               res.status(403).type("text/plain").send("forbidden"); return;
             }
@@ -186,10 +208,10 @@ async function startServer() {
         res.setHeader("Content-Disposition", "attachment");
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-        res.setHeader("Cache-Control", "private, max-age=300");
+        res.setHeader("Cache-Control", "private, no-store");
         next();
       } catch (err) {
-        console.error("[Uploads] authz failure:", err);
+        console.error("[Uploads] authz failure:", safeLogError(err));
         if (!res.headersSent) res.status(500).type("text/plain").send("server error");
       }
     };
@@ -221,6 +243,7 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      maxBatchSize: 10,
     })
   );
   // Catch /api/* requests that didn't match any defined route as JSON 404
@@ -254,7 +277,14 @@ async function startServer() {
     }
   }
 
-  server.listen(port, () => {
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+      const timer = setTimeout(() => process.exit(1), 15_000).unref();
+      server.close(() => { void db.closeDatabase().finally(() => { clearTimeout(timer); process.exit(0); }); });
+      server.closeIdleConnections();
+    });
+  }
+  server.listen(port, process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1", () => {
     console.log(`Server running on http://localhost:${port}/`);
     startCertificateBackupScheduler();
     void ensureDefaultCommittee()
@@ -263,4 +293,4 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch(() => { console.error("[Startup] Failed to initialize service; inspect configuration and migration state."); process.exitCode = 1; });

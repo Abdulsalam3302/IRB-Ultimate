@@ -1,7 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { Request } from "express";
 import { ENV } from "./env";
-import { assertSafeEgress } from "./ssrfGuard";
 import { clientIpKey } from "./security";
 
 export type CoarseGeo = {
@@ -12,7 +11,7 @@ export type CoarseGeo = {
 
 export function hashIp(ip: string): string {
   const secret = ENV.cookieSecret || "dev-analytics";
-  return createHmac("sha256", secret).update(ip).digest("hex").slice(0, 64);
+  return createHmac("sha256", secret).update(`analytics:${new Date().toISOString().slice(0, 10)}:${ip}`).digest("hex").slice(0, 64);
 }
 
 export function classifyUa(ua: string | undefined): string {
@@ -31,33 +30,8 @@ export async function resolveCoarseGeo(req: Request): Promise<CoarseGeo> {
     return { country: cf.toUpperCase(), region: null, city: null };
   }
 
-  const ip = clientIpKey(req);
-  if (!ip || ip === "unknown" || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("10.") || ip.startsWith("192.168.")) {
-    return { country: null, region: null, city: null };
-  }
-
-  // Soft geo via ipapi.co (HTTPS). SSRF-guarded; never block ingest on failure.
-  try {
-    const url = `https://ipapi.co/${encodeURIComponent(ip)}/json/`;
-    await assertSafeEgress(url);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 1500);
-    const resp = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { Accept: "application/json", "User-Agent": "irb-platform-analytics/1.1" },
-    });
-    clearTimeout(timer);
-    if (!resp.ok) return { country: null, region: null, city: null };
-    const data = (await resp.json()) as Record<string, unknown>;
-    if (data.error) return { country: null, region: null, city: null };
-    return {
-      country: typeof data.country_code === "string" ? data.country_code.slice(0, 64) : null,
-      region: typeof data.region === "string" ? data.region.slice(0, 96) : null,
-      city: typeof data.city === "string" ? data.city.slice(0, 96) : null,
-    };
-  } catch {
-    return { country: null, region: null, city: null };
-  }
+  // Do not disclose visitor IPs to a third-party geolocation service.
+  return { country: null, region: null, city: null };
 }
 
 export function stripPath(raw: string): string {

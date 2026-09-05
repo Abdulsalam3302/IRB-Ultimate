@@ -1,3 +1,4 @@
+import { StaffMfaNotice } from "@/components/StaffMfaNotice";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -23,7 +24,8 @@ export default function AdminObservability() {
   const [, setLocation] = useLocation();
   const { lang } = useT();
   const isAr = lang === "ar";
-  const isAdmin = isAuthenticated && user?.role === "admin";
+  const needsMfa = Boolean(user?.staffMfaRequired && user.authLevel !== "aal2");
+  const isAdmin = isAuthenticated && user?.role === "admin" && !needsMfa;
 
   const { data: ownerCheck, isLoading: ownerLoading } = trpc.aiSwarm.amOwner.useQuery(undefined, {
     enabled: isAdmin,
@@ -54,6 +56,8 @@ export default function AdminObservability() {
       </div>
     );
   }
+
+  if (needsMfa) return <StaffMfaNotice />;
 
   if (ownerLoading) {
     return (
@@ -187,7 +191,7 @@ export default function AdminObservability() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <MetricCard icon={Activity} label={isAr ? "الجلسات" : "Sessions"} value={data.sessions} />
               <MetricCard icon={BarChart3} label={isAr ? "مشاهدات الصفحات" : "Pageviews"} value={data.pageviews} />
-              <MetricCard icon={Clock} label={isAr ? "متوسط الوقت" : "Avg time on site"} value={formatMs(data.avgDwellMs)} />
+              <MetricCard icon={Clock} label={isAr ? "متوسط الوقت" : "Avg time on site"} value={data.avgDwellMs == null ? (isAr ? "غير متاح" : "Unavailable") : formatMs(data.avgDwellMs)} />
               <MetricCard icon={Users} label={isAr ? "الحسابات" : "Accounts"} value={data.accountsTotal} />
               <MetricCard icon={Users} label={isAr ? "حسابات (24س)" : "Accounts (24h)"} value={data.accounts24h} />
               <MetricCard icon={Users} label={isAr ? "حسابات (7ي)" : "Accounts (7d)"} value={data.accounts7d} />

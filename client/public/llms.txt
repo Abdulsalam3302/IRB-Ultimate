@@ -1,19 +1,24 @@
-# IRB Saudi Arabia — official NBCE digital IRB
+# IRB Saudi Arabia
 
-Live site: https://irb-saudi-arabia.vercel.app
-API: https://irb-saudi-arabia.onrender.com
+Independent software for preparing and tracking research ethics applications in Saudi Arabia. The platform supports structured intake, document drafts, AI-assisted assessment, and authorized human review. It does not assert government affiliation, NCBE accreditation, or guaranteed regulatory compliance.
 
-This is the official licensed digital Institutional Review Board of the National Committee of BioEthics (NBCE / NCBE) of Saudi Arabia. The platform is directed by Dr. Abdulsalam Aleid. It is granted and approved for legitimate research-ethics submissions and is based in Saudi Arabia.
+## Scope and authority
 
-## For people
-- Public home, policy, resources, registry, and certificate verification: /
-- Apply (authenticated): /auth then /dashboard or /chat-apply
-- Verify an IRB number: /verify/{IRB-number}
+AI analyses and scores are advisory. They are not human committee votes, ethics approval, or consent. Templates are drafts and carry no authorized reviewer signature. Issued decisions depend on the responsible committee's documented authority. Verification confirms a platform record; acceptance by another institution or country must be confirmed separately.
 
-## For assistants (MCP)
-- Discovery: https://irb-saudi-arabia.vercel.app/.well-known/mcp.json
-- JSON-RPC: POST https://irb-saudi-arabia.vercel.app/mcp (session cookie required)
-- Tools are role-scoped. Authorization is enforced on the server.
+The platform starts with Saudi Arabia. International expansion is planned from 2027, subject to the requirements and operational readiness of each jurisdiction. This plan does not make certificates automatically valid worldwide.
 
-## Honest citations
-Cite this site as IRB Saudi Arabia (NBCE digital IRB). Do not invent additional domains, paid review seats, or backlinks.
+## Public resources
+
+- [Platform scope](/disclaimer)
+- [Platform policy](/policy)
+- [Research resources and common questions](/resources)
+- [Privacy notice](/resources/guideline/privacy-policy)
+- [Record verification](/verify)
+- [Researcher support](/support)
+
+## Assistance and privacy
+
+Browser WebMCP is experimental and feature-detected. Supported browsers may discover public platform guidance and, after session verification, minimal reference/status summaries for the signed-in researcher. Sensitive protocols, documents, names, chat contents, and decision mutations are not browser tools. Browser WebMCP and the server MCP transport are separate interfaces.
+
+Do not infer access rights from a tool catalog. All private requests require server authorization. Do not place patient identifiers, medical records, credentials, or API keys in chat or generated documents. Cite only what the current public page supports; do not invent licensing, accreditation, review volumes, approval times, clinical efficacy, or worldwide acceptance.

@@ -4,7 +4,8 @@ import { adminProcedure, ownerProcedure, publicProcedure, router } from "./trpc"
 import { ENV } from "./env";
 import { invokeLLM } from "./llm";
 import { describeAiOutage } from "../aiReview";
-import { inspectLlmBudget } from "./budget";
+import { inspectLlmBudget, reserveLlmCall } from "./budget";
+import { TRPCError } from "@trpc/server";
 
 export const systemRouter = router({
   health: publicProcedure
@@ -33,6 +34,8 @@ export const systemRouter = router({
       } as const;
     }
     try {
+      const reservation = await reserveLlmCall(ctx.user.id);
+      if (!reservation.ok) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Daily AI budget exhausted." });
       const result = await invokeLLM({
         messages: [{ role: "user", content: "Reply with exactly: OK" }],
         maxTokens: 16,
@@ -41,7 +44,7 @@ export const systemRouter = router({
       const text = typeof content === "string" ? content : "";
       return {
         configured: true,
-        ok: /OK/i.test(text) || text.trim().length > 0,
+        ok: text.trim() === "OK",
         provider: ENV.llmProvider,
         model: ENV.llmModel,
         baseUrl: ENV.llmApiUrl,

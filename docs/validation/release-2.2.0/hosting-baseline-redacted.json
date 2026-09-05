@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "NODE_ENV": "production",
+    "DATABASE_POOL_MAX": "5",
+    "PILOT_LOGIN_ENABLED": "0",
+    "LLM_PROVIDER": "openai",
+    "LLM_MAX_TOKENS": "8192"
+  },
+  "configured": {
+    "S3_BUCKET": false,
+    "AWS_ACCESS_KEY_ID": false,
+    "AWS_SECRET_ACCESS_KEY": false,
+    "CLAMAV_HOST": false,
+    "OWNER_OPEN_ID": false,
+    "OWNER_EMAIL": true,
+    "SUPABASE_URL": true,
+    "LLM_API_KEY": true,
+    "LLM_API_URL": true,
+    "SENTRY_DSN": false,
+    "BUILT_IN_FORGE_API_URL": false,
+    "BUILT_IN_FORGE_API_KEY": false
+  },
+  "databaseRegionObserved": "EU central",
+  "scope": "Read-only pre-release hosting settings; credential values excluded"
+}

@@ -16,7 +16,7 @@ export default function Statistics() {
   const [, setLocation] = useLocation();
   const { t, lang } = useT();
   const isAr = lang === "ar";
-  const { data: stats, isLoading } = trpc.publicStats.getStats.useQuery();
+  const { data: stats, isLoading, isError, refetch } = trpc.publicStats.getStats.useQuery();
 
   const formatHours = (hours: number) => {
     if (!hours || hours === 0) return isAr ? "غير متاح" : "N/A";
@@ -27,7 +27,7 @@ export default function Statistics() {
 
   const approvalRate = stats && stats.totalApplications > 0
     ? Math.round((stats.totalApproved / stats.totalApplications) * 100)
-    : 0;
+    : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,6 +70,8 @@ export default function Statistics() {
           <div className="flex justify-center py-20">
             <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : isError || !stats ? (
+          <Card><CardContent className="py-12 text-center" role="alert"><p>{isAr ? "الإحصائيات غير متاحة حالياً. تعذر تأكيد الأعداد." : "Statistics are temporarily unavailable. Counts could not be confirmed."}</p><Button variant="outline" onClick={() => refetch()}>{isAr ? "إعادة المحاولة" : "Retry"}</Button></CardContent></Card>
         ) : (
           <>
             {/* Key Metrics */}
@@ -123,7 +125,7 @@ export default function Statistics() {
                       <TrendingUp className="h-6 w-6 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{approvalRate}%</p>
+                      <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{approvalRate == null ? "—" : `${approvalRate}%`}</p>
                       <p className="text-sm text-muted-foreground">{isAr ? "معدل الموافقة" : "Approval Rate"}</p>
                     </div>
                   </div>
@@ -238,8 +240,8 @@ export default function Statistics() {
                   </h3>
                   <p className="text-muted-foreground mb-4">
                     {isAr
-                      ? "تعمل منصتنا وفقًا لإرشادات اللجنة الوطنية للأخلاقيات الحيوية في المملكة العربية السعودية (NCBE)، وإعلان هلسنكي، ومعايير ICH-GCP. كل طلب يخضع لمراجعة AI ومراجعة لجنة علمية."
-                      : "Our platform operates under the guidelines of the National Committee of BioEthics (NCBE) of Saudi Arabia, the Declaration of Helsinki, and ICH-GCP standards. Every application undergoes AI pre-screening and scientific committee review."}
+                      ? "تصف هذه الإحصائيات سجلات المنصة، ولا تثبت الاعتماد أو الامتثال النظامي أو جودة المراجعة. يبقى المراجعون البشريون المخولون مسؤولين عن القرارات الأخلاقية."
+                      : "These metrics describe platform records. They do not demonstrate accreditation, legal compliance, or review quality. Authorized human reviewers remain responsible for ethics decisions."}
                   </p>
                   <div className="flex items-center justify-center gap-4 flex-wrap">
                     <Badge variant="outline" className="px-3 py-1">NCBE</Badge>

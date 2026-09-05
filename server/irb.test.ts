@@ -772,10 +772,11 @@ describe("RTL support", () => {
     expect(css).toContain('[dir="rtl"]');
   });
 
-  it("index.html includes Arabic font", async () => {
+  it("public HTML includes Arabic fallback without sending font requests to third parties", async () => {
     const fs = await import("fs");
     const html = fs.readFileSync("client/index.html", "utf-8");
-    expect(html).toContain("Noto+Kufi+Arabic");
+    expect(html).toContain('lang="ar"');
+    expect(html).not.toContain("fonts.googleapis.com");
   });
 });
 

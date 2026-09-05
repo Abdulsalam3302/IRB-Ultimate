@@ -1,0 +1,134 @@
+{
+  "testedAt": "2026-09-05T01:54:02.291Z",
+  "base": "http://127.0.0.1:3018",
+  "checks": [
+    {
+      "name": "liveness available",
+      "passed": true
+    },
+    {
+      "name": "database and safety tables ready",
+      "passed": true
+    },
+    {
+      "name": "anonymous application read denied",
+      "passed": true
+    },
+    {
+      "name": "cross-origin mutation denied",
+      "passed": true
+    },
+    {
+      "name": "malformed JSON classified400",
+      "passed": true
+    },
+    {
+      "name": "synthetic researcher1 registered",
+      "passed": true
+    },
+    {
+      "name": "session cookie uses HttpOnly and Secure",
+      "passed": true
+    },
+    {
+      "name": "synthetic researcher2 registered",
+      "passed": true
+    },
+    {
+      "name": "session cookie uses HttpOnly and Secure",
+      "passed": true
+    },
+    {
+      "name": "draft created",
+      "passed": true
+    },
+    {
+      "name": "researcher can read own draft",
+      "passed": true
+    },
+    {
+      "name": "application responses never cached",
+      "passed": true
+    },
+    {
+      "name": "cross-user draft read denied",
+      "passed": true
+    },
+    {
+      "name": "incomplete submission rejected",
+      "passed": true
+    },
+    {
+      "name": "private upload stored",
+      "passed": true
+    },
+    {
+      "name": "owner receives authorized storage redirect",
+      "passed": true
+    },
+    {
+      "name": "synthetic file resolves to same-origin private storage",
+      "passed": true
+    },
+    {
+      "name": "owner retrieves correct private file",
+      "passed": true
+    },
+    {
+      "name": "anonymous direct storage access denied",
+      "passed": true
+    },
+    {
+      "name": "other user cannot retrieve private file",
+      "passed": true
+    },
+    {
+      "name": "anonymous cannot retrieve private file",
+      "passed": true
+    },
+    {
+      "name": "active HTML upload rejected",
+      "passed": true
+    },
+    {
+      "name": "admin roster denied to researcher",
+      "passed": true
+    },
+    {
+      "name": "owner AI swarm denied to researcher",
+      "passed": true
+    },
+    {
+      "name": "authenticated MCP tools available",
+      "passed": true
+    },
+    {
+      "name": "MCP researcher cannot discover admin tools",
+      "passed": true
+    },
+    {
+      "name": "logout persisted",
+      "passed": true
+    },
+    {
+      "name": "logged-out cookie replay rejected",
+      "passed": true
+    },
+    {
+      "name": "home renders a visible heading",
+      "passed": true
+    },
+    {
+      "name": "no horizontal overflow on mobile",
+      "passed": true
+    },
+    {
+      "name": "private auth route carries noindex",
+      "passed": true
+    },
+    {
+      "name": "browser no uncaught runtime errors",
+      "passed": true
+    }
+  ]
+}

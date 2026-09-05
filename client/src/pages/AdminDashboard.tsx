@@ -1,3 +1,5 @@
+import { StaffMfaNotice } from "@/components/StaffMfaNotice";
+import { csvCell } from "@/lib/files";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,7 +35,8 @@ export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const { t, lang } = useT();
   const isAr = lang === "ar";
-  const isAdmin = isAuthenticated && user?.role === "admin";
+  const needsMfa = Boolean(user?.staffMfaRequired && user.authLevel !== "aal2");
+  const isAdmin = isAuthenticated && user?.role === "admin" && !needsMfa;
   // Owner-only AI Swarm console. The query is admin-gated client-side and
   // owner-verified server-side; non-owners simply never see the tab.
   const { data: ownerCheck } = trpc.aiSwarm.amOwner.useQuery(undefined, {
@@ -54,7 +57,7 @@ export default function AdminDashboard() {
             {isAuthenticated && (
               <Button
                 variant="outline"
-                onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+                onClick={async () => { try { await logout(); window.location.href = "/"; } catch { toast.error(t("auth.networkError")); } }}
               >
                 <LogOut className="h-4 w-4 me-1" /> {t("nav.logout")}
               </Button>
@@ -64,6 +67,8 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  if (needsMfa) return <StaffMfaNotice />;
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,7 +94,7 @@ export default function AdminDashboard() {
               variant="ghost"
               size="sm"
               title={t("nav.logout")}
-              onClick={async () => { try { await logout(); } finally { window.location.href = "/"; } }}
+              onClick={async () => { try { await logout(); window.location.href = "/"; } catch { toast.error(t("auth.networkError")); } }}
             >
               <LogOut className="h-3.5 w-3.5 me-1" /> {t("nav.logout")}
             </Button>
@@ -867,7 +872,7 @@ function ApplicationsTab() {
                         <p className="text-sm text-muted-foreground">
                           {isAr
                             ? "سيتم الموافقة على هذا الطلب مباشرة وإصدار شهادة IRB فوراً، متجاوزاً مراجعة اللجنة."
-                            : "This will directly approve the application and issue an IRB certificate immediately, bypassing committee review."}
+                            : "This records a final human decision. Issuance requires verified institutional authority, qualified appointment, and the required committee review."}
                         </p>
                         <div className="space-y-2">
                           <Label>{isAr ? "ملاحظات (اختياري)" : "Notes (optional)"}</Label>
@@ -1079,14 +1084,14 @@ function ApplicationsTab() {
 function CommitteeTab() {
   const { data: members, isLoading, refetch } = trpc.admin.allCommitteeMembers.useQuery();
   const { data: allUsers } = trpc.admin.allUsers.useQuery();
-  const [newMember, setNewMember] = useState({ userId: "", specialization: "", title: "", institution: "" });
+  const [newMember, setNewMember] = useState({ userId: "", specialization: "", title: "", institution: "", qualificationReference: "" });
   const { lang } = useT();
   const isAr = lang === "ar";
 
   const addMember = trpc.admin.addCommitteeMember.useMutation({
     onSuccess: () => {
       toast.success(isAr ? "تم إضافة عضو اللجنة." : "Committee member added.");
-      setNewMember({ userId: "", specialization: "", title: "", institution: "" });
+      setNewMember({ userId: "", specialization: "", title: "", institution: "", qualificationReference: "" });
       refetch();
     },
     onError: (e) => toast.error(e.message),
@@ -1100,7 +1105,7 @@ function CommitteeTab() {
     onError: (e) => toast.error(e.message),
   });
 
-  const existingUserIds = new Set(members?.map((m: any) => m.userId) || []);
+  const existingUserIds = new Set(members?.filter((m: any) => m.isActive && m.qualificationReference && m.appointedAt).map((m: any) => m.userId) || []);
   const availableUsers = allUsers?.filter((u: any) => !existingUserIds.has(u.id)) || [];
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -1138,14 +1143,20 @@ function CommitteeTab() {
               <Input placeholder={isAr ? "جامعة أو مستشفى" : "University or hospital"} value={newMember.institution} onChange={(e) => setNewMember({ ...newMember, institution: e.target.value })} />
             </div>
           </div>
+          <div className="space-y-2 mb-4">
+            <Label htmlFor="committee-qualification">{isAr ? "مرجع التأهيل والتعيين *" : "Qualification and appointment reference *"}</Label>
+            <Textarea id="committee-qualification" minLength={10} maxLength={2000} value={newMember.qualificationReference} onChange={e => setNewMember({ ...newMember, qualificationReference: e.target.value })} placeholder={isAr ? "سجّل مرجع التحقق من التدريب والكفاءة والتعيين الرسمي لدى المؤسسة." : "Record the reference verifying ethics training, competence, and institutional appointment."} />
+            <p className="text-xs text-muted-foreground">{isAr ? "لا تمنح عضوية الإدارة وحدها صلاحية المراجعة الأخلاقية. يجب التحقق من مؤهلات الشخص وتعيينه قبل تفعيله." : "An administrator role alone does not confer ethics review authority. Verify the person’s qualifications and appointment before activation."}</p>
+          </div>
           <Button
             onClick={() => addMember.mutate({
               userId: parseInt(newMember.userId),
+              qualificationReference: newMember.qualificationReference.trim(),
               specialization: newMember.specialization || undefined,
               title: newMember.title || undefined,
               institution: newMember.institution || undefined,
             })}
-            disabled={!newMember.userId || addMember.isPending}
+            disabled={!newMember.userId || newMember.qualificationReference.trim().length < 10 || addMember.isPending}
           >
             <UserPlus className="h-4 w-4 me-2" /> {isAr ? "إضافة عضو" : "Add Member"}
           </Button>
@@ -1166,7 +1177,7 @@ function CommitteeTab() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{m.title ? `${m.title} ` : ""}{m.userName || "Unknown"}</span>
-                      {!m.isActive && <Badge variant="outline" className="text-xs">{isAr ? "غير نشط" : "Inactive"}</Badge>}
+                      {(!m.isActive || !m.qualificationReference || !m.appointedAt) && <Badge variant="outline" className="text-xs">{isAr ? "يحتاج تعييناً موثقاً" : "Appointment required"}</Badge>}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
                       {m.specialization && <span>{m.specialization}</span>}
@@ -1214,15 +1225,7 @@ function ReportsTab() {
   // RFC 4180 CSV escaping. Without this, a research title that contains a
   // comma, double-quote, or newline corrupts the row alignment and the
   // spreadsheet shifts every column to the right.
-  const csvEscape = (value: unknown): string => {
-    if (value === null || value === undefined) return "";
-    const s = String(value);
-    if (s.length === 0) return "";
-    if (/[",\n\r]/.test(s)) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  };
+  const csvEscape = csvCell;
   const csvRow = (...cells: unknown[]): string => cells.map(csvEscape).join(",") + "\n";
   // UTF-8 BOM helps Excel recognise the encoding for non-ASCII titles.
   const CSV_BOM = "﻿";

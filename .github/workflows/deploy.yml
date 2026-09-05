@@ -1,104 +1,89 @@
 name: Deploy IRB Saudi Arabia
-
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
-
 concurrency:
   group: deploy-irb-sa
-  cancel-in-progress: true
-
+  cancel-in-progress: false
 permissions:
   contents: read
-
+  actions: read
 jobs:
-  # Render Git auto-deploy can miss pushes when the GitHub webhook is absent.
-  # Prefer a Deploy Hook; otherwise POST the Render API with a CLI token.
-  deploy-render:
-    name: Render (deploy)
+  verified-revision:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
     steps:
-      - name: Trigger Render deploy
+      - id: revision
         env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(gh api repos/${{ github.repository }}/commits/main --jq .sha)
+          test "$CURRENT" = "$CANDIDATE" || { echo 'A newer revision exists. Waiting for its CI.'; exit 1; }
+          SUCCESS=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE&status=completed" --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')
+          test "$SUCCESS" -gt 0 || { echo 'No passing CI for this revision.'; exit 1; }
+          echo "sha=$CANDIDATE" >> "$GITHUB_OUTPUT"
+  deploy-render:
+    needs: verified-revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Deploy verified backend revision
+        env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          VERIFIED_SHA: ${{ needs.verified-revision.outputs.sha }}
         run: |
-          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
-            curl -sfS -X POST "$RENDER_DEPLOY_HOOK"
-            echo "Render deploy hook triggered."
-            exit 0
-          fi
-          if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
-            curl -sfS -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
-              -H "Authorization: Bearer ${RENDER_API_KEY}" \
-              -H "Content-Type: application/json" \
-              -d '{"clearCache":"do_not_clear"}'
-            echo
-            echo "Render API deploy triggered."
-            exit 0
-          fi
-          echo "No RENDER_DEPLOY_HOOK or RENDER_API_KEY — relying on Render Git auto-deploy."
-
+          set -euo pipefail
+          test -n "$RENDER_API_KEY" && test -n "$RENDER_SERVICE_ID"
+          jq -n --arg sha "$VERIFIED_SHA" '{commitId:$sha,clearCache:"do_not_clear"}' > /tmp/render-deploy.json
+          curl -fsS --max-time 60 -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/render-deploy.json > /tmp/render-receipt.json
+          DEPLOY_ID=$(jq -er .id /tmp/render-receipt.json)
+          for i in {1..90}; do
+            curl -fsS --max-time 30 "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" > /tmp/render-status.json
+            STATUS=$(jq -er .status /tmp/render-status.json)
+            case "$STATUS" in
+              live) jq -e --arg sha "$VERIFIED_SHA" '.commit.id == $sha' /tmp/render-status.json; exit 0 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated) echo "Backend deployment failed: $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo 'Backend deployment did not reach live before the deadline.'; exit 1
   deploy-vercel:
-    name: Vercel (frontend)
+    needs: [verified-revision, deploy-render]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
-      - name: Skip without Vercel token
-        id: vercel_skip
-        run: |
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: pnpm/action-setup@v4
-        if: steps.vercel_skip.outputs.skip != 'true'
-
-      - uses: actions/setup-node@v4
-        if: steps.vercel_skip.outputs.skip != 'true'
         with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install Vercel CLI
-        if: steps.vercel_skip.outputs.skip != 'true'
-        run: npm install -g vercel@52
-
-      - name: Sync public build env on Vercel
-        if: steps.vercel_skip.outputs.skip != 'true'
-        continue-on-error: true
+          ref: ${{ needs.verified-revision.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 24, cache: pnpm}
+      - run: npm install -g vercel@52
+      - name: Deploy verified frontend revision
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: |
-          if [ -n "$VITE_SUPABASE_URL" ]; then
-            printf '%s' "$VITE_SUPABASE_URL" | vercel env add VITE_SUPABASE_URL production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" || true
-          fi
-          if [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
-            printf '%s' "$VITE_SUPABASE_ANON_KEY" | vercel env add VITE_SUPABASE_ANON_KEY production --force --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" || true
-          fi
-
-      - name: Deploy production
-        if: steps.vercel_skip.outputs.skip != 'true'
-        continue-on-error: true
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_PUBLIC_SITE_URL: https://irb-saudi-arabia.vercel.app
-          VITE_APP_ID: irb-sa-prod
-        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN" && test -n "$VITE_PUBLIC_SITE_URL"
           vercel deploy --prod --token="$VERCEL_TOKEN" \
             --build-env "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
             --build-env "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" \
             --build-env "VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL" \
-            --build-env "VITE_APP_ID=$VITE_APP_ID"
+            --build-env 'VITE_PUBLIC_DEMO_BANNER=1' \
+            --build-env 'VITE_APP_ID=irb-sa-prod'

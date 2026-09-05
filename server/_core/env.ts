@@ -1,3 +1,4 @@
+import { boundedInt } from "./limits";
 const isProduction = process.env.NODE_ENV === "production";
 
 // Guard rails — fail fast in production rather than silently boot with an
@@ -42,7 +43,7 @@ export const ENV = {
   // when not separately set — same value in both is fine.
   oAuthPortalUrl: (process.env.OAUTH_PORTAL_URL ?? process.env.VITE_OAUTH_PORTAL_URL ?? "").trim(),
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-  ownerEmail: (process.env.OWNER_EMAIL ?? "kubee3302@gmail.com").trim().toLowerCase(),
+  ownerEmail: (process.env.OWNER_EMAIL ?? "").trim().toLowerCase(),
   supabaseUrl: (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim(),
   supabaseEnabled: Boolean(
     (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").trim()
@@ -92,9 +93,9 @@ export const ENV = {
   llmApiKey:
     process.env.LLM_API_KEY?.trim() || process.env.BUILT_IN_FORGE_API_KEY || "",
   llmModel: process.env.LLM_MODEL ?? "MiniMax-M3",
-  llmMaxTokens: parseInt(process.env.LLM_MAX_TOKENS ?? "8192", 10),
+  llmMaxTokens: boundedInt(process.env.LLM_MAX_TOKENS, 8192, 512, 16384),
   /** Cap for interactive AI (review / enhance / autocomplete). Keeps latency down. */
-  llmFastMaxTokens: parseInt(process.env.LLM_FAST_MAX_TOKENS ?? "4096", 10),
+  llmFastMaxTokens: boundedInt(process.env.LLM_FAST_MAX_TOKENS, 4096, 512, 8192),
   /**
    * MiniMax-M3 thinking control for interactive calls.
    * `disabled` is ~2–3× faster and is the default for public UX.
@@ -102,7 +103,7 @@ export const ENV = {
    */
   llmThinking: (process.env.LLM_THINKING ?? "disabled").toLowerCase(),
   llmProvider: (process.env.LLM_PROVIDER ?? "openai").toLowerCase(),
-  llmTimeoutMs: parseInt(process.env.LLM_TIMEOUT_MS ?? "90000", 10),
+  llmTimeoutMs: boundedInt(process.env.LLM_TIMEOUT_MS, 90000, 1000, 120000),
 
   // Literature & evidence sources — used to cross-check submitted
   // protocols against existing trials and prior art. All optional;

@@ -25,12 +25,11 @@ function displayName(payload: Record<string, unknown>): string {
   return "Researcher";
 }
 
+const jwks = ENV.supabaseUrl ? createRemoteJWKSet(new URL(`${ENV.supabaseUrl.replace(/\/$/, "")}/auth/v1/.well-known/jwks.json`)) : null;
+
 async function verifySupabaseAccessToken(token: string) {
   if (!ENV.supabaseUrl) throw new Error("Supabase not configured");
-  const jwks = createRemoteJWKSet(
-    new URL(`${ENV.supabaseUrl.replace(/\/$/, "")}/auth/v1/.well-known/jwks.json`)
-  );
-  const { payload } = await jwtVerify(token, jwks, {
+  const { payload } = await jwtVerify(token, jwks!, {
     issuer: `${ENV.supabaseUrl.replace(/\/$/, "")}/auth/v1`,
     audience: "authenticated",
   });
@@ -85,8 +84,7 @@ export function registerSupabaseAuthRoutes(app: Express) {
           : payload.aal;
       const name = displayName(payload);
       const emailVerified =
-        payload.email_confirmed_at != null ||
-        (payload.user_metadata as Record<string, unknown> | undefined)?.email_verified === true;
+        typeof payload.email_confirmed_at === "string"; // user_metadata is user-editable, never privilege evidence
       const role = await roleForUser(openId, email, Boolean(emailVerified));
 
       await db.upsertUser({
@@ -101,6 +99,7 @@ export function registerSupabaseAuthRoutes(app: Express) {
       const sessionToken = await sdk.createSessionToken(openId, {
         name,
         expiresInMs: SESSION_TTL_MS,
+        authLevel: payload.aal === "aal2" ? "aal2" : "aal1",
       });
 
       const cookieOptions = getSessionCookieOptions(req);
@@ -111,7 +110,7 @@ export function registerSupabaseAuthRoutes(app: Express) {
 
       res.json({ ok: true, openId, role: role ?? "user" });
     } catch (error) {
-      console.error("[SupabaseAuth] session bridge failed", error);
+      console.error("[SupabaseAuth] invalid session");
       res.status(401).json({ error: "Invalid Supabase session" });
     }
   });

@@ -7,7 +7,7 @@ import {
 } from "@shared/disclaimer";
 
 /**
- * First-visit disclaimer gate. Disabled for the official v2.0.0 launch —
+ * First-visit disclaimer gate. Disabled so public information remains accessible —
  * /disclaimer remains available as a legal page, but it no longer blocks the app.
  */
 export const DISCLAIMER_GATE_ENABLED = false;

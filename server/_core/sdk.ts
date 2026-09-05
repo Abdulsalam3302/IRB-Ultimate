@@ -7,6 +7,8 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { randomUUID } from "node:crypto";
+import { isSessionRevoked, revokeSession } from "./sessions";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -22,6 +24,7 @@ export type SessionPayload = {
   openId: string;
   appId: string;
   name: string;
+  authLevel?: "aal1" | "aal2";
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -169,13 +172,14 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string } = {}
+    options: { expiresInMs?: number; name?: string; authLevel?: "aal1" | "aal2" } = {}
   ): Promise<string> {
     return this.signSession(
       {
         openId,
         appId: ENV.appId,
         name: options.name || "",
+        authLevel: options.authLevel ?? "aal1",
       },
       options
     );
@@ -186,7 +190,7 @@ class SDKServer {
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? SESSION_TTL_MS;
+    const expiresInMs = Math.min(options.expiresInMs ?? SESSION_TTL_MS, payload.authLevel === "aal2" ? 60 * 60_000 : SESSION_TTL_MS);
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 
@@ -194,10 +198,12 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      authLevel: payload.authLevel ?? "aal1",
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setIssuer("irb-platform")
       .setAudience(ENV.appId || "irb-platform")
+      .setJti(randomUUID())
       .setIssuedAt(Math.floor(issuedAt / 1000))
       .setExpirationTime(expirationSeconds)
       .sign(secretKey);
@@ -205,9 +211,8 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; jti: string; exp: number; authLevel: "aal1" | "aal2" } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
       return null;
     }
 
@@ -215,16 +220,17 @@ class SDKServer {
       const secretKey = this.getSessionSecret();
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
-        // Accept tokens issued with or without iss/aud so the upgrade is
-        // backwards-compatible. New tokens are pinned by sign-time
-        // claims; legacy ones still verify by signature + expiry.
+        issuer: "irb-platform",
+        audience: ENV.appId || "irb-platform",
+        requiredClaims: ["exp", "iat", "jti"],
+        maxTokenAge: Math.floor(SESSION_TTL_MS / 1000),
       });
-      const { openId, appId, name, iss, aud } = payload as Record<string, unknown>;
+      const { openId, appId, name, iss, aud, jti, exp } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
         !isNonEmptyString(appId) ||
-        !isNonEmptyString(name)
+        typeof name !== "string" || appId !== ENV.appId || !isNonEmptyString(jti) || typeof exp !== "number"
       ) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
@@ -243,13 +249,10 @@ class SDKServer {
         return null;
       }
 
-      return {
-        openId,
-        appId,
-        name,
-      };
+      if (await isSessionRevoked(jti)) return null;
+      return { openId, appId, name, jti, exp, authLevel: payload.authLevel === "aal2" ? "aal2" : "aal1" };
     } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      // Invalid or revoked credentials fail closed without noisy token-bearing logs.
       return null;
     }
   }
@@ -278,7 +281,13 @@ class SDKServer {
     } as GetUserInfoWithJwtResponse;
   }
 
-  async authenticateRequest(req: Request): Promise<User> {
+  async revokeRequestSession(req: Request): Promise<void> {
+    const token = this.parseCookies(req.headers.cookie).get(COOKIE_NAME);
+    const session = await this.verifySession(token);
+    if (session) await revokeSession(session.jti, session.exp * 1000);
+  }
+
+  async authenticateRequest(req: Request): Promise<User & { authLevel: "aal1" | "aal2" }> {
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
@@ -289,37 +298,11 @@ class SDKServer {
     }
 
     const sessionUserId = session.openId;
-    const signedInAt = new Date();
-    let user = await db.getUserByOpenId(sessionUserId);
+    const user = await db.getUserByOpenId(sessionUserId);
+    if (!user) throw ForbiddenError("User not found");
+    // Login updates lastSignedIn. Ordinary reads must not generate database writes.
 
-    // If user not in DB, sync from OAuth server automatically
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
-    }
-
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
-
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
-
-    return user;
+    return { ...user, authLevel: session.authLevel };
   }
 }
 

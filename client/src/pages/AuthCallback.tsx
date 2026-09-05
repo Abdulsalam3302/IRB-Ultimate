@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { safeNextPath } from "@/lib/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { getSupabase, isSupabaseAuthEnabled } from "@/lib/supabase";
 import { useT } from "@/contexts/LanguageContext";
@@ -21,13 +22,9 @@ async function bridgeSession(accessToken: string): Promise<void> {
 export default function AuthCallback() {
   const { t } = useT();
   const [error, setError] = useState<string | null>(null);
-  const params = new URLSearchParams(window.location.search);
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const rawNext = params.get("next") || "/dashboard";
-  // Same-origin path only — block open redirects via //evil.com or /\evil.com
-  const next =
-    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
-      ? rawNext
-      : "/dashboard";
+  const next = safeNextPath(rawNext);
 
   useEffect(() => {
     if (!isSupabaseAuthEnabled) {
@@ -56,7 +53,7 @@ export default function AuthCallback() {
 
         await bridgeSession(token);
         if (!cancelled) {
-          window.location.replace(next.startsWith("/") ? next : "/dashboard");
+          window.location.replace(next);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -68,7 +65,7 @@ export default function AuthCallback() {
     return () => {
       cancelled = true;
     };
-  }, [next, params, t]);
+  }, [next, params]);
 
   if (error) {
     return (

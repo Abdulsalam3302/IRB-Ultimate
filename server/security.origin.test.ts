@@ -71,7 +71,7 @@ describe("isOriginAllowed", () => {
     ).toBe(false);
   });
 
-  it("allows proxied same-origin via X-Forwarded-Host (Vercel rewrite)", () => {
+  it("rejects unlisted origins even with a forged forwarded host", () => {
     expect(
       isOriginAllowed(
         fakeReq({
@@ -83,7 +83,7 @@ describe("isOriginAllowed", () => {
           },
         })
       )
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("rejects cross-site origins that do not match the addressed host", () => {
@@ -105,16 +105,16 @@ describe("isOriginAllowed", () => {
     expect(isOriginAllowed(fakeReq({ headers: {} }))).toBe(false);
   });
 
-  it("allows no-origin POSTs from loopback (dev tools)", () => {
-    expect(isOriginAllowed(fakeReq({ headers: {}, ip: "127.0.0.1" }))).toBe(true);
+  it("rejects no-origin production POSTs even from loopback", () => {
+    expect(isOriginAllowed(fakeReq({ headers: {}, ip: "127.0.0.1" }))).toBe(false);
   });
 });
 
 describe("clientIpKey", () => {
-  it("uses the leftmost X-Forwarded-For entry", () => {
+  it("ignores attacker-controlled forwarded-for entries", () => {
     expect(
       clientIpKey(fakeReq({ headers: { "x-forwarded-for": "198.51.100.4, 76.76.21.21" } }))
-    ).toBe("198.51.100.4");
+    ).toBe("203.0.113.7");
   });
 
   it("falls back to req.ip without the header", () => {

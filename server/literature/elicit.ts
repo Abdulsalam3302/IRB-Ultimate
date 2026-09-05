@@ -1,5 +1,5 @@
 import type { LiteratureItem } from "./types";
-import { fetchWithTimeout, trim } from "./http";
+import { fetchWithTimeout, trim, sourceTotal } from "./http";
 
 /**
  * Elicit Search API. Per Elicit docs (docs.elicit.com):
@@ -16,7 +16,7 @@ export async function searchElicit(
   limit: number,
   apiKey: string | undefined,
   apiUrl: string | undefined
-): Promise<{ items: LiteratureItem[]; total: number }> {
+): Promise<{ items: LiteratureItem[]; total?: number }> {
   if (!apiKey) {
     throw new Error("Elicit not configured (ELICIT_API_KEY required)");
   }
@@ -38,11 +38,13 @@ export async function searchElicit(
     timeoutMs: 12000,
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Elicit ${res.status}: ${body.slice(0, 200)}`);
+    await res.body?.cancel();
+    throw new Error(`Elicit unavailable (HTTP ${res.status})`);
   }
   const json = (await res.json()) as any;
-  const arr: any[] = json?.papers ?? json?.results ?? json?.data ?? [];
+  const raw = json?.papers ?? json?.results ?? json?.data;
+  if (!Array.isArray(raw)) throw new Error("Invalid Elicit search response");
+  const arr: any[] = Array.isArray(raw) ? raw : [];
 
   const items: LiteratureItem[] = arr
     .slice(0, limit)
@@ -74,5 +76,5 @@ export async function searchElicit(
     })
     .filter((x): x is LiteratureItem => Boolean(x));
 
-  return { items, total: json?.total ?? items.length };
+  return { items, total: sourceTotal(json?.total) };
 }

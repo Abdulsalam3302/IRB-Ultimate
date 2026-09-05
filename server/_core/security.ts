@@ -1,10 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { ENV } from "./env";
+import { consumeRateLimit } from "./requestLimits";
+import { boundedInt } from "./limits";
+import { captureException } from "./observability";
 
 /**
  * Lightweight security middleware — no extra deps.
  *  - Sets sensible response headers
- *  - Naive in-memory rate limit on /api/* (per IP)
+ *  - Shared persistent rate limits on /api/* (pseudonymous per-IP counters)
  *  - Top-level error handler that hides stack traces in production
  */
 
@@ -48,68 +51,44 @@ const AUTH_ROUTES = [
   "/api/oauth/start",
 ];
 
-/**
- * Best-effort real client IP for rate-limit bucket keys.
- *
- * Behind the split deploy (browser → Vercel rewrite → Render → app),
- * `req.ip` with trust proxy=1 resolves to Vercel's egress IP — shared by
- * every visitor — so one busy hour of legitimate users would exhaust a
- * single bucket and 429 everyone at once. The leftmost X-Forwarded-For
- * entry is the browser's IP as recorded by the first proxy.
- *
- * A direct (non-proxied) caller can forge X-Forwarded-For to rotate
- * buckets, which weakens per-IP limiting to roughly what an IP-rotating
- * client could do anyway; account-scoped throttles in nativeAuth remain
- * the backstop for credential attacks. Never use this value for authz.
- */
+/** Only Express may resolve trusted proxy hops. Never accept the leftmost caller-supplied XFF. */
 export function clientIpKey(req: Request): string {
-  const xff = req.headers["x-forwarded-for"];
-  const first = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim();
-  if (first && first.length <= 64 && /^[0-9a-fA-F.:]+$/.test(first)) return first;
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
-type Bucket = { count: number; reset: number };
-const buckets = new Map<string, Bucket>();
-
-function rateLimit(req: Request, res: Response, next: NextFunction) {
-  if (!req.path.startsWith("/api/")) return next();
-  // Health-check exempted so external monitors don't get 429s.
-  if (req.path === "/api/health") return next();
-  const ip = clientIpKey(req);
-  const now = Date.now();
-  // Three independent buckets per IP (g / s / a) so a strict-route burst
-  // doesn't drain the general budget, and an auth-route brute-force
-  // attempt doesn't drain either. Auth gets the tightest cap.
-  const isAuth = AUTH_ROUTES.some(p => req.path === p || req.path.startsWith(p + "/"));
-  const isStrict = !isAuth && STRICT_ROUTES.some(p => req.path === p || req.path.startsWith(p + "/"));
-  const scope = isAuth ? "a" : isStrict ? "s" : "g";
-  const limit = isAuth ? AUTH_RATE_LIMIT : isStrict ? STRICT_RATE_LIMIT : RATE_LIMIT;
-  const key = `${scope}:${ip}`;
-  const bucket = buckets.get(key);
-
-  if (!bucket || bucket.reset <= now) {
-    buckets.set(key, { count: 1, reset: now + RATE_WINDOW_MS });
-    return next();
-  }
-
-  if (bucket.count >= limit) {
-    res.setHeader("Retry-After", Math.ceil((bucket.reset - now) / 1000));
-    res.status(429).json({ error: "Too many requests" });
-    return;
-  }
-
-  bucket.count += 1;
-  next();
+export function rateScope(path: string): "auth" | "strict" | "general" {
+  if (AUTH_ROUTES.some(p => path === p || path.startsWith(p + "/"))) return "auth";
+  // A comma-separated tRPC batch must not bypass the expensive-route policy.
+  const paths = path.startsWith("/api/trpc/")
+    ? path.slice("/api/trpc/".length).split(",").map(p => `/api/trpc/${p}`)
+    : [path];
+  if (paths.some(p => STRICT_ROUTES.some(strict => p === strict || p.startsWith(strict + "/")))) return "strict";
+  return "general";
 }
 
-// Periodically prune stale buckets (memory bound)
-setInterval(() => {
-  const now = Date.now();
-  buckets.forEach((b, key) => {
-    if (b.reset <= now) buckets.delete(key);
-  });
-}, RATE_WINDOW_MS).unref();
+async function rateLimit(req: Request, res: Response, next: NextFunction) {
+  if (!req.path.startsWith("/api/") || ["/api/health", "/api/ready"].includes(req.path)) return next();
+  if (req.method === "OPTIONS") return next();
+  const scope = rateScope(req.path);
+  const limit = scope === "auth" ? AUTH_RATE_LIMIT : scope === "strict" ? STRICT_RATE_LIMIT : RATE_LIMIT;
+  try {
+    if (scope === "auth" || scope === "strict") {
+      const global = await consumeRateLimit(`api-global-${scope}`, "all", scope === "auth" ? 120 : 300, RATE_WINDOW_MS);
+      if (!global.allowed) {
+        res.setHeader("Retry-After", global.retryAfter);
+        res.status(global.unavailable ? 503 : 429).json({ error: global.unavailable ? "Service temporarily unavailable" : "Too many requests" });
+        return;
+      }
+    }
+    const result = await consumeRateLimit(`api-${scope}`, clientIpKey(req), limit, RATE_WINDOW_MS);
+    if (!result.allowed) {
+      res.setHeader("Retry-After", result.retryAfter);
+      res.status(result.unavailable ? 503 : 429).json({ error: result.unavailable ? "Service temporarily unavailable" : "Too many requests" });
+      return;
+    }
+    next();
+  } catch (err) { next(err); }
+}
 
 // CSP — strict baseline. The Vite dev pipeline injects inline scripts at
 // runtime, so we relax script-src in dev only. Style 'unsafe-inline'
@@ -117,25 +96,14 @@ setInterval(() => {
 //
 // connect-src in production is an explicit allowlist (SA-13). The previous
 // `https:` wildcard would have let a stored-XSS exfiltrate to any host on the
-// web. AI + literature endpoints are listed so the SPA's tRPC calls and any
-// browser-side fetches stay on-allowlist. ALLOWED_CONNECT_HOSTS (comma-sep)
+// web. AI and literature requests stay server-side. The browser may contact only
+// its own origin and its configured identity provider. ALLOWED_CONNECT_HOSTS (comma-sep)
 // lets ops add their Sentry DSN or analytics endpoint without a code change.
-function gtmContainerId(): string {
-  const id = (process.env.VITE_GTM_ID || process.env.GTM_ID || "").trim();
-  return /^GTM-[A-Z0-9]+$/i.test(id) ? id : "";
-}
-
 function buildConnectSrc(): string {
   if (!ENV.isProduction) return "'self' https: ws: wss:";
   const base = [
     "'self'",
-    "https://api.openai.com",
-    "https://api.anthropic.com",
-    "https://api.minimax.io",
-    "https://eutils.ncbi.nlm.nih.gov",
-    "https://api.semanticscholar.org",
-    "https://api.openalex.org",
-    "https://clinicaltrials.gov",
+
   ];
   if (ENV.supabaseUrl) {
     try {
@@ -148,30 +116,25 @@ function buildConnectSrc(): string {
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
-  if (gtmContainerId()) {
-    extra.push("https://www.googletagmanager.com", "https://www.google-analytics.com");
-  }
   return [...base, ...extra].join(" ");
 }
 
 function buildCsp(): string {
-  const gtm = Boolean(gtmContainerId());
   const scriptSrc = ENV.isProduction
-    ? (gtm ? "'self' https://www.googletagmanager.com" : "'self'")
+    ? "'self'"
     : "'self' 'unsafe-inline' 'unsafe-eval'";
   const imgHosts = (process.env.ALLOWED_IMG_HOSTS ?? "")
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
-  if (gtm) imgHosts.push("https://www.googletagmanager.com", "https://www.google-analytics.com");
   const imgSrc = ENV.isProduction
     ? ["'self'", "data:", "blob:", "https://*.amazonaws.com", "https://*.cloudfront.net", ...imgHosts].join(" ")
     : "'self' data: blob: https:";
   return [
     "default-src 'self'",
     `img-src ${imgSrc}`,
-    "font-src 'self' data: https://fonts.gstatic.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
     `script-src ${scriptSrc}`,
     `connect-src ${buildConnectSrc()}`,
     "frame-ancestors 'none'",
@@ -181,7 +144,11 @@ function buildCsp(): string {
   ].join("; ");
 }
 
-function securityHeaders(_req: Request, res: Response, next: NextFunction) {
+function securityHeaders(req: Request, res: Response, next: NextFunction) {
+  if (req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  }
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -212,9 +179,9 @@ function securityHeaders(_req: Request, res: Response, next: NextFunction) {
  *  - same-site subdomain attacks (Lax allows top-level same-site POST)
  *  - non-browser callers (Postman, curl) that need to be on-allowlist
  *
- * Allowed: same-origin requests (no Origin header, or Origin === own host)
+ * Allowed: verified same-origin browser requests
  * AND any origin listed in ENV.allowedOrigins. The split deploy (SPA on
- * Vercel, API on Railway) requires ENV.allowedOrigins to be set to the SPA
+ * Vercel, API on Render) requires ENV.allowedOrigins to be set to the SPA
  * domain in prod.
  */
 /** Compile an ALLOWED_ORIGINS entry. Entries may contain `*` wildcards
@@ -248,7 +215,7 @@ export function isOriginAllowed(req: Request): boolean {
   // reject. (curl scripts can opt in via ALLOWED_ORIGINS.)
   if (!claimed) {
     const ip = req.ip || req.socket.remoteAddress || "";
-    return /^(127\.|::1|::ffff:127\.)/.test(ip);
+    return !ENV.isProduction && /^(127\.|::1$|::ffff:127\.)/.test(ip);
   }
 
   // Compare on origin only, not full URL — strip path/query.
@@ -260,26 +227,11 @@ export function isOriginAllowed(req: Request): boolean {
     return false;
   }
 
-  // Hosts this request was addressed to. Behind the Vercel→Railway split
-  // deploy the browser talks to the Vercel domain (any deployment URL) and
-  // the rewrite proxies to Railway: Host becomes the Railway domain while
-  // X-Forwarded-Host carries the domain the browser actually used. A
-  // request whose Origin matches the host it was sent to is same-origin
-  // from the browser's point of view — exactly what this guard exists to
-  // verify. Browsers cannot forge X-Forwarded-Host, and a non-browser
-  // caller that sets it could just as easily set Origin, so this adds no
-  // new surface while making every Vercel preview/alias domain work.
-  const protoHeader = (req.headers["x-forwarded-proto"] as string | undefined)
-    ?.split(",")[0]
-    ?.trim();
-  const proto = protoHeader || req.protocol;
-  const ownHosts = [req.get("host") ?? ""];
-  const xfh = req.headers["x-forwarded-host"];
-  for (const h of (Array.isArray(xfh) ? xfh.join(",") : xfh ?? "").split(",")) {
-    if (h.trim()) ownHosts.push(h.trim());
-  }
-  for (const host of ownHosts) {
-    if (host && claimedOrigin === `${proto}://${host}`) return true;
+  // Do not trust forwarded host/proto supplied by a direct client. The configured
+  // public URL covers the split edge/API deployment; preview origins must be explicit.
+  if (claimedOrigin === `${req.protocol}://${req.get("host") ?? ""}`) return true;
+  if (ENV.publicAppUrl) {
+    try { if (claimedOrigin === new URL(ENV.publicAppUrl).origin) return true; } catch { /* invalid configuration */ }
   }
 
   return ENV.allowedOrigins.some(entry => originMatches(entry, claimedOrigin));
@@ -300,7 +252,7 @@ function corsForApi(req: Request, res: Response, next: NextFunction) {
   const origin = req.headers.origin as string | undefined;
   if (origin && ENV.allowedOrigins.some(entry => originMatches(entry, origin))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
+    res.vary("Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader(
@@ -322,27 +274,19 @@ function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
-  console.error("[Server error]", err);
-  // Forward to Sentry if configured (no-op otherwise).
-  // Lazy require so a circular import can't break the security module.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const obs = require("./observability");
-    obs.captureException(err, {
-      request: { method: req.method, url: req.originalUrl, headers: { "user-agent": req.headers["user-agent"] } },
-    });
-  } catch { /* observability optional */ }
-  if (res.headersSent) return;
-  const message =
-    ENV.isProduction || !(err instanceof Error)
-      ? "Internal server error"
-      : err.message;
-  res.status(500).json({ error: message });
+  captureException(err, { request: { method: req.method, url: req.path } });
+  console.error("[Server error]", err instanceof Error ? err.name : "UnknownError");
+  if (res.headersSent) return _next(err);
+  const code = (err as { type?: string; status?: number })?.type;
+  const status = code === "entity.too.large" ? 413 : code === "entity.parse.failed" ? 400 : 500;
+  const message = status === 413 ? "Request body too large" : status === 400 ? "Invalid JSON body" :
+    ENV.isProduction || !(err instanceof Error) ? "Internal server error" : err.message;
+  res.status(status).json({ error: message });
 }
 
 export function registerSecurity(app: Express) {
-  // Trust proxy so X-Forwarded-For works behind reverse proxies
-  app.set("trust proxy", 1);
+  // Configure only the verified proxy topology; never blindly trust arbitrary XFF.
+  app.set("trust proxy", boundedInt(process.env.TRUST_PROXY_HOPS, ENV.isProduction ? 1 : 0, 0, 5));
   app.disable("x-powered-by");
   app.use(securityHeaders);
   app.use(rateLimit);

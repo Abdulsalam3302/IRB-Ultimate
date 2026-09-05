@@ -1,6 +1,6 @@
+import { safeLogError } from "../_core/safeLog";
 import * as db from "../db";
 import { ENV } from "../_core/env";
-import { generateAndStoreCertificatePdf } from "../certificateV2";
 import {
   decideAcceleratedOutcome,
   runBotPanelReview,
@@ -27,7 +27,7 @@ async function notifyOwnerAccelerated(
   content: string,
 ) {
   const owner = await db.getUserByEmail(ENV.ownerEmail);
-  if (owner) {
+  if (owner?.role === "admin") {
     await emailService.createNotification({
       userId: owner.id,
       applicationId,
@@ -46,8 +46,6 @@ async function notifyOwnerAccelerated(
 export const OWNER_ALERT_NOT_PASSED =
   "AI Swarm auto review NOT passed — human intervention required";
 
-const REVIEWABLE = new Set(["under_review", "pending_admin", "submitted"]);
-
 export async function applyOfficialDigitalApproval(opts: {
   applicationId: number;
   actorUserId: number;
@@ -55,68 +53,22 @@ export async function applyOfficialDigitalApproval(opts: {
   swarm: SwarmReviewResult;
   bots: BotPanelResult;
 }): Promise<AcceleratedReviewOutcome> {
-  const { applicationId, actorUserId, via, swarm, bots } = opts;
-  const app = await db.getApplicationById(applicationId);
-  if (!app) throw new Error("Application not found");
-
-  if (app.status === "approved" && app.irbNumber) {
-    return { action: "auto_approved", irbNumber: app.irbNumber };
-  }
-
-  if (!REVIEWABLE.has(app.status)) {
-    const reason =
-      "Accelerated review passed but application is not in a reviewable status";
-    await notifyOwnerAccelerated(applicationId, OWNER_ALERT_NOT_PASSED, reason);
-    return { action: "owner_alert", reason };
-  }
-
-  const irbNumber = await db.generateIrbNumber();
-  const applicant = await db.getUserById(app.applicantId);
-  let certUrl = "";
-  try {
-    certUrl = await generateAndStoreCertificatePdf({
-      app: { ...app, irbNumber, approvedAt: new Date(), status: "approved" } as typeof app,
-      applicantName: applicant?.name ?? null,
-      applicantEmail: applicant?.email ?? null,
-    });
-  } catch (e) {
-    console.error("[Accelerated] certificate generation failed", e);
-  }
-
-  await db.updateApplication(applicationId, {
-    status: "approved",
-    irbNumber,
-    approvedAt: new Date(),
-    certificateUrl: certUrl || null,
-    adminNotes: `Official digital approval under Dr. Abdulsalam Aleid via ${via}. Swarm=${swarm.passed}, Bots=${bots.passed}.`,
-  });
-
+  // Retained as a compatibility boundary for older callers. AI evidence never
+  // carries authority to change an approval state or create a certificate.
+  const reason = "Qualified human committee review and an authorized recorded decision are required before IRB approval.";
   await db.addAuditLog({
-    applicationId,
-    userId: actorUserId,
-    action: "accelerated_auto_approved",
-    details: `IRB ${irbNumber} issued via ${via}`,
+    applicationId: opts.applicationId,
+    userId: opts.actorUserId,
+    action: "automated_approval_blocked",
+    details: reason,
   });
-
-  await notifyOwnerAccelerated(
-    applicationId,
-    "IRB auto-approved (official digital pathway)",
-    `Application #${applicationId} approved as ${irbNumber} under Dr. Abdulsalam Aleid. Swarm=${swarm.passed}, Bots=${bots.passed}.`,
-  );
-
-  try {
-    await emailService.notifyAdminApproved(app.applicantId, applicationId, irbNumber);
-    await emailService.notifyCertificateIssued(app.applicantId, applicationId, irbNumber);
-  } catch {
-    /* best-effort */
-  }
-
-  return { action: "auto_approved", irbNumber };
+  await notifyOwnerAccelerated(opts.applicationId, "Human committee decision required", reason);
+  return { action: "owner_alert", reason };
 }
 
 /**
- * Official NBCE digital pathway: AI Swarm OR unanimous 4-reviewer pass
- * issues approval. Both fail → owner alert for manual action.
+ * Advisory pre-screening. Automated checks route work but cannot issue an
+ * ethics decision, manufacture committee votes, or generate approval documents.
  */
 export async function runAcceleratedPipeline(
   applicationId: number,
@@ -146,13 +98,13 @@ export async function runAcceleratedPipeline(
       completedAt: new Date(),
     });
   } catch (err) {
-    console.warn("[Accelerated] swarm persist failed", err);
+    console.warn("[Accelerated] swarm persist failed", safeLogError(err));
   }
 
   await db.addAuditLog({
     applicationId,
     userId: actorUserId,
-    action: "accelerated_digital_review",
+    action: "automated_advisory_review",
     details: JSON.stringify({
       swarmPassed: swarm.passed,
       swarmScore: swarm.overallScore,
@@ -167,7 +119,7 @@ export async function runAcceleratedPipeline(
     await db.addAuditLog({
       applicationId,
       userId: actorUserId,
-      action: "digital_reviewer_decision",
+      action: "automated_specialty_check",
       details: JSON.stringify({
         reviewer: r.reviewer.name,
         specialty: r.reviewer.specialty,
@@ -177,8 +129,8 @@ export async function runAcceleratedPipeline(
     });
   }
 
-  if (decision === "auto_approve") {
-    const via = swarm.passed ? "AI Swarm pass" : "unanimous digital reviewers (4/4)";
+  if (decision === "human_review") {
+    const via = swarm.passed ? "automated completeness checks" : "automated specialty checklists";
     const outcome = await applyOfficialDigitalApproval({
       applicationId,
       actorUserId,
@@ -192,7 +144,7 @@ export async function runAcceleratedPipeline(
   await notifyOwnerAccelerated(
     applicationId,
     OWNER_ALERT_NOT_PASSED,
-    `${OWNER_ALERT_NOT_PASSED} Application #${applicationId}. Neither the AI Swarm nor the four designated digital reviewers reached a pass.`,
+    `${OWNER_ALERT_NOT_PASSED} Application #${applicationId}. Automated advisory checks found outstanding items. A qualified human committee must assess the application.`,
   );
 
   return { swarm, bots, outcome: { action: "owner_alert", reason: OWNER_ALERT_NOT_PASSED } };

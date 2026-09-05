@@ -10,10 +10,10 @@ export const PLATFORM = {
   ahssUrl: "https://ahss-sa.org",
 } as const;
 
-/** Official NBCE digital IRB — AHSS-operated platform for Saudi Arabia. */
+/** Scope statement must not imply government affiliation or accreditation. */
 export const PLATFORM_DISCLAIMER = {
-  en: "Official digital Institutional Review Board of the National Committee of BioEthics (NCBE) of Saudi Arabia, operated with Advanced Healthcare Systems Society (AHSS · ahss-sa.org). Built in compliance with PDPL, NCBE ethical guidelines, the Declaration of Helsinki, ICH-GCP, and Saudi Vision 2030 digitalization goals.",
-  ar: "المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية، وتُشغَّل مع جمعية أنظمة الرعاية الصحية المتقدمة (AHSS · ahss-sa.org). مُصمّمة وفق PDPL وإرشادات NCBE الأخلاقية وإعلان هلسنكي وICH-GCP وأهداف رؤية السعودية 2030 للتحول الرقمي.",
+  en: "Independent digital research ethics workflow platform for Saudi Arabia. AI assists preparation and assessment; authorized human reviewers retain decision authority. Institutional and jurisdictional requirements apply. International expansion is planned from 2027, subject to local requirements.",
+  ar: "منصة رقمية مستقلة لإدارة إجراءات أخلاقيات البحث في السعودية. يساعد الذكاء الاصطناعي في الإعداد والتقييم، وتبقى صلاحية القرار لدى المراجعين البشريين المخولين. تنطبق متطلبات المؤسسة والدولة المعنية. يُخطط للتوسع الدولي ابتداءً من 2027 وفق المتطلبات المحلية.",
 } as const;
 
 export const BRAND = {
@@ -26,8 +26,8 @@ export const BRAND = {
 export const AUTHOR = {
   nameEn: "Dr. Abdulsalam Aleid",
   nameAr: "د. عبدالسلام العيد",
-  titleEn: "Platform Director & Approving Authority",
-  titleAr: "مدير المنصة والجهة المعتمدة",
+  titleEn: "Platform Founder",
+  titleAr: "مؤسس المنصة",
   orgEn: "Advanced Healthcare Systems Society (AHSS)",
   orgAr: "جمعية أنظمة الرعاية الصحية المتقدمة (AHSS)",
   linkedin: "https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-mhqs-911446142/",

@@ -430,7 +430,10 @@ let _browserPromise: Promise<import("playwright").Browser> | null = null;
 async function getSharedBrowser() {
   const { chromium } = await import("playwright");
   if (!_browserPromise) {
-    _browserPromise = chromium.launch({ headless: true });
+    _browserPromise = chromium.launch({ headless: true }).then(browser => {
+      browser.once("disconnected", () => { _browserPromise = null; });
+      return browser;
+    });
     _browserPromise.catch(() => { _browserPromise = null; });
   }
   return _browserPromise;
@@ -441,9 +444,10 @@ export async function renderResourcePdf(opts: RenderResourceOptions): Promise<Bu
   return pdfSemaphore.run(async () => {
     const html = renderResourceHtml(opts);
     const browser = await getSharedBrowser();
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
+    const ctx = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
+    const timeout = setTimeout(() => { void ctx.close().catch(() => undefined); }, 20000);
     try {
+      const page = await ctx.newPage();
       await page.route("**/*", route => {
         if (route.request().url().startsWith("data:")) return route.continue();
         return route.abort();
@@ -456,6 +460,7 @@ export async function renderResourcePdf(opts: RenderResourceOptions): Promise<Bu
       });
       return Buffer.from(pdf);
     } finally {
+      clearTimeout(timeout);
       await ctx.close().catch(() => undefined);
     }
   });

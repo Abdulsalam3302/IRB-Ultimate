@@ -1,3 +1,4 @@
+import { safeLogError } from "../_core/safeLog";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { storagePut, UPLOADS_DIR_PATH } from "../storage";
@@ -26,7 +27,7 @@ export function expiredBackupDayKeys(
   return keys.filter(k => {
     if (!DAY_RE.test(k)) return false;
     const t = Date.parse(`${k}T00:00:00Z`);
-    return Number.isFinite(t) && t < cutoff;
+    return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === k && t < cutoff;
   });
 }
 
@@ -39,14 +40,15 @@ export async function backupCertificateArtifact(
   const base = path.basename(storageKey.replace(/\\/g, "/"));
   const buf = typeof data === "string" ? Buffer.from(data, "utf8") : Buffer.from(data);
   const destDir = path.join(backupsRoot(), day);
-  await fs.mkdir(destDir, { recursive: true });
-  await fs.writeFile(path.join(destDir, base), buf);
+  await fs.mkdir(destDir, { recursive: true, mode: 0o700 });
+  if (!base || base === "." || base === "..") throw new Error("Invalid certificate artifact key");
+  await fs.writeFile(path.join(destDir, base), buf, { mode: 0o600 });
 
   if (process.env.S3_BUCKET && process.env.AWS_ACCESS_KEY_ID) {
     try {
       await storagePut(`certificate-backups/${day}/${base}`, buf, contentType);
     } catch (err) {
-      console.warn("[cert-backup] S3 copy failed; disk copy retained", err);
+      console.warn("[cert-backup] S3 copy failed; disk copy retained", safeLogError(err));
     }
   }
 }
@@ -81,8 +83,8 @@ async function copyLiveCertificatesIntoToday(): Promise<number> {
   for (const name of files) {
     if (name.startsWith(".")) continue;
     const src = path.join(live, name);
-    const stat = await fs.stat(src).catch(() => null);
-    if (!stat?.isFile()) continue;
+    const stat = await fs.lstat(src).catch(() => null);
+    if (!stat?.isFile() || stat.isSymbolicLink()) continue;
     const buf = await fs.readFile(src);
     const type = name.endsWith(".pdf")
       ? "application/pdf"
@@ -101,15 +103,18 @@ let _started = false;
 export function startCertificateBackupScheduler(): void {
   if (_started) return;
   _started = true;
+  let running = false;
   const run = () => {
+    if (running) return;
+    running = true;
     void (async () => {
       try {
         const copied = await copyLiveCertificatesIntoToday();
         const { removed } = await pruneCertificateBackups();
         console.log(`[cert-backup] snapshotted ${copied} file(s); pruned ${removed.length} day folder(s)`);
       } catch (err) {
-        console.warn("[cert-backup] run failed", err);
-      }
+        console.warn("[cert-backup] run failed", safeLogError(err));
+      } finally { running = false; }
     })();
   };
   run();

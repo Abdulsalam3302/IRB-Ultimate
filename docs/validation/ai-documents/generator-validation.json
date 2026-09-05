@@ -1,0 +1,34 @@
+{
+  "fixture": "synthetic only; no application/database writes",
+  "checked_at": "2026-09-05",
+  "network": "HTTP requests blocked inside PDF render contexts",
+  "typescript": "pnpm exec tsc --noEmit passed 2026-09-05",
+  "tests": "46 targeted tests across 10 files passed",
+  "certificate.pdf": {
+    "pages": 1,
+    "bytes": 141061,
+    "text_chars": 1582
+  },
+  "consent-ar.pdf": {
+    "pages": 2,
+    "bytes": 88949,
+    "text_chars": 1094
+  },
+  "consent-en.pdf": {
+    "pages": 2,
+    "bytes": 175782,
+    "text_chars": 1253
+  },
+  "consent-en.docx": {
+    "bytes": 9476,
+    "document_xml_bytes": 12580
+  },
+  "consent-ar.docx": {
+    "bytes": 9702,
+    "document_xml_bytes": 13066
+  },
+  "certificate.docx": {
+    "bytes": 9189,
+    "document_xml_bytes": 4445
+  }
+}

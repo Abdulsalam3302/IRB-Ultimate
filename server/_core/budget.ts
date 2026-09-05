@@ -8,8 +8,8 @@
  * before anyone notices.
  *
  * This module enforces TWO budgets:
- *  - per-user, per-day  (env LLM_USER_DAILY_LIMIT, default 200)
- *  - global, per-day    (env LLM_GLOBAL_DAILY_LIMIT, default 10000)
+ *  - per-user, per-day  (env LLM_USER_DAILY_LIMIT, default 40)
+ *  - global, per-day    (env LLM_GLOBAL_DAILY_LIMIT, default 500)
  *
  * Counters are persisted in the `llm_usage_daily` MySQL table so they
  * survive deploys/restarts and are shared across horizontal replicas
@@ -22,16 +22,18 @@
  */
 
 import { sql } from "drizzle-orm";
+import { ENV } from "./env";
+import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 
 const USER_DAILY_LIMIT = clampInt(
   process.env.LLM_USER_DAILY_LIMIT,
-  200,
+  40,
   { min: 1, max: 100_000 }
 );
 const GLOBAL_DAILY_LIMIT = clampInt(
   process.env.LLM_GLOBAL_DAILY_LIMIT,
-  10000,
+  500,
   { min: 1, max: 10_000_000 }
 );
 
@@ -165,11 +167,13 @@ export async function reserveLlmCall(userId: number): Promise<BudgetCheck> {
         globalRemaining: Math.max(0, GLOBAL_DAILY_LIMIT - globalCount),
       };
     } catch (err) {
-      console.warn("[Budget] DB counter failed; using in-memory fallback:", err);
+      console.warn("[Budget] Persistent reservation unavailable");
     }
   }
 
-  // In-memory fallback (dev, or transient DB outage).
+  if (ENV.isProduction) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "AI budget accounting is temporarily unavailable. Please try again later." });
+
+  // In-memory fallback is restricted to local development.
   const u = getUserBucket(userId);
   const g = refreshGlobalBucket();
   if (u.count >= USER_DAILY_LIMIT) {
@@ -218,9 +222,11 @@ export async function inspectLlmBudget(userId: number) {
         resetAt: nextMidnightISO(),
       };
     } catch (err) {
-      console.warn("[Budget] DB inspect failed; using in-memory fallback:", err);
+      console.warn("[Budget] Persistent accounting unavailable");
     }
   }
+
+  if (ENV.isProduction) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "AI budget accounting is temporarily unavailable." });
 
   const u = getUserBucket(userId);
   const g = refreshGlobalBucket();

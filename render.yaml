@@ -16,12 +16,18 @@ services:
     region: frankfurt
     repo: https://github.com/Abdulsalam3302/IRB-Ultimate
     branch: main
-    autoDeploy: true
-    healthCheckPath: /api/health
+    autoDeploy: false
+    healthCheckPath: /api/ready
     # Avoid `corepack enable` on Render free images (EROFS on /usr/bin/pnpm).
-    buildCommand: npm install -g pnpm@10.4.1 && pnpm install --frozen-lockfile && pnpm run build
+    buildCommand: npm install -g pnpm@10.34.5 && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm run build
     startCommand: node dist/index.js
     envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: IRB_ISSUANCE_ENABLED
+        value: "false"
+      - key: PDF_MAX_CONCURRENCY
+        value: "1"
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -59,7 +65,15 @@ services:
         sync: false
       - key: LLM_PROVIDER
         sync: false
+      - key: LLM_USER_DAILY_LIMIT
+        value: "40"
+      - key: LLM_GLOBAL_DAILY_LIMIT
+        value: "500"
+      - key: LLM_MAX_CONCURRENCY
+        value: "2"
+      - key: VITE_PUBLIC_DEMO_BANNER
+        value: "1"
       - key: LLM_MAX_TOKENS
-        value: "24576"
+        value: "8192"
       - key: PILOT_LOGIN_ENABLED
         value: "0"

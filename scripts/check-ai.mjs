@@ -2,12 +2,14 @@
 /**
  * Probe the local (or BASE) server's AI provider via owner login + system.aiStatus.
  * Usage: PORT=3010 node scripts/check-ai.mjs
- * Env: OWNER_EMAIL / OWNER_PASSWORD (defaults match local bootstrap)
+ * Env: OWNER_EMAIL / OWNER_PASSWORD (explicit isolated test credentials)
  */
 const PORT = process.env.PORT ?? "3010";
 const BASE = process.env.BASE_URL ?? `http://127.0.0.1:${PORT}`;
-const email = process.env.OWNER_EMAIL ?? "owner@irb-ultimate.local";
-const password = process.env.OWNER_PASSWORD ?? "OwnerAdmin!2026";
+if (!["localhost", "127.0.0.1"].includes(new URL(BASE).hostname)) throw new Error("AI probe is restricted to a controlled loopback test server.");
+const email = process.env.OWNER_EMAIL;
+const password = process.env.OWNER_PASSWORD;
+if (!email || !password) throw new Error("Explicit isolated test credentials are required.");
 
 const jar = new Map();
 function cookieHeader() {

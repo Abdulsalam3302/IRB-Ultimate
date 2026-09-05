@@ -1,6 +1,6 @@
 import type { Application } from "../../drizzle/schema";
 
-const STAGE2_FIELDS = [
+export const STAGE2_FIELDS = [
   "researchObjectives",
   "methodology",
   "sampleSize",
@@ -15,7 +15,7 @@ const STAGE2_FIELDS = [
   "conflictOfInterest",
 ] as const;
 
-const STAGE1_FIELDS = [
+export const STAGE1_FIELDS = [
   "researchType",
   "irbCategory",
   "researchTitle",
@@ -26,19 +26,17 @@ const STAGE1_FIELDS = [
 ] as const;
 
 function isBlank(value: string | null | undefined): boolean {
-  return !value || value.trim().length === 0;
+  return !value || value.trim().length === 0 || /\[(?:STILL\s+MISSING|MISSING|NEEDS\s+APPLICANT|ASSUMPTION|TEMPLATE|BLOCKED)\b[^\]]*\]/i.test(value);
 }
 
 export function listMissingRequirements(app: Application): string[] {
   const missing: string[] = [];
 
-  if (!app.declarationCompletedAt) {
-    if (!app.declarationHonesty) missing.push("declaration_honesty");
-    if (!app.declarationNbceCertification) missing.push("declaration_nbce_certification");
-    if (!app.declarationConsentTruth) missing.push("declaration_consent_truth");
-    if (!app.declarationAcceptPolicy) missing.push("declaration_accept_policy");
-    if (missing.length === 0) missing.push("declaration_phase");
-  }
+  if (!app.declarationHonesty) missing.push("declaration_honesty");
+  if (!app.declarationNbceCertification) missing.push("declaration_nbce_certification");
+  if (!app.declarationConsentTruth) missing.push("declaration_consent_truth");
+  if (!app.declarationAcceptPolicy) missing.push("declaration_accept_policy");
+  if (!app.declarationCompletedAt) missing.push("declaration_phase");
 
   for (const field of STAGE1_FIELDS) {
     const value = app[field];
@@ -57,8 +55,8 @@ export function listMissingRequirements(app: Application): string[] {
     if (isBlank(app[field])) missing.push(field);
   }
 
-  if (!app.stage1Passed) missing.push("stage1_ai_review_pass");
-  if (!app.stage2Passed) missing.push("stage2_ai_review_pass");
+  if (!app.stage1Passed && !(app.proceedDespiteStage1 && !isBlank(app.proceedDespiteStage1Reason))) missing.push("stage1_ai_review_pass");
+  if (!app.stage2Passed && !(app.proceedDespiteStage2 && !isBlank(app.proceedDespiteStage2Reason))) missing.push("stage2_ai_review_pass");
 
   return missing;
 }
@@ -71,13 +69,14 @@ export function validateApplicationReadiness(app: Application): {
   const missing = listMissingRequirements(app);
   const readyToSubmit =
     app.status === "submitted" &&
-    missing.length === 0 &&
-    Boolean(app.stage1Passed) &&
-    Boolean(app.stage2Passed);
+    missing.length === 0;
   return { readyToSubmit, missing, status: app.status };
 }
 
 export const IRB_REQUIREMENTS = {
+  authority: "Platform preparation checklist; the responsible institution determines binding requirements.",
+  aiRole: "Advisory screening and preparation only; AI cannot authorize human-subject research.",
+  launchStatus: "Institutional authority and qualified human committee activation required before issuing decisions.",
   studyTypes: [
     "clinical_trial",
     "observational",
@@ -88,8 +87,8 @@ export const IRB_REQUIREMENTS = {
     "educational",
     "social_behavioral",
     "other",
-  ],
-  irbCategories: ["full_board", "expedited", "exempt"],
+  ] as const,
+  irbCategories: ["full_board", "expedited", "exempt"] as const,
   requiredDocuments: [
     "nbce_certificate",
     "questionnaire",

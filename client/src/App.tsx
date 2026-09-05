@@ -6,8 +6,9 @@ import { Loader2 } from "lucide-react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
-import { DisclaimerGate } from "./components/DisclaimerGate";
 import { AnalyticsBeacon } from "./components/AnalyticsBeacon";
+import { DemoBanner } from "./components/DemoBanner";
+import { RouteMetadata } from "./components/RouteMetadata";
 import { WebMcpProvider } from "./components/WebMcpProvider";
 
 // Lazy-loaded route pages — each becomes its own chunk so first paint
@@ -41,14 +42,15 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 function PageFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div role="status" aria-live="polite"><Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" /><span className="sr-only">Loading / جارٍ التحميل</span></div>
     </div>
   );
 }
 
 function Router() {
   return (
-    <DisclaimerGate>
+    <>
+      <RouteMetadata />
       <Suspense fallback={<PageFallback />}>
         <Switch>
           <Route path={"/"} component={Home} />
@@ -84,7 +86,7 @@ function Router() {
         </Switch>
       </Suspense>
       <AnalyticsBeacon />
-    </DisclaimerGate>
+    </>
   );
 }
 
@@ -94,6 +96,7 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <LanguageProvider>
           <TooltipProvider>
+            <DemoBanner />
             <Toaster />
             <WebMcpProvider>
               <Router />

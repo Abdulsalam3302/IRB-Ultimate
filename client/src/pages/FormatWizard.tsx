@@ -1,3 +1,4 @@
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { Navbar } from "@/components/Navbar";
@@ -23,11 +24,18 @@ import NotFound from "@/pages/NotFound";
 export default function FormatWizard() {
   const { slug = "" } = useParams<{ slug: string }>();
   const search = useSearch();
+  if (!isFormattableSlug(slug)) return <NotFound />;
+  return <FormatWizardContent key={`${slug}:${search}`} slug={slug} />;
+}
+
+function FormatWizardContent({ slug }: { slug: keyof typeof SLUG_META }) {
+  const { isAuthenticated } = useAuth({ redirectOnUnauthenticated: true });
+  const search = useSearch();
   const appId = useMemo(() => {
     const p = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
     const raw = p.get("appId");
-    const n = raw ? parseInt(raw, 10) : NaN;
-    return Number.isFinite(n) ? n : undefined;
+    const n = raw ? Number(raw) : NaN;
+    return Number.isSafeInteger(n) && n > 0 ? n : undefined;
   }, [search]);
 
   const { t, lang, isRtl } = useT();
@@ -37,17 +45,15 @@ export default function FormatWizard() {
   const [generating, setGenerating] = useState<"pdf" | "docx" | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  if (!isFormattableSlug(slug)) return <NotFound />;
-
   const sections = getTemplateSections(slug)!;
   const meta = SLUG_META[slug];
   const allFields = sections.flatMap(s => s.fields);
   const filledCount = allFields.filter(f => answers[f.id]?.trim()).length;
   const progressPct = allFields.length ? Math.round((filledCount / allFields.length) * 100) : 0;
 
-  const { data: app, isLoading: appLoading } = trpc.application.getById.useQuery(
+  const { data: app, isLoading: appLoading, isError: appError } = trpc.application.getById.useQuery(
     { id: appId! },
-    { enabled: !!appId },
+    { enabled: isAuthenticated && !!appId },
   );
 
   useEffect(() => {
@@ -77,6 +83,7 @@ export default function FormatWizard() {
   const missingCount = allFields.filter(f => !answers[f.id]?.trim()).length;
 
   const generate = async (format: "pdf" | "docx") => {
+    if (generating || !isAuthenticated || appError) return;
     setGenerating(format);
     try {
       const resp = await fetch("/api/export/format/generate", {
@@ -86,8 +93,7 @@ export default function FormatWizard() {
         body: JSON.stringify({ slug, lang, format, answers, appId }),
       });
       if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || "Generation failed");
+        throw new Error(resp.status === 429 ? (isAr ? "بلغت حد الاستخدام. حاول لاحقاً." : "Usage limit reached. Please retry later.") : t("format.generateError"));
       }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
@@ -97,7 +103,7 @@ export default function FormatWizard() {
         resp.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ??
         `${slug}-${lang}.${format}`;
       a.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
       toast.success(t("format.generateSuccess"));
     } catch (err) {
       toast.error(t("format.generateError"), {
@@ -248,7 +254,7 @@ export default function FormatWizard() {
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     className="bg-forest-900 hover:bg-forest-800 text-cream-50 gap-1.5"
-                    disabled={!!generating}
+                    disabled={!!generating || !isAuthenticated || appError}
                     onClick={() => generate("pdf")}
                   >
                     {generating === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
@@ -257,7 +263,7 @@ export default function FormatWizard() {
                   <Button
                     variant="outline"
                     className="ring-forest-900/15 gap-1.5"
-                    disabled={!!generating}
+                    disabled={!!generating || !isAuthenticated || appError}
                     onClick={() => generate("docx")}
                   >
                     {generating === "docx" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
@@ -268,7 +274,7 @@ export default function FormatWizard() {
                 <ul className="space-y-1.5 text-[12px] text-ink-soft">
                   <li className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-jade-600" />
-                    {isAr ? "توقيع د. العيد المعتمد" : "Dr. Aleid authorized signature"}
+                    {isAr ? "مسودة لمراجعة الباحث" : "Draft for researcher review"}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-jade-600" />
@@ -276,13 +282,13 @@ export default function FormatWizard() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-3.5 w-3.5 text-jade-600" />
-                    IRB / NCBE
+                    {isAr ? "لا تمنح موافقة أخلاقية" : "No ethics approval conferred"}
                   </li>
                 </ul>
               </Card>
 
               <Card className="irb-card p-4 flex items-center gap-3">
-                <div className="seal shrink-0">{isAr ? "العيد · مختوم" : "Aleid · stamped"}</div>
+                <div className="seal shrink-0">{isAr ? "مسودة" : "Draft"}</div>
                 <p className="text-[12px] text-ink-soft leading-snug">{t("format.stampNote")}</p>
               </Card>
 
@@ -299,7 +305,7 @@ export default function FormatWizard() {
                   <p className="text-ink-muted line-clamp-4">
                     {(answers[allFields[0]?.id ?? ""] || (isAr ? "…" : "…")).slice(0, 120)}
                   </p>
-                  <div className="absolute bottom-2 end-2 text-[7px] text-ink-muted font-mono">Dr. A. Aleid</div>
+                  <div className="absolute bottom-2 end-2 text-[7px] text-ink-muted font-mono">{isAr ? "مسودة غير معتمدة" : "DRAFT — NOT APPROVED"}</div>
                 </div>
               </div>
 

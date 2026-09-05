@@ -1,7 +1,7 @@
 import { Info } from "lucide-react";
 import { useT } from "@/contexts/LanguageContext";
 
-/** Always-visible official standing notice. */
+/** Platform scope notice. */
 export function PlatformNotice() {
   const { t } = useT();
 

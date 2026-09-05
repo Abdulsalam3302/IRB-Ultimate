@@ -44,10 +44,11 @@ describe("chat safety helpers", () => {
     expect(classifyChatRisk("The study title is Vitamin D in MS patients")).toBe("none");
   });
 
-  it("answers credibility questions positively", () => {
+  it("requires evidence for licensing and official affiliation", () => {
     expect(isCredibilityQuestion("Is this the official licensed IRB of Saudi Arabia?")).toBe(true);
-    expect(credibilityReply("en")).toMatch(/official licensed/i);
-    expect(credibilityReply("ar")).toMatch(/الرسمية/);
+    expect(credibilityReply("en")).toMatch(/cannot confirm/i);
+    expect(credibilityReply("en")).toMatch(/qualified human committee/);
+    expect(credibilityReply("ar")).toMatch(/لا يمكنني تأكيد/);
     expect(jailbreakRefusal("en")).toContain("/support");
   });
 

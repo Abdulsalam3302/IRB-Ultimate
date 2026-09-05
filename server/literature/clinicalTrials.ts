@@ -1,5 +1,5 @@
 import type { LiteratureItem } from "./types";
-import { fetchWithTimeout, trim } from "./http";
+import { fetchWithTimeout, trim, sourceTotal } from "./http";
 
 /**
  * ClinicalTrials.gov v2 API — no key required.
@@ -9,19 +9,20 @@ import { fetchWithTimeout, trim } from "./http";
 export async function searchClinicalTrials(
   query: string,
   limit: number
-): Promise<{ items: LiteratureItem[]; total: number }> {
+): Promise<{ items: LiteratureItem[]; total?: number }> {
   const url = `https://clinicaltrials.gov/api/v2/studies?query.term=${encodeURIComponent(
     query
-  )}&pageSize=${limit}&format=json`;
+  )}&pageSize=${limit}&format=json&countTotal=true`;
   const res = await fetchWithTimeout(url, { timeoutMs: 8000 });
   if (!res.ok) throw new Error(`ClinicalTrials.gov ${res.status}`);
   const json = (await res.json()) as any;
-  const studies: any[] = json?.studies ?? [];
+  if (!Array.isArray(json?.studies)) throw new Error("Invalid ClinicalTrials search response");
+  const studies: any[] = Array.isArray(json?.studies) ? json.studies.slice(0, limit) : [];
 
   const items: LiteratureItem[] = studies
     .map((s: any): LiteratureItem | null => {
       const id = s?.protocolSection?.identificationModule?.nctId;
-      if (!id) return null;
+      if (typeof id !== "string" || !/^NCT\d{8}$/.test(id)) return null;
       const title =
         s?.protocolSection?.identificationModule?.briefTitle ||
         s?.protocolSection?.identificationModule?.officialTitle ||
@@ -63,5 +64,5 @@ export async function searchClinicalTrials(
     })
     .filter((x): x is LiteratureItem => Boolean(x));
 
-  return { items, total: items.length };
+  return { items, total: sourceTotal(json?.totalCount) };
 }

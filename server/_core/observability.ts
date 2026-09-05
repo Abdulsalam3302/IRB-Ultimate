@@ -25,7 +25,7 @@ function parseDsn(dsn: string): SentryConfig | null {
   try {
     const u = new URL(dsn);
     const projectId = u.pathname.slice(1);
-    if (!u.username || !u.host || !projectId) return null;
+    if (u.protocol !== "https:" || !u.username || !u.host || !/^\d+$/.test(projectId)) return null;
     return { publicKey: u.username, host: u.host, projectId };
   } catch {
     return null;
@@ -75,10 +75,12 @@ async function sendEnvelope(payload: string): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/x-sentry-envelope" },
       body: payload,
+      signal: AbortSignal.timeout(3000),
+      redirect: "error",
     });
   } catch (err) {
     // Never let observability blow up the request path
-    console.warn("[Observability] envelope send failed:", String(err).slice(0, 200));
+    console.warn("[Observability] envelope send failed");
   }
 }
 
@@ -123,28 +125,26 @@ function scrub(input: unknown): unknown {
 export function captureException(err: unknown, context: Record<string, any> = {}): void {
   if (!cfg) return;
   const e = err instanceof Error ? err : new Error(String(err ?? "unknown"));
-  const frames = (e.stack || "").split("\n").slice(0, 30);
+  const frames = (e.stack || "").split("\n").slice(1, 16).filter(line => /^\s+at /.test(line));
   const payload = buildEnvelope({
     exception: {
       values: [
         {
           type: e.name || "Error",
-          value: scrub((e.message || "(no message)").slice(0, 1000)) as string,
-          stacktrace: { frames: frames.map(filename => ({ filename })) },
+          value: ENVIRONMENT === "production" ? "Application operation failed" : scrub((e.message || "(no message)").slice(0, 1000)) as string,
+          stacktrace: { frames: frames.map(filename => ({ filename: scrub(filename) })) },
         },
       ],
     },
-    tags: context.tags,
-    extra: scrub(context.extra),
-    user: scrub(context.user),
-    request: scrub(context.request),
+    // Request URLs, user records, database errors and arbitrary extra objects can contain health data.
+    tags: { method: ["GET", "POST", "PUT", "DELETE"].includes(context.request?.method) ? context.request.method : "internal" },
   });
   void sendEnvelope(payload);
 }
 
 export function captureMessage(message: string, level: "info" | "warning" | "error" = "info"): void {
   if (!cfg) return;
-  const payload = buildEnvelope({ message: message.slice(0, 4000), level });
+  const payload = buildEnvelope({ message: ENVIRONMENT === "production" ? "Application event" : scrub(message), level });
   void sendEnvelope(payload);
 }
 

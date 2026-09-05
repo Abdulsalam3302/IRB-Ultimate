@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-09-05T01:51:22.928Z",
+  "endpoint": "http://127.0.0.1:3017/api/mcp",
+  "sdk": "@modelcontextprotocol/sdk@1.30.0",
+  "protocolVersion": "2025-11-25",
+  "checks": {
+    "initialize": true,
+    "initializedNotification": true,
+    "toolsList": true,
+    "schemas": true,
+    "roleScopedDiscovery": true,
+    "ping": true,
+    "readOnlyApplicationListCall": true,
+    "statelessGet405": true,
+    "anonymous401": true
+  },
+  "toolCount": 6,
+  "authenticatedApplicationCount": 1,
+  "nodeVersion": "v24.20.0",
+  "transportResponses": [
+    {
+      "method": "POST",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "protocolVersion": "2025-11-25"
+    },
+    {
+      "method": "POST",
+      "status": 202,
+      "contentType": null,
+      "protocolVersion": "2025-11-25"
+    },
+    {
+      "method": "GET",
+      "status": 405,
+      "contentType": "application/json; charset=utf-8",
+      "protocolVersion": null
+    },
+    {
+      "method": "POST",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "protocolVersion": "2025-11-25"
+    },
+    {
+      "method": "POST",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "protocolVersion": "2025-11-25"
+    },
+    {
+      "method": "POST",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "protocolVersion": "2025-11-25"
+    }
+  ],
+  "researchMutationsPerformed": false,
+  "limitations": [
+    "Isolated loopback synthetic database and native researcher session only",
+    "No production/OAuth integration or 2026-07-28 protocol support claimed"
+  ]
+}

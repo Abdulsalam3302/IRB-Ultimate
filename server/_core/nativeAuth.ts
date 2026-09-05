@@ -6,6 +6,8 @@ import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { hashPassword, verifyPassword } from "./passwords";
 import { clientIpKey } from "./security";
+import { consumeRateLimit } from "./requestLimits";
+import { boundedInt } from "./limits";
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
@@ -43,42 +45,10 @@ const REGISTER_MAX = 20; // new accounts per IP per window
 // caller to the Railway origin can forge to rotate buckets. This global
 // ceiling is IP-independent, so even unlimited IP spoofing cannot create
 // more than GLOBAL_REGISTER_MAX accounts per hour platform-wide.
-const GLOBAL_REGISTER_MAX = parseInt(process.env.REGISTER_GLOBAL_HOURLY_MAX ?? "200", 10);
-
-type Bucket = { count: number; reset: number };
-const failedLogins = new Map<string, Bucket>();
-const registrations = new Map<string, Bucket>();
-const globalRegistrations = new Map<string, Bucket>();
-
-function hit(map: Map<string, Bucket>, key: string, windowMs: number, max: number): boolean {
-  const now = Date.now();
-  const bucket = map.get(key);
-  if (!bucket || bucket.reset <= now) {
-    map.set(key, { count: 1, reset: now + windowMs });
-    return true;
-  }
-  if (bucket.count >= max) return false;
-  bucket.count += 1;
-  return true;
+const GLOBAL_REGISTER_MAX = boundedInt(process.env.REGISTER_GLOBAL_HOURLY_MAX, 100, 1, 1000);
+async function hit(scope: string, key: string, windowMs: number, max: number): Promise<boolean> {
+  return (await consumeRateLimit(scope, key, max, windowMs)).allowed;
 }
-
-function clearFailures(email: string) {
-  failedLogins.delete(email);
-}
-
-// Bound memory — prune expired buckets every 5 minutes.
-setInterval(() => {
-  const now = Date.now();
-  failedLogins.forEach((b, k) => {
-    if (b.reset <= now) failedLogins.delete(k);
-  });
-  registrations.forEach((b, k) => {
-    if (b.reset <= now) registrations.delete(k);
-  });
-  globalRegistrations.forEach((b, k) => {
-    if (b.reset <= now) globalRegistrations.delete(k);
-  });
-}, 5 * 60_000).unref();
 
 // A throwaway hash so a login attempt against a non-existent account spends
 // roughly the same CPU as a real one — closes the timing side-channel that
@@ -118,12 +88,12 @@ export function registerNativeAuthRoutes(app: Express) {
       // proxy's egress IP, so keying on req.ip would cap sign-ups for the
       // whole site at REGISTER_MAX/hour.
       const ip = clientIpKey(req);
-      if (!hit(registrations, ip, REGISTER_WINDOW_MS, REGISTER_MAX)) {
+      if (!await hit("registrations", ip, REGISTER_WINDOW_MS, REGISTER_MAX)) {
         res.status(429).json({ error: "Too many sign-ups from this network. Try again later.", code: "RATE_LIMITED" });
         return;
       }
       // IP-independent backstop against X-Forwarded-For rotation.
-      if (!hit(globalRegistrations, "global", REGISTER_WINDOW_MS, GLOBAL_REGISTER_MAX)) {
+      if (!await hit("globalRegistrations", "global", REGISTER_WINDOW_MS, GLOBAL_REGISTER_MAX)) {
         res.status(429).json({ error: "Sign-ups are temporarily rate-limited. Please try again shortly.", code: "RATE_LIMITED" });
         return;
       }
@@ -149,7 +119,7 @@ export function registerNativeAuthRoutes(app: Express) {
       await issueSession(req, res, user.openId, name);
       res.json({ ok: true, openId: user.openId, role: user.role });
     } catch (error) {
-      console.error("[NativeAuth] register failed", error);
+      console.error("[NativeAuth] register failed");
       if (!res.headersSent) {
         res.status(500).json({ error: "Could not create account. Please try again.", code: "SERVER_ERROR" });
       }
@@ -167,13 +137,13 @@ export function registerNativeAuthRoutes(app: Express) {
       const reject = () =>
         res.status(401).json({ error: "Invalid email or password.", code: "INVALID_CREDENTIALS" });
 
-      if (!email || !password) {
-        await verifyPassword(password || "x", DUMMY_HASH); // equalise timing
+      if (!email || !password || password.length > MAX_PASSWORD) {
+        await verifyPassword("invalid", DUMMY_HASH); // equalise timing
         reject();
         return;
       }
 
-      if (!hit(failedLogins, email, FAILED_WINDOW_MS, FAILED_MAX)) {
+      if (!await hit("loginAttempts", email, FAILED_WINDOW_MS, FAILED_MAX)) {
         res.status(429).json({
           error: "Too many sign-in attempts for this account. Please wait a few minutes.",
           code: "RATE_LIMITED",
@@ -191,12 +161,11 @@ export function registerNativeAuthRoutes(app: Express) {
         return;
       }
 
-      clearFailures(email);
       await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
       await issueSession(req, res, user.openId, user.name ?? email.split("@")[0]!);
       res.json({ ok: true, openId: user.openId, role: user.role });
     } catch (error) {
-      console.error("[NativeAuth] login failed", error);
+      console.error("[NativeAuth] login failed");
       if (!res.headersSent) {
         res.status(500).json({ error: "Sign-in failed. Please try again.", code: "SERVER_ERROR" });
       }

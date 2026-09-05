@@ -1,5 +1,5 @@
 import type { LiteratureItem } from "./types";
-import { fetchWithTimeout, trim } from "./http";
+import { fetchWithTimeout, trim, sourceTotal } from "./http";
 
 /**
  * OpenAlex — open scholarly database. Free, no key required for the
@@ -9,8 +9,8 @@ export async function searchOpenAlex(
   query: string,
   limit: number,
   apiKey?: string
-): Promise<{ items: LiteratureItem[]; total: number }> {
-  const keyParam = apiKey ? `&api_key=${apiKey}` : "";
+): Promise<{ items: LiteratureItem[]; total?: number }> {
+  const keyParam = apiKey ? `&api_key=${encodeURIComponent(apiKey)}` : "";
   const url = `https://api.openalex.org/works?search=${encodeURIComponent(
     query
   )}&per-page=${limit}${keyParam}`;
@@ -18,21 +18,23 @@ export async function searchOpenAlex(
   const res = await fetchWithTimeout(url, { timeoutMs: 8000 });
   if (!res.ok) throw new Error(`OpenAlex ${res.status}`);
   const json = (await res.json()) as any;
-  const results: any[] = json?.results ?? [];
+  if (!Array.isArray(json?.results)) throw new Error("Invalid OpenAlex search response");
+  const results: any[] = Array.isArray(json?.results) ? json.results.slice(0, limit) : [];
 
   const items: LiteratureItem[] = results
     .map((w: any): LiteratureItem | null => {
       const id: string | undefined = w.id;
-      if (!id) return null;
+      if (typeof id !== "string" || !/^https:\/\/openalex\.org\/W\d+$/.test(id)) return null;
       const shortId = id.split("/").pop() || id;
       // OpenAlex returns abstract as inverted index — reconstruct.
       const inv = w.abstract_inverted_index;
       let abstract: string | undefined;
       if (inv && typeof inv === "object") {
         const positioned: { pos: number; word: string }[] = [];
-        for (const [word, positions] of Object.entries(inv)) {
-          for (const pos of positions as number[]) {
-            positioned.push({ pos, word });
+        for (const [word, positions] of Object.entries(inv).slice(0, 2000)) {
+          if (!Array.isArray(positions)) continue;
+          for (const pos of positions.slice(0, 100)) {
+            if (Number.isInteger(pos) && pos >= 0 && pos < 5000) positioned.push({ pos, word: word.slice(0, 100) });
           }
         }
         positioned.sort((a, b) => a.pos - b.pos);
@@ -60,5 +62,5 @@ export async function searchOpenAlex(
     })
     .filter((x): x is LiteratureItem => Boolean(x));
 
-  return { items, total: json?.meta?.count ?? items.length };
+  return { items, total: sourceTotal(json?.meta?.count) };
 }

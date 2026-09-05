@@ -113,6 +113,34 @@
       "when": 1784000000000,
       "tag": "0015_chat_application_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1788570000000,
+      "tag": "0016_request_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1788571000000,
+      "tag": "0017_committee_authority",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1788572000000,
+      "tag": "0018_session_revocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1788573000000,
+      "tag": "0019_human_decision_provenance",
+      "breakpoints": true
     }
   ]
 }

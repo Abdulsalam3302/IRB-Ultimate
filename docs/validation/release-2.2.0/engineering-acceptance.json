@@ -1,0 +1,58 @@
+{
+  "checkedAt": "2026-09-05",
+  "runtime": {
+    "node": "24.20.0",
+    "pnpm": "10.34.5",
+    "database": "isolated MySQL9.6 on loopback"
+  },
+  "tests": {
+    "files": 42,
+    "passed": 330,
+    "failed": 0
+  },
+  "typecheck": "passed",
+  "frozenLockfileInstall": "passed",
+  "productionBuild": "passed",
+  "dependencyAudit": {
+    "knownVulnerabilities": 0,
+    "dependencies": 596
+  },
+  "frontendBundle": {
+    "entryBytes": 81640,
+    "entryGzipBytes": 23919,
+    "vendorBytes": 685928,
+    "vendorGzipBytes": 206412
+  },
+  "browser": {
+    "publicChecks": 15,
+    "globalPilotBannerChecks": 6,
+    "uncaughtErrors": 0,
+    "thirdPartyRequests": 0
+  },
+  "httpE2E": {
+    "checks": 32,
+    "failures": 0
+  },
+  "load": {
+    "requests": 510,
+    "maxConcurrency": 30,
+    "serverErrors": 0,
+    "throttledInStrict60RequestPhase": 30
+  },
+  "documents": "see ../ai-documents/generator-validation.json",
+  "backupRestore": "see ../../verification/backup-restore-20260905.json",
+  "limitations": [
+    "Synthetic local verification does not prove production capacity or clinical validity.",
+    "Native browser WebMCP unavailable; registration/cancellation tests and official server MCP SDK verified separately.",
+    "Production S3/ClamAV/institutional owner and MFA configuration remain launch gates.",
+    "Docker build was not executed because the local Docker daemon was unavailable.",
+    "Provider account monetary limits and data processing terms need operator validation."
+  ],
+  "productionOnlyInstall": {
+    "install": "pnpm install --prod --frozen-lockfile in clean temporary directory",
+    "startup": "passed with production dependencies only",
+    "httpBrowserChecks": 32,
+    "base": "http://127.0.0.1:3018",
+    "developmentDependenciesPresent": false
+  }
+}

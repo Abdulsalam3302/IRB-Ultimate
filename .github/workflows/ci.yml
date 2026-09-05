@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           # Patterns that must never land in git. Local .env is gitignored.
           # Scan application sources only (avoid matching this workflow's pattern text).
-          if git grep -nE 'sk-cp-|sk-ant-|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |OPENSSH )?PRIVATE KEY-----' -- \
+          if git grep -lE 'sk-cp-|sk-ant-|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |OPENSSH )?PRIVATE KEY-----' -- \
             'server' 'client' 'shared' 'scripts' 'drizzle' 2>/dev/null; then
             echo "::error::Possible secret material found in tracked files"
             exit 1
@@ -44,7 +44,7 @@ jobs:
         image: mariadb:11
         env:
           MYSQL_ROOT_PASSWORD: rootpw
-          MYSQL_DATABASE: irb_platform
+          MYSQL_DATABASE: irb_ci_test
         ports: ["3306:3306"]
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # Match engines / .node-version (Render production pin).
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -75,37 +75,30 @@ jobs:
 
       - name: Apply migrations
         env:
-          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_ci_test
         run: pnpm db:migrate
+
+      - name: Dependency vulnerability audit
+        run: pnpm audit --audit-level=low
 
       - name: Typecheck
         run: pnpm check
 
       - name: Tests
         env:
-          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_ci_test
           JWT_SECRET: ci-test-secret-not-for-production-use
           VITE_APP_ID: ci
           OWNER_OPEN_ID: dev-owner-001
         run: pnpm test
 
       - name: Build
+        env:
+          VITE_PUBLIC_SITE_URL: https://irb-saudi-arabia.vercel.app
         run: pnpm build
 
       - name: Bundle-size budget
-        # First-paint entry stays small; main vendor chunk includes React + UI libs.
-        run: |
-          ENTRY_BYTES=$(stat -c%s dist/public/assets/index-*.js | head -1)
-          VENDOR_BYTES=$(stat -c%s dist/public/assets/vendor-*.js | grep -v charts | grep -v utils | head -1)
-          echo "entry=${ENTRY_BYTES}b  vendor=${VENDOR_BYTES}b"
-          if [ "$ENTRY_BYTES" -gt 81920 ]; then
-            echo "::error::Initial entry chunk exceeded 80KB budget"
-            exit 1
-          fi
-          if [ "$VENDOR_BYTES" -gt 1048576 ]; then
-            echo "::error::vendor chunk exceeded 1MB budget"
-            exit 1
-          fi
+        run: node scripts/check-bundle.mjs
 
   e2e:
     needs: verify
@@ -116,7 +109,7 @@ jobs:
         image: mariadb:11
         env:
           MYSQL_ROOT_PASSWORD: rootpw
-          MYSQL_DATABASE: irb_platform
+          MYSQL_DATABASE: irb_ci_test
         ports: ["3306:3306"]
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
@@ -125,13 +118,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: Wait for MariaDB & migrate
         env:
-          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_ci_test
         run: |
           for i in {1..40}; do
             mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -prootpw --silent 2>/dev/null && break
@@ -139,36 +132,38 @@ jobs:
           done
           pnpm db:migrate
 
-      - name: Boot dev server
+      - name: Build and boot isolated production-mode server
         env:
-          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_platform
+          DATABASE_URL: mysql://root:rootpw@127.0.0.1:3306/irb_ci_test?ssl=false
           JWT_SECRET: ci-test-secret-not-for-production-use
           VITE_APP_ID: ci
-          OWNER_OPEN_ID: dev-owner-001
-          # SA-17: dev-login is now opt-in. CI needs the explicit flag so
-          # the e2e sweep can mint sessions via /api/dev/login.
-          DEV_LOGIN_ENABLED: "1"
+          VITE_PUBLIC_SITE_URL: https://irb-saudi-arabia.vercel.app
+          PUBLIC_APP_URL: http://127.0.0.1:3000
+          UPLOADS_DIR: /tmp/irb-ci-uploads
+          ALLOW_LOCAL_TEST_DB: "1"
+          ALLOW_LOCAL_STORAGE: "true"
+          UPLOAD_SCAN_REQUIRED: "false" # Disposable loopback E2E; scanner protocol has separate tests.
         run: |
-          pnpm dev > /tmp/dev.log 2>&1 &
+          pnpm build
+          NODE_ENV=production node dist/index.js > /tmp/irb-runtime.log 2>&1 &
           for i in {1..30}; do
-            curl -fsS http://localhost:3000/api/health >/dev/null 2>&1 && break
+            curl -fsS http://127.0.0.1:3000/api/ready >/dev/null && break
             sleep 2
           done
+          curl -fsS http://127.0.0.1:3000/api/ready
 
-      - name: E2E sweep
-        env:
-          PORT: "3000"
-        run: node scripts/e2e-sweep.mjs
+      - name: HTTP and browser readiness checks
+        run: node scripts/e2e-readiness.mjs
 
-      - name: Deep sweep
-        env:
-          PORT: "3000"
-        run: node scripts/e2e-deep.mjs
+      - name: Bounded load and rate-limit checks
+        run: node scripts/load-readiness.mjs
 
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-screenshots
-          path: /tmp/irb-e2e
+          path: |
+            /tmp/irb-e2e
+            /tmp/irb-runtime.log
           retention-days: 7

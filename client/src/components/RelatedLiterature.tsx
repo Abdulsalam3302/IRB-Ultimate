@@ -1,3 +1,4 @@
+import { safeExternalUrl } from "@/lib/files";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
@@ -50,7 +51,7 @@ export default function RelatedLiterature({ applicationId }: Props) {
   }
 
   if (isError || !data) {
-    return null;
+    return <Card><CardContent className="py-5 text-sm text-muted-foreground">{isAr ? "تعذر تحميل الأدبيات ذات الصلة حالياً. لا يعني ذلك عدم وجود دراسات ذات صلة." : "Related literature could not be loaded. This does not mean no relevant studies exist."}</CardContent></Card>;
   }
 
   const items = data.items ?? [];
@@ -120,7 +121,7 @@ export default function RelatedLiterature({ applicationId }: Props) {
                   {bySource[src].map(it => (
                     <li key={`${it.source}-${it.id}`} className="text-sm">
                       <a
-                        href={it.url}
+                        href={safeExternalUrl(it.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-medium hover:underline inline-flex items-baseline gap-1"

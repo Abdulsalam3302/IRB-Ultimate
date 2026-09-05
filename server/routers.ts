@@ -1,10 +1,13 @@
+import { safeLogError } from "./_core/safeLog";
 import { randomBytes } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminProcedure, aiProcedure, ownerProcedure, isPlatformOwner, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, staffProcedure, adminProcedure, aiProcedure, ownerProcedure, isPlatformOwner, router } from "./_core/trpc";
+import { assertStaffMfa } from "./_core/staffAuth";
 import { inspectLlmBudget, reserveLlmCall } from "./_core/budget";
 import { ENV } from "./_core/env";
+import { sdk } from "./_core/sdk";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
@@ -13,11 +16,11 @@ import { runSwarmPanel, SWARM_LLM_CALLS_PER_RUN } from "./aiSwarmReview";
 import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
-import { applyOfficialDigitalApproval, runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
+import { runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
 import { chatApplicationTurn } from "./services/chatApplication.service";
-import { ensureDefaultCommittee } from "./services/committeeAutoEnroll";
-import { runSwarmReview } from "./services/acceleratedReview.service";
+import { IRB_REQUIREMENTS } from "./services/irb.validation";
 import { storagePut } from "./storage";
+import { scanUploadedFile } from "./services/uploadScanner";
 import * as emailService from "./emailService";
 import { searchLiterature } from "./literature";
 import {
@@ -27,22 +30,23 @@ import {
   stripPath,
 } from "./_core/analyticsGeo";
 import { CERT_DOWNLOAD_TTL_SEC } from "@shared/const";
-import { storageGet, storageKeyFromUrl } from "./storage";
+
 
 // ─── Shared access helpers ──────────────────────────────────────────────────
 // Returns the application if the caller may view it (owner, admin, or
 // committee member assigned to this specific application). Throws 404 if
 // the app is missing and 403 otherwise. Centralised so committee member
 // access cannot accidentally degrade to "any committee member sees any app".
-async function loadApplicationForViewer(ctx: { user: { id: number; role: string } }, applicationId: number) {
+async function loadApplicationForViewer(ctx: { user: { id: number; role: string; authLevel?: string } }, applicationId: number) {
   const app = await db.getApplicationById(applicationId);
   if (!app) throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
   if (app.applicantId === ctx.user.id) return app;
+  assertStaffMfa(ctx.user);
   if (ctx.user.role === "admin") return app;
   const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-  if (member) {
+  if (member?.isActive && member.appointedAt && member.qualificationReference) {
     const reviews = await db.getReviewsByApplication(applicationId);
-    if (reviews.some(r => r.committeeMemberId === member.id)) return app;
+    if (reviews.some(r => r.committeeMemberId === member.id && r.status !== "expired" && r.expiresAt.getTime() > Date.now())) return app;
   }
   throw new TRPCError({ code: "FORBIDDEN" });
 }
@@ -77,6 +81,26 @@ const uploadedUrl = z
       return false;
     }
   }, { message: "URL must be a /uploads/ path or http(s):// link" });
+
+async function assertOwnedUploadReferences(userId: number, applicationId: number, urls: Array<string | undefined>) {
+  for (const url of urls.filter((value): value is string => Boolean(value))) {
+    const file = await db.getFileUploadByUrl(url);
+    if (!file || file.userId !== userId || (file.applicationId !== null && file.applicationId !== applicationId)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Documents must be uploaded through this account for this application." });
+    }
+    if (file.applicationId === null && !(await db.bindOwnedUpload(file.id, userId, applicationId))) throw new TRPCError({ code: "CONFLICT", message: "Document was attached to another application. Upload it again for this application." });
+  }
+}
+
+function supplementaryUploadUrls(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = z.array(z.object({ name: z.string().max(512), url: uploadedUrl })).max(25).parse(JSON.parse(raw));
+    return parsed.map(file => file.url);
+  } catch {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Supplementary documents must be a valid list of uploaded files." });
+  }
+}
 
 // Statuses where the applicant must not be able to silently re-write
 // answers (would otherwise corrupt the submission already in the
@@ -116,11 +140,20 @@ const UPLOAD_ALLOWED_MIME = new Set([
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
+const UPLOAD_EXTENSIONS: Record<string, string[]> = {
+  "application/pdf": ["pdf"], "image/png": ["png"], "image/jpeg": ["jpg", "jpeg"],
+  "image/gif": ["gif"], "image/webp": ["webp"], "text/plain": ["txt"], "text/csv": ["csv"],
+  "application/msword": ["doc"], "application/vnd.ms-excel": ["xls"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["xlsx"],
+};
 const FILENAME_SAFE_RE = /[^A-Za-z0-9._-]+/g;
 function sanitizeUploadFileName(input: string): string {
-  const trimmed = input.trim().slice(0, 160);
-  const sanitized = trimmed.replace(FILENAME_SAFE_RE, "_");
-  return sanitized.replace(/^_+|_+$/g, "") || "file";
+  const sanitized = input.trim().replace(FILENAME_SAFE_RE, "_").replace(/^[_\.]+/, "");
+  if (sanitized.length <= 160) return sanitized || "file";
+  const dot = sanitized.lastIndexOf(".");
+  const extension = dot > 0 ? sanitized.slice(dot) : "";
+  return sanitized.slice(0, 160 - extension.length) + extension;
 }
 
 // SA-27: magic-byte validation — the declared Content-Type is attacker
@@ -136,7 +169,7 @@ function matchesMagicBytes(buffer: Buffer, contentType: string): boolean {
     case "application/pdf":
       return startsWith([0x25, 0x50, 0x44, 0x46]); // %PDF
     case "image/png":
-      return startsWith([0x89, 0x50, 0x4e, 0x47]);
+      return startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     case "image/jpeg":
       return startsWith([0xff, 0xd8, 0xff]);
     case "image/gif":
@@ -146,11 +179,11 @@ function matchesMagicBytes(buffer: Buffer, contentType: string): boolean {
     case "application/msword":
     case "application/vnd.ms-excel":
       // Legacy OLE compound file
-      return startsWith([0xd0, 0xcf, 0x11, 0xe0]);
+      return startsWith([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
     case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
     case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
       // OOXML = ZIP container
-      return startsWith([0x50, 0x4b]);
+      return startsWith([0x50, 0x4b, 0x03, 0x04]);
     case "text/plain":
     case "text/csv": {
       const head = buffer.subarray(0, Math.min(buffer.length, 8192));
@@ -205,7 +238,7 @@ const applicationRouter = router({
   }),
 
   getById: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const app = await loadApplicationForViewer(ctx, input.id);
       const applicant = await db.getUserById(app.applicantId);
@@ -239,7 +272,7 @@ const applicationRouter = router({
   // Phase 0: Save Declaration
   saveDeclaration: protectedProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.number().int().positive(),
       declarationHonesty: z.boolean(),
       declarationNbceCertification: z.boolean(),
       declarationConsentTruth: z.boolean(),
@@ -251,6 +284,7 @@ const applicationRouter = router({
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
+      await assertOwnedUploadReferences(ctx.user.id, input.id, [input.nbceCertificateUrl]);
 
       // All declarations must be true
       if (!input.declarationHonesty || !input.declarationNbceCertification || !input.declarationConsentTruth || !input.declarationAcceptPolicy) {
@@ -260,7 +294,7 @@ const applicationRouter = router({
       // Don't regress the application to "declaration_pending" if it has
       // already moved past Phase 0 — preserves the in-flight workflow.
       const shouldRegressStatus = app.status === "draft" || app.status === "declaration_pending";
-      await db.updateApplication(input.id, {
+      await db.updateEditableApplication(input.id, ctx.user.id, {
         declarationHonesty: input.declarationHonesty,
         declarationNbceCertification: input.declarationNbceCertification,
         declarationConsentTruth: input.declarationConsentTruth,
@@ -268,7 +302,7 @@ const applicationRouter = router({
         nbceCertificateUrl: input.nbceCertificateUrl || null,
         declarationCompletedAt: new Date(),
         ...(shouldRegressStatus ? { status: "declaration_pending" as const } : {}),
-      });
+      }, app);
 
       await db.addAuditLog({
         applicationId: input.id,
@@ -283,30 +317,31 @@ const applicationRouter = router({
   // Stage 1: Save research type info with research-type-specific fields
   saveStage1: protectedProcedure
     .input(z.object({
-      id: z.number(),
-      researchType: z.string(),
-      irbCategory: z.string(),
-      researchTitle: z.string(),
-      principalInvestigator: z.string(),
+      id: z.number().int().positive(),
+      researchType: z.enum(IRB_REQUIREMENTS.studyTypes),
+      irbCategory: z.enum(IRB_REQUIREMENTS.irbCategories),
+      researchTitle: z.string().trim().min(1).max(2000),
+      principalInvestigator: z.string().max(255),
       piEmail: z.string().email(),
-      piInstitution: z.string(),
-      piDepartment: z.string(),
-      fundingSource: z.string().optional(),
-      estimatedDuration: z.string().optional(),
+      piInstitution: z.string().max(255),
+      piDepartment: z.string().max(255),
+      fundingSource: z.string().max(255).optional(),
+      estimatedDuration: z.string().max(128).optional(),
       questionnaireFileUrl: uploadedUrl.optional(),
-      retrospectiveDataSource: z.string().optional(),
-      clinicalTrialDetails: z.string().optional(),
-      supplementaryFilesJson: z.string().optional(),
+      retrospectiveDataSource: z.string().max(20_000).optional(),
+      clinicalTrialDetails: z.string().max(20_000).optional(),
+      supplementaryFilesJson: z.string().max(20_000).optional(),
       labHeadApproval: z.boolean().optional(),
-      labHeadName: z.string().optional(),
-      labHeadEmail: z.string().optional(),
-      labHeadPhone: z.string().optional(),
+      labHeadName: z.string().max(255).optional(),
+      labHeadEmail: z.string().max(320).optional(),
+      labHeadPhone: z.string().max(64).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
+      await assertOwnedUploadReferences(ctx.user.id, input.id, [input.questionnaireFileUrl, ...supplementaryUploadUrls(input.supplementaryFilesJson)]);
 
       if (input.researchType === "survey_questionnaire" && !input.questionnaireFileUrl) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Questionnaire file is required for Survey/Questionnaire research type" });
@@ -315,7 +350,7 @@ const applicationRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Data source is required for Retrospective Study research type" });
       }
 
-      await db.updateApplication(input.id, {
+      await db.updateEditableApplication(input.id, ctx.user.id, {
         researchType: input.researchType as any,
         irbCategory: input.irbCategory as any,
         researchTitle: input.researchTitle,
@@ -339,14 +374,14 @@ const applicationRouter = router({
         ...((app.status === "draft" || app.status === "declaration_pending" || app.status === "stage1_pending" || app.status === "stage1_failed")
           ? { status: "stage1_pending" as const }
           : {}),
-      });
+      }, app);
 
       return { success: true };
     }),
 
   // Run AI review for Stage 1 — SA-03: reserved against per-user daily budget.
   runStage1Review: aiProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
@@ -372,7 +407,7 @@ const applicationRouter = router({
         && result.feedback.startsWith("[AI_UNAVAILABLE]");
 
       if (!isAiUnavailable) {
-        await db.updateApplication(input.id, {
+        await db.updateEditableApplication(input.id, ctx.user.id, {
           stage1AiScore: result.score,
           stage1AiFeedback: JSON.stringify({
             feedback: result.feedback,
@@ -382,7 +417,7 @@ const applicationRouter = router({
           }),
           stage1Passed: result.passed,
           status: result.passed ? "stage2_pending" : "stage1_failed",
-        });
+        }, app);
 
         await db.addAuditLog({
           applicationId: input.id,
@@ -409,19 +444,19 @@ const applicationRouter = router({
   // Save draft (auto-save)
   saveDraft: protectedProcedure
     .input(z.object({
-      id: z.number(),
-      researchObjectives: z.string().optional(),
-      methodology: z.string().optional(),
-      sampleSize: z.string().optional(),
-      targetPopulation: z.string().optional(),
-      inclusionCriteria: z.string().optional(),
-      exclusionCriteria: z.string().optional(),
-      dataCollectionMethods: z.string().optional(),
-      informedConsentProcess: z.string().optional(),
-      riskAssessment: z.string().optional(),
-      benefitAssessment: z.string().optional(),
-      confidentialityMeasures: z.string().optional(),
-      conflictOfInterest: z.string().optional(),
+      id: z.number().int().positive(),
+      researchObjectives: z.string().max(20_000).optional(),
+      methodology: z.string().max(20_000).optional(),
+      sampleSize: z.string().max(20_000).optional(),
+      targetPopulation: z.string().max(20_000).optional(),
+      inclusionCriteria: z.string().max(20_000).optional(),
+      exclusionCriteria: z.string().max(20_000).optional(),
+      dataCollectionMethods: z.string().max(20_000).optional(),
+      informedConsentProcess: z.string().max(20_000).optional(),
+      riskAssessment: z.string().max(20_000).optional(),
+      benefitAssessment: z.string().max(20_000).optional(),
+      confidentialityMeasures: z.string().max(20_000).optional(),
+      conflictOfInterest: z.string().max(20_000).optional(),
       rejectionFileUrl: uploadedUrl.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -429,6 +464,7 @@ const applicationRouter = router({
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
+      await assertOwnedUploadReferences(ctx.user.id, input.id, [input.rejectionFileUrl]);
 
       const updates: Record<string, any> = {};
       const fields = ["researchObjectives", "methodology", "sampleSize", "targetPopulation", "inclusionCriteria", "exclusionCriteria", "dataCollectionMethods", "informedConsentProcess", "riskAssessment", "benefitAssessment", "confidentialityMeasures", "conflictOfInterest", "rejectionFileUrl"];
@@ -436,7 +472,7 @@ const applicationRouter = router({
         if ((input as any)[f] !== undefined) updates[f] = (input as any)[f];
       }
       if (Object.keys(updates).length > 0) {
-        await db.updateApplication(input.id, updates);
+        await db.updateEditableApplication(input.id, ctx.user.id, updates, app);
       }
       return { success: true };
     }),
@@ -502,7 +538,7 @@ const applicationRouter = router({
   // Returns both the enhanced fields and the new review result so the
   // client can update form + result card in a single render. SA-03 budget-bound.
   aiEnhanceStage1: aiProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
@@ -536,15 +572,15 @@ const applicationRouter = router({
         stage1FeedbackSummary: prevSummary,
       });
 
-      // 2) Persist.
-      await db.updateApplication(input.id, {
+      // 2) Persist and invalidate old review results.
+      const enhancedApp = await db.updateEditableApplication(input.id, ctx.user.id, {
         researchTitle: merged.researchTitle,
         principalInvestigator: merged.principalInvestigator,
         piInstitution: merged.piInstitution,
         piDepartment: merged.piDepartment,
         fundingSource: merged.fundingSource,
         estimatedDuration: merged.estimatedDuration,
-      });
+      }, app);
 
       // 3) Re-run Stage 1 review against the enhanced data.
       // Skip literature on the post-enhance re-review — we already paid that
@@ -565,7 +601,7 @@ const applicationRouter = router({
       const isAiEnhanceUnavailable = typeof review.feedback === "string"
         && review.feedback.startsWith("[AI_UNAVAILABLE]");
       if (!isAiEnhanceUnavailable) {
-        await db.updateApplication(input.id, {
+        await db.updateEditableApplication(input.id, ctx.user.id, {
           stage1AiScore: review.score,
           stage1AiFeedback: JSON.stringify({
             feedback: review.feedback,
@@ -575,7 +611,7 @@ const applicationRouter = router({
           }),
           stage1Passed: review.passed,
           status: review.passed ? "stage2_pending" : "stage1_failed",
-        });
+        }, enhancedApp);
 
         await db.addAuditLog({
           applicationId: input.id,
@@ -681,19 +717,19 @@ const applicationRouter = router({
   // Stage 2: Save research details
   saveStage2: protectedProcedure
     .input(z.object({
-      id: z.number(),
-      researchObjectives: z.string(),
-      methodology: z.string(),
-      sampleSize: z.string(),
-      targetPopulation: z.string(),
-      inclusionCriteria: z.string(),
-      exclusionCriteria: z.string(),
-      dataCollectionMethods: z.string(),
-      informedConsentProcess: z.string(),
-      riskAssessment: z.string(),
-      benefitAssessment: z.string(),
-      confidentialityMeasures: z.string(),
-      conflictOfInterest: z.string(),
+      id: z.number().int().positive(),
+      researchObjectives: z.string().max(20_000),
+      methodology: z.string().max(20_000),
+      sampleSize: z.string().max(20_000),
+      targetPopulation: z.string().max(20_000),
+      inclusionCriteria: z.string().max(20_000),
+      exclusionCriteria: z.string().max(20_000),
+      dataCollectionMethods: z.string().max(20_000),
+      informedConsentProcess: z.string().max(20_000),
+      riskAssessment: z.string().max(20_000),
+      benefitAssessment: z.string().max(20_000),
+      confidentialityMeasures: z.string().max(20_000),
+      conflictOfInterest: z.string().max(20_000),
       rejectionFileUrl: uploadedUrl.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -701,8 +737,9 @@ const applicationRouter = router({
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
+      await assertOwnedUploadReferences(ctx.user.id, input.id, [input.rejectionFileUrl]);
 
-      await db.updateApplication(input.id, {
+      await db.updateEditableApplication(input.id, ctx.user.id, {
         researchObjectives: input.researchObjectives,
         methodology: input.methodology,
         sampleSize: input.sampleSize,
@@ -716,14 +753,14 @@ const applicationRouter = router({
         confidentialityMeasures: input.confidentialityMeasures,
         conflictOfInterest: input.conflictOfInterest,
         rejectionFileUrl: input.rejectionFileUrl || null,
-      });
+      }, app);
 
       return { success: true };
     }),
 
   // Run AI review for Stage 2 (with color-coded field scores) — SA-03 budget-bound.
   runStage2Review: aiProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
@@ -752,7 +789,7 @@ const applicationRouter = router({
         && result.feedback.startsWith("[AI_UNAVAILABLE]");
 
       if (!isAiUnavailable2) {
-        await db.updateApplication(input.id, {
+        await db.updateEditableApplication(input.id, ctx.user.id, {
           stage2AiScore: result.score,
           stage2AiFeedback: JSON.stringify({
             feedback: result.feedback,
@@ -764,7 +801,7 @@ const applicationRouter = router({
           stage2AiFieldScores: JSON.stringify(result.fieldScores || []),
           stage2Passed: result.passed,
           status: result.passed ? "submitted" : "stage2_failed",
-        });
+        }, app);
 
         await db.addAuditLog({
           applicationId: input.id,
@@ -790,50 +827,9 @@ const applicationRouter = router({
 
   // Final submission - triggers committee assignment
   submit: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
-      const app = await db.getApplicationById(input.id);
-      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      if (app.status !== "submitted") throw new TRPCError({ code: "BAD_REQUEST", message: "Application must pass both AI reviews before submission" });
-
-      // Committee assignment is an admin/operations concern, not the
-      // applicant's. We always accept the submission. If there are
-      // fewer than 5 active members right now, the application sits in
-      // `pending_admin` until an admin invites more reviewers, at which
-      // point the cron / admin "expire and reassign" job picks it up.
-      const activeMembers = await db.getActiveCommitteeMembers();
-      const shuffled = [...activeMembers].sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, Math.min(5, activeMembers.length));
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      for (const member of selected) {
-        await db.createReviewAssignment({
-          applicationId: input.id,
-          committeeMemberId: member.id,
-          assignedBy: "system",
-          status: "pending",
-          expiresAt,
-        });
-        await db.updateCommitteeMember(member.id, {
-          totalAssignments: member.totalAssignments + 1,
-        });
-      }
-
-      // If we got 5 reviewers, normal flow. Otherwise queue for admin.
-      const nextStatus = selected.length >= 5 ? "under_review" : "pending_admin";
-      // SA-08: atomic counter bump. `applyResubmission` uses
-      // `submissionCount = submissionCount + 1` server-side so two
-      // concurrent submits can't both read N and both write N+1. First
-      // submission keeps the schema-default counter at 1; only genuine
-      // resubmissions advance it.
-      const isResubmission = app.submittedAt != null;
-      await db.applyResubmission(
-        input.id,
-        { status: nextStatus, submittedAt: new Date() },
-        isResubmission,
-      );
-
+      const { app, selected, activeMemberCount } = await db.submitApplicationForReview(input.id, ctx.user.id);
       // Tell the admin if we couldn't fully assign. Best-effort —
       // don't fail submission on notification failure.
       if (selected.length < 5) {
@@ -843,7 +839,7 @@ const applicationRouter = router({
             applicationId: input.id,
             userId: ctx.user.id,
             action: "queued_for_committee_assignment",
-            details: `Submitted with only ${activeMembers.length} active committee members; awaiting admin to invite more (need ${needed} more).`,
+            details: `Submitted with only ${activeMemberCount} active committee members; awaiting admin to invite more (need ${needed} more).`,
           });
         } catch { /* best-effort */ }
         // In-app notification for the applicant — they shouldn't be in
@@ -854,51 +850,17 @@ const applicationRouter = router({
             applicationId: input.id,
             type: "general",
             title: "Application queued — awaiting committee",
-            message: `Your application "${(app.researchTitle || "Untitled").slice(0, 80)}" has been submitted successfully. The platform currently has ${activeMembers.length} active reviewer${activeMembers.length === 1 ? "" : "s"}; ${needed} more are needed before review begins. The admin team has been alerted; you'll be notified the moment your reviewers are assigned.`,
+            message: `Your application "${(app.researchTitle || "Untitled").slice(0, 80)}" has been submitted successfully. The platform currently has ${activeMemberCount} active reviewer${activeMemberCount === 1 ? "" : "s"}; ${needed} more are needed before review begins. The admin team has been alerted; you'll be notified the moment your reviewers are assigned.`,
           });
         } catch { /* best-effort */ }
         // Wake the platform owner so they can invite reviewers.
         try {
           await notifyOwner({
             title: "IRB application queued for committee assignment",
-            content: `Application #${input.id} ("${(app.researchTitle || "Untitled").slice(0, 80)}") was submitted with only ${activeMembers.length}/5 active committee members. Invite ${needed} more reviewer${needed === 1 ? "" : "s"} from the admin dashboard to start the review.`,
+            content: `Application #${input.id} ("${(app.researchTitle || "Untitled").slice(0, 80)}") was submitted with only ${activeMemberCount}/5 active committee members. Invite ${needed} more reviewer${needed === 1 ? "" : "s"} from the admin dashboard to start the review.`,
           });
         } catch { /* best-effort */ }
       }
-
-      // Save version snapshot
-      try {
-        const latestVersion = await db.getLatestVersionNumber(input.id);
-        const prevVersions = await db.getApplicationVersions(input.id);
-        const prevSnapshot = prevVersions.length > 0 ? JSON.parse(prevVersions[0].snapshot) : {};
-        const currentSnapshot: Record<string, any> = {
-          researchType: app.researchType, irbCategory: app.irbCategory, researchTitle: app.researchTitle,
-          principalInvestigator: app.principalInvestigator, piEmail: app.piEmail, piInstitution: app.piInstitution,
-          piDepartment: app.piDepartment, fundingSource: app.fundingSource, estimatedDuration: app.estimatedDuration,
-          researchObjectives: app.researchObjectives, methodology: app.methodology, sampleSize: app.sampleSize,
-          targetPopulation: app.targetPopulation, inclusionCriteria: app.inclusionCriteria, exclusionCriteria: app.exclusionCriteria,
-          dataCollectionMethods: app.dataCollectionMethods, informedConsentProcess: app.informedConsentProcess,
-          riskAssessment: app.riskAssessment, benefitAssessment: app.benefitAssessment,
-          confidentialityMeasures: app.confidentialityMeasures, conflictOfInterest: app.conflictOfInterest,
-        };
-        const changedFields = Object.keys(currentSnapshot).filter(k => currentSnapshot[k] !== prevSnapshot[k]);
-        await db.saveApplicationVersion({
-          applicationId: input.id,
-          version: latestVersion + 1,
-          snapshot: JSON.stringify(currentSnapshot),
-          status: "under_review",
-          stage1AiScore: app.stage1AiScore,
-          stage2AiScore: app.stage2AiScore,
-          changedFields: JSON.stringify(changedFields),
-        });
-      } catch (e) { console.warn("[Version] Failed to save snapshot:", e); }
-
-      await db.addAuditLog({
-        applicationId: input.id,
-        userId: ctx.user.id,
-        action: "application_submitted",
-        details: `Assigned to ${selected.length} committee members`,
-      });
 
       try {
         await emailService.notifyApplicationSubmitted(ctx.user.id, input.id, app.researchTitle || "Untitled");
@@ -907,13 +869,13 @@ const applicationRouter = router({
         }
       } catch (e) { /* notification is best-effort */ }
 
-      // Official digital pathway: AI Swarm OR unanimous 4-bot pass auto-approves.
+      // AI findings support the appointed human committee; they never issue approval.
       // Failures must not block the applicant's successful submit.
       let accelerated: Awaited<ReturnType<typeof runAcceleratedPipeline>> | null = null;
       try {
         accelerated = await runAcceleratedPipeline(input.id, ctx.user.id);
       } catch (e) {
-        console.error("[Accelerated] pipeline failed after submit", e);
+        console.error("[Accelerated] pipeline failed after submit", safeLogError(e));
         try {
           await notifyOwner({
             title: "IRB accelerated review pipeline failed",
@@ -928,7 +890,7 @@ const applicationRouter = router({
   // Proceed despite Stage 1 AI score (red flag)
   proceedDespiteStage1: protectedProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.number().int().positive(),
       reason: z.string().trim().min(1, "Please provide a reason.").max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -937,12 +899,12 @@ const applicationRouter = router({
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
 
-      await db.updateApplication(input.id, {
+      await db.updateEditableApplication(input.id, ctx.user.id, {
         proceedDespiteStage1: true,
         proceedDespiteStage1Reason: input.reason,
-        stage1Passed: true,
+        stage1Passed: false,
         status: "stage2_pending",
-      });
+      }, app);
 
       await db.addAuditLog({
         applicationId: input.id,
@@ -961,7 +923,7 @@ const applicationRouter = router({
   // Proceed despite Stage 2 AI score (red flag)
   proceedDespiteStage2: protectedProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.number().int().positive(),
       reason: z.string().trim().min(1, "Please provide a reason.").max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -970,12 +932,12 @@ const applicationRouter = router({
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       assertApplicantCanEdit(app);
 
-      await db.updateApplication(input.id, {
+      await db.updateEditableApplication(input.id, ctx.user.id, {
         proceedDespiteStage2: true,
         proceedDespiteStage2Reason: input.reason,
-        stage2Passed: true,
+        stage2Passed: false,
         status: "submitted",
-      });
+      }, app);
 
       await db.addAuditLog({
         applicationId: input.id,
@@ -1039,7 +1001,7 @@ const applicationRouter = router({
       fileName: z.string().min(1).max(255),
       fileData: z.string().min(1).max(28_000_000), // ~21 MB after base64 decode
       contentType: z.string().min(1).max(128),
-      applicationId: z.number().optional(),
+      applicationId: z.number().int().positive().optional(),
       category: z.enum(["questionnaire", "supplementary", "nbce_certificate", "rejection_file", "additional_document", "other"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -1051,7 +1013,12 @@ const applicationRouter = router({
         if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
+        if (app.applicantId !== ctx.user.id) assertStaffMfa(ctx.user);
+        assertApplicantCanEdit(app);
       }
+
+      const usage = await db.getUserUploadUsage(ctx.user.id);
+      if (usage.count >= 500 || usage.bytes >= 250 * 1024 * 1024) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Upload allowance reached. Contact support to review your storage needs." });
 
       // Strict MIME allow-list — uploaded files are served back from same
       // origin (or signed S3 URLs); HTML / SVG with active content would
@@ -1063,7 +1030,10 @@ const applicationRouter = router({
           message: `File type "${contentType}" is not allowed. Permitted: PDF, images (PNG/JPG/GIF/WEBP), text, CSV, Word, Excel.`,
         });
       }
+      const extension = input.fileName.trim().split(".").pop()?.toLowerCase() || "";
+      if (!UPLOAD_EXTENSIONS[contentType]?.includes(extension)) throw new TRPCError({ code: "BAD_REQUEST", message: "Filename extension must match the declared document type." });
 
+      if (input.fileData.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(input.fileData) || !/^[^=]*={0,2}$/.test(input.fileData)) throw new TRPCError({ code: "BAD_REQUEST", message: "File must use canonical base64 encoding." });
       const buffer = Buffer.from(input.fileData, "base64");
       if (buffer.length === 0) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Empty file" });
@@ -1074,6 +1044,7 @@ const applicationRouter = router({
           message: `File too large. Maximum size is ${Math.floor(UPLOAD_MAX_BYTES / 1024 / 1024)} MB.`,
         });
       }
+      if (usage.bytes + buffer.length > 250 * 1024 * 1024) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Upload would exceed your storage allowance." });
 
       // SA-27: the declared MIME must match the actual bytes.
       if (!matchesMagicBytes(buffer, contentType)) {
@@ -1082,6 +1053,22 @@ const applicationRouter = router({
           message: "File content does not match the declared file type. Please upload the original, unmodified file.",
         });
       }
+
+      // Request cancellation stops a queued/active scan. No bytes enter storage
+      // until the configured daemon has returned a complete clean verdict.
+      const cancellation = new AbortController();
+      const cancelUpload = () => cancellation.abort();
+      ctx.req.once?.("aborted", cancelUpload);
+      ctx.res.once?.("close", cancelUpload);
+      if (ctx.req.aborted || ctx.res.destroyed) cancelUpload();
+      let scan;
+      try {
+        scan = await scanUploadedFile(buffer, cancellation.signal, ctx.user.id);
+      } finally {
+        ctx.req.off?.("aborted", cancelUpload);
+        ctx.res.off?.("close", cancelUpload);
+      }
+      if (cancellation.signal.aborted || ctx.req.aborted || ctx.res.destroyed) throw new TRPCError({ code: "CLIENT_CLOSED_REQUEST", message: "Upload request was cancelled." });
 
       const safeFileName = sanitizeUploadFileName(input.fileName);
       // Cryptographically random suffix — the local-disk driver serves
@@ -1092,30 +1079,27 @@ const applicationRouter = router({
       // already partitions under /uploads/<key> for the local driver
       // and namespaces by bucket for S3/Forge.
       const fileKey = `${ctx.user.id}/${Date.now()}-${randomSuffix}-${safeFileName}`;
-      const { url } = await storagePut(fileKey, buffer, contentType);
+      const stored = await storagePut(fileKey, buffer, contentType);
 
       // Save file metadata to DB
-      try {
-        await db.addFileUpload({
+      const fileId = await db.addFileUpload({
           applicationId: input.applicationId || null,
           userId: ctx.user.id,
           fileName: safeFileName,
-          fileKey,
-          fileUrl: url,
+          fileKey: stored.key,
+          fileUrl: "",
           mimeType: contentType,
           fileSize: buffer.length,
           category: (input.category || "other") as any,
         });
-      } catch (e) {
-        console.error("[File Upload] Failed to save metadata:", e);
-      }
+      await db.addAuditLog({ applicationId: input.applicationId || null, userId: ctx.user.id, action: "file_upload_stored", details: `Upload #${fileId}; malware scan ${scan.status}${scan.status === "skipped" ? " under configured development/pilot policy" : " using ClamAV"}.` });
 
-      return { url, fileKey };
+      return { url: `/api/irb/files/${fileId}`, fileKey: stored.key, scanStatus: scan.status };
     }),
 
   // Version history
   getVersions: protectedProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       await loadApplicationForViewer(ctx, input.applicationId);
       return db.getApplicationVersions(input.applicationId);
@@ -1126,7 +1110,7 @@ const applicationRouter = router({
 
 const authorsRouter = router({
   getByApplication: protectedProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       await loadApplicationForViewer(ctx, input.applicationId);
       return db.getAuthorsByApplication(input.applicationId);
@@ -1134,7 +1118,7 @@ const authorsRouter = router({
 
   add: protectedProcedure
     .input(z.object({
-      applicationId: z.number(),
+      applicationId: z.number().int().positive(),
       name: z.string().trim().min(1).max(255),
       email: z.string().email().max(320),
       phone: z.string().max(64).optional(),
@@ -1146,6 +1130,7 @@ const authorsRouter = router({
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
 
       const existing = await db.getAuthorsByApplication(input.applicationId);
       if (existing.length >= MAX_AUTHORS_PER_APPLICATION) {
@@ -1168,11 +1153,12 @@ const authorsRouter = router({
     }),
 
   remove: protectedProcedure
-    .input(z.object({ id: z.number(), applicationId: z.number() }))
+    .input(z.object({ id: z.number().int().positive(), applicationId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      assertApplicantCanEdit(app);
       await db.removeAuthor(input.id, input.applicationId);
       return { success: true };
     }),
@@ -1193,7 +1179,7 @@ const verifyRouter = router({
       // verify.certificateDownload for a short-lived URL on demand.
       const app = await db.getApplicationByIrbNumber(input.irbNumber.trim().toUpperCase());
       if (!app) return { found: false as const };
-      if (app.status === "hidden") return { found: false as const };
+      if (app.status === "hidden" || !app.humanDecisionAt || !app.humanDecisionByUserId) return { found: false as const };
 
       if (app.status === "retracted") {
         return {
@@ -1207,7 +1193,7 @@ const verifyRouter = router({
           retractedAt: app.retractedAt,
           // Reason is shown — it's the whole point of the public retraction
           // notice — but we cap its length to defeat exfil-via-reason vectors.
-          retractionReason: (app.retractionReason || "").slice(0, 2000),
+          retractionReason: "Approval has been withdrawn. Contact the responsible committee for details.",
           hasRetractionCertificate: Boolean(app.retractionCertificateUrl),
         };
       }
@@ -1236,7 +1222,7 @@ const verifyRouter = router({
     }))
     .mutation(async ({ input }) => {
       const app = await db.getApplicationByIrbNumber(input.irbNumber.trim().toUpperCase());
-      if (!app || app.status === "hidden") {
+      if (!app || app.status === "hidden" || !app.humanDecisionAt || !app.humanDecisionByUserId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Certificate not found" });
       }
       const stored =
@@ -1247,12 +1233,10 @@ const verifyRouter = router({
           : app.status === "approved"
             ? app.certificateUrl
             : null;
-      const key = storageKeyFromUrl(stored);
-      if (!key) {
+      if (!stored || !app.irbNumber) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Certificate not available" });
       }
-      const { url } = await storageGet(key, CERT_DOWNLOAD_TTL_SEC);
-      return { url, expiresInSec: CERT_DOWNLOAD_TTL_SEC };
+      return { url: `/api/export/public-certificate/${encodeURIComponent(app.irbNumber)}`, expiresInSec: CERT_DOWNLOAD_TTL_SEC };
     }),
 });
 
@@ -1297,7 +1281,7 @@ const supportRouter = router({
 
   updateStatus: adminProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.number().int().positive(),
       status: z.enum(["open", "in_progress", "resolved", "closed"]),
     }))
     .mutation(async ({ input }) => {
@@ -1309,9 +1293,9 @@ const supportRouter = router({
 // ─── Review Router ──────────────────────────────────────────────────────────
 
 const reviewRouter = router({
-  myPendingReviews: protectedProcedure.query(async ({ ctx }) => {
+  myPendingReviews: staffProcedure.query(async ({ ctx }) => {
     const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-    if (!member) return [];
+    if (!member?.isActive || !member.appointedAt || !member.qualificationReference) return [];
     await db.expireOldReviews();
     const reviews = await db.getPendingReviewsByMember(member.id);
     const enriched = await Promise.all(reviews.map(async (r) => {
@@ -1321,10 +1305,10 @@ const reviewRouter = router({
     return enriched;
   }),
 
-  myAllReviews: protectedProcedure.query(async ({ ctx }) => {
+  myAllReviews: staffProcedure.query(async ({ ctx }) => {
     const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-    if (!member) return [];
-    const reviews = await db.getReviewsByCommitteeMember(member.id);
+    if (!member?.isActive || !member.appointedAt || !member.qualificationReference) return [];
+    const reviews = (await db.getReviewsByCommitteeMember(member.id)).filter(r => r.status !== "expired" && r.expiresAt.getTime() > Date.now());
     const enriched = await Promise.all(reviews.map(async (r) => {
       const app = await db.getApplicationById(r.applicationId);
       return { ...r, application: app };
@@ -1333,7 +1317,7 @@ const reviewRouter = router({
   }),
 
   getByApplication: protectedProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       await loadApplicationForViewer(ctx, input.applicationId);
       const reviews = await db.getReviewsByApplication(input.applicationId);
@@ -1358,92 +1342,44 @@ const reviewRouter = router({
       });
     }),
 
-  submitReview: protectedProcedure
+  submitReview: staffProcedure
     .input(z.object({
-      reviewId: z.number(),
+      reviewId: z.number().int().positive(),
       decision: z.enum(["approved", "rejected"]),
-      comments: z.string().optional(),
+      comments: z.string().max(20_000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-      if (!member) throw new TRPCError({ code: "FORBIDDEN", message: "You are not a committee member" });
-
-      const review = await db.getReviewAssignmentById(input.reviewId);
-      if (!review) throw new TRPCError({ code: "NOT_FOUND" });
-      if (review.committeeMemberId !== member.id) throw new TRPCError({ code: "FORBIDDEN" });
-      if (review.status !== "pending") throw new TRPCError({ code: "BAD_REQUEST", message: "This review has already been completed or expired" });
-
-      if (new Date() > review.expiresAt) {
-        await db.updateReviewAssignment(input.reviewId, { status: "expired" });
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Review period has expired" });
-      }
-
-      const now = new Date();
-      const responseTimeMs = now.getTime() - review.assignedAt.getTime();
-
-      await db.updateReviewAssignment(input.reviewId, {
-        status: input.decision,
-        comments: input.comments || null,
-        respondedAt: now,
-      });
-
-      const newTotalResponses = member.totalResponses + 1;
-      const newAvgTime = Math.round(((member.averageResponseTimeMs || 0) * member.totalResponses + responseTimeMs) / newTotalResponses);
-      await db.updateCommitteeMember(member.id, {
-        totalResponses: newTotalResponses,
-        totalApprovals: input.decision === "approved" ? member.totalApprovals + 1 : member.totalApprovals,
-        totalRejections: input.decision === "rejected" ? member.totalRejections + 1 : member.totalRejections,
-        averageResponseTimeMs: newAvgTime,
-      });
-
-      await db.addAuditLog({
-        applicationId: review.applicationId,
-        userId: ctx.user.id,
-        action: `review_${input.decision}`,
-        details: input.comments || `Committee member ${input.decision} the application`,
-      });
-
-      const approvals = await db.countApprovalsByApplication(review.applicationId);
-      const rejections = await db.countRejectionsByApplication(review.applicationId);
-
+      const result = await db.recordHumanReview({ ...input, userId: ctx.user.id });
       try {
-        const appForNotif = await db.getApplicationById(review.applicationId);
-        if (appForNotif) {
-          await emailService.notifyReviewReceived(appForNotif.applicantId, review.applicationId, input.decision, approvals, approvals + rejections);
-        }
-      } catch (e) { /* best-effort */ }
+        await emailService.notifyReviewReceived(result.applicantId, result.applicationId, input.decision, result.approvals, result.approvals + result.rejections);
+      } catch { /* Review is durable; notifications are best effort. */ }
+      return { success: true, approvals: result.approvals, rejections: result.rejections };
 
-      if (approvals >= 3) {
-        await db.updateApplication(review.applicationId, { status: "pending_admin" });
-        await db.addAuditLog({
-          applicationId: review.applicationId,
-          userId: ctx.user.id,
-          action: "moved_to_admin",
-          details: `${approvals} approvals received, moved to admin for final decision`,
-        });
-        try {
-          const appForNotif = await db.getApplicationById(review.applicationId);
-          if (appForNotif) {
-            await emailService.notifyPendingAdmin(appForNotif.applicantId, review.applicationId);
-          }
-        } catch (e) { /* best-effort */ }
-      } else if (rejections >= 3) {
-        const app = await db.getApplicationById(review.applicationId);
-        if (app && app.submissionCount >= 2) {
-          await db.updateApplication(review.applicationId, { status: "permanently_rejected" });
-        } else {
-          await db.updateApplication(review.applicationId, {
-            status: "rejected",
-            rejectionReason: "Majority of committee members rejected the application",
-          });
-        }
-      }
-
-      return { success: true, approvals, rejections };
     }),
 });
 
 // ─── Admin Router ───────────────────────────────────────────────────────────
+
+async function storeDecisionCertificate(app: Awaited<ReturnType<typeof db.finalizeApplicationDecision>>) {
+  const applicant = await db.getUserById(app.applicantId);
+  let certificateUrl: string | null = null;
+  try {
+    const generated = await generateAndStoreCertificatePdf({ app, applicantName: applicant?.name ?? null, applicantEmail: applicant?.email ?? null });
+    const attached = await db.attachDecisionCertificate(app, generated);
+    if (attached) certificateUrl = generated;
+  } catch (error) {
+    console.error("[Certificate] Decision recorded; PDF generation requires retry", safeLogError(error));
+  }
+  try {
+    if (app.status === "approved" && app.irbNumber) {
+      await emailService.notifyAdminApproved(app.applicantId, app.id, app.irbNumber);
+      if (certificateUrl) await emailService.notifyCertificateIssued(app.applicantId, app.id, app.irbNumber);
+    } else {
+      await emailService.notifyAdminRejected(app.applicantId, app.id, app.rejectionReason || "Committee rejected the application", app.submissionCount < 2);
+    }
+  } catch { /* Decision is durable; notifications are best effort. */ }
+  return { success: true, irbNumber: app.irbNumber, certificateUrl, certificatePending: !certificateUrl };
+}
 
 const adminRouter = router({
   allApplications: adminProcedure.query(async () => {
@@ -1459,7 +1395,7 @@ const adminRouter = router({
     return db.getApplicationStats();
   }),
 
-  // Direct approval - admin can approve any application at any stage
+  // Compatibility entry point with the same human authority gates as finalDecision.
   directApproval: adminProcedure
     .input(z.object({
       applicationId: z.number().int().positive(),
@@ -1468,7 +1404,7 @@ const adminRouter = router({
       // echo back the exact string `APPROVE-<applicationId>`. A
       // CSRF-induced auto-submit can't guess the right value, and a
       // typo'd click can't accidentally mint an IRB number.
-      confirm: z.string(),
+      confirm: z.string().max(20_000),
     }))
     .mutation(async ({ ctx, input }) => {
       if (input.confirm !== `APPROVE-${input.applicationId}`) {
@@ -1477,63 +1413,20 @@ const adminRouter = router({
           message: "Confirmation token missing or incorrect",
         });
       }
-      const app = await db.getApplicationById(input.applicationId);
-      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      if (["approved", "permanently_rejected", "retracted", "hidden"].includes(app.status)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot modify this application" });
-      }
+      const approved = await db.finalizeApplicationDecision({ applicationId: input.applicationId, actorUserId: ctx.user.id, decision: "approved", notes: input.notes, direct: true });
+      return storeDecisionCertificate(approved);
 
-      const irbNumber = await db.generateIrbNumber();
-      const applicant = await db.getUserById(app.applicantId);
-
-      const updatedApp = { ...app, irbNumber, approvedAt: new Date() };
-      let certUrl = "";
-      try {
-        // V2: real PDF, not bundled SVG.
-        certUrl = await generateAndStoreCertificatePdf({
-          app: updatedApp as any,
-          applicantName: applicant?.name ?? null,
-          applicantEmail: applicant?.email ?? null,
-        });
-      } catch (e) {
-        // SA-14: fail closed — no v1 SVG/HTML fallback (stored-XSS surface
-        // when served from S3). Approval proceeds; the certificate can be
-        // regenerated on demand via /api/export/certificate/:id.
-        console.error("Certificate v2 generation failed; approval proceeds without stored certificate:", e);
-      }
-
-      await db.updateApplication(input.applicationId, {
-        status: "approved",
-        irbNumber,
-        adminNotes: input.notes || "Direct approval by admin",
-        approvedAt: new Date(),
-        certificateUrl: certUrl || null,
-      });
-
-      await db.addAuditLog({
-        applicationId: input.applicationId,
-        userId: ctx.user.id,
-        action: "admin_direct_approval",
-        details: `Direct approval by admin. IRB Number: ${irbNumber}`,
-      });
-
-      try {
-        await emailService.notifyAdminApproved(app.applicantId, input.applicationId, irbNumber);
-        await emailService.notifyCertificateIssued(app.applicantId, input.applicationId, irbNumber);
-      } catch (e) { /* best-effort */ }
-
-      return { success: true, irbNumber, certificateUrl: certUrl };
     }),
 
   finalDecision: adminProcedure
     .input(z.object({
-      applicationId: z.number(),
+      applicationId: z.number().int().positive(),
       decision: z.enum(["approved", "rejected"]),
       notes: z.string().max(20000).optional(),
       // SA-10 (parity with directApproval): the client must echo back
       // `DECIDE-<applicationId>`. A CSRF-induced auto-submit or a stray
       // click can't mint an IRB number or reject a study by accident.
-      confirm: z.string(),
+      confirm: z.string().max(20_000),
     }))
     .mutation(async ({ ctx, input }) => {
       if (input.confirm !== `DECIDE-${input.applicationId}`) {
@@ -1542,94 +1435,16 @@ const adminRouter = router({
           message: "Confirmation token missing or incorrect",
         });
       }
-      const app = await db.getApplicationById(input.applicationId);
-      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
+      const decided = await db.finalizeApplicationDecision({ applicationId: input.applicationId, actorUserId: ctx.user.id, decision: input.decision, notes: input.notes });
+      return storeDecisionCertificate(decided);
 
-      if (input.decision === "approved") {
-        const irbNumber = await db.generateIrbNumber();
-        const applicant = await db.getUserById(app.applicantId);
-
-        const updatedApp = { ...app, irbNumber, approvedAt: new Date() };
-        let certUrl = "";
-        try {
-          certUrl = await generateAndStoreCertificatePdf({
-            app: updatedApp as any,
-            applicantName: applicant?.name ?? null,
-            applicantEmail: applicant?.email ?? null,
-          });
-        } catch (e) {
-          // SA-14: fail closed — no v1 fallback. See directApproval note.
-          console.error("Certificate v2 generation failed; approval proceeds without stored certificate:", e);
-        }
-
-        await db.updateApplication(input.applicationId, {
-          status: "approved",
-          irbNumber,
-          adminNotes: input.notes || null,
-          approvedAt: new Date(),
-          certificateUrl: certUrl || null,
-        });
-
-        await db.addAuditLog({
-          applicationId: input.applicationId,
-          userId: ctx.user.id,
-          action: "admin_approved",
-          details: `IRB Number: ${irbNumber}`,
-        });
-
-        try {
-          await emailService.notifyAdminApproved(app.applicantId, input.applicationId, irbNumber);
-          await emailService.notifyCertificateIssued(app.applicantId, input.applicationId, irbNumber);
-        } catch (e) { /* best-effort */ }
-
-        return { success: true, irbNumber, certificateUrl: certUrl };
-      } else {
-        const nextStatus = app.submissionCount >= 2 ? "permanently_rejected" : "rejected";
-        const applicant = await db.getUserById(app.applicantId);
-        const rejectedApp = {
-          ...app,
-          status: nextStatus,
-          rejectionReason: input.notes || "Application rejected by admin",
-        };
-        let certUrl = "";
-        try {
-          certUrl = await generateAndStoreCertificatePdf({
-            app: rejectedApp as typeof app,
-            applicantName: applicant?.name ?? null,
-            applicantEmail: applicant?.email ?? null,
-          });
-        } catch (e) {
-          console.error("Rejection certificate generation failed; decision proceeds:", e);
-        }
-
-        await db.updateApplication(input.applicationId, {
-          status: nextStatus,
-          adminNotes: input.notes || null,
-          rejectionReason: input.notes || "Application rejected by admin",
-          certificateUrl: certUrl || app.certificateUrl || null,
-        });
-
-        await db.addAuditLog({
-          applicationId: input.applicationId,
-          userId: ctx.user.id,
-          action: "admin_rejected",
-          details: input.notes || "Rejected by admin",
-        });
-
-        try {
-          const canResubmit = app.submissionCount < 2;
-          await emailService.notifyAdminRejected(app.applicantId, input.applicationId, input.notes || "Application rejected by admin", canResubmit);
-        } catch (e) { /* best-effort */ }
-
-        return { success: true };
-      }
     }),
 
   // Retract an approved application (generates red/white retraction PDF)
   retractApplication: adminProcedure
     .input(z.object({
-      applicationId: z.number(),
-      reason: z.string(),
+      applicationId: z.number().int().positive(),
+      reason: z.string().trim().min(10).max(2000),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
@@ -1638,20 +1453,19 @@ const adminRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Only approved applications can be retracted" });
       }
 
+      const changed = await db.transitionApplicationStatus(input.applicationId, ["approved"], {
+        status: "retracted", retractionReason: input.reason, retractedAt: new Date(), retractionCertificateUrl: null,
+      });
+      if (!changed) throw new TRPCError({ code: "CONFLICT", message: "Application decision changed. Refresh and try again." });
       const applicant = await db.getUserById(app.applicantId);
       let retractionUrl = "";
       try {
-        retractionUrl = await generateRetractionCertificatePdf(app, applicant?.name || "", input.reason);
+        const retracted = await db.getApplicationById(app.id);
+        retractionUrl = await generateRetractionCertificatePdf(retracted!, applicant?.name || "", input.reason);
+        await db.transitionApplicationStatus(app.id, ["retracted"], { retractionCertificateUrl: retractionUrl });
       } catch (e) {
-        console.error("Retraction certificate generation failed:", e);
+        console.error("Retraction certificate generation failed:", safeLogError(e));
       }
-
-      await db.updateApplication(input.applicationId, {
-        status: "retracted",
-        retractionReason: input.reason,
-        retractedAt: new Date(),
-        retractionCertificateUrl: retractionUrl || null,
-      });
 
       await db.addAuditLog({
         applicationId: input.applicationId,
@@ -1670,8 +1484,8 @@ const adminRouter = router({
   // Hide an application (not verifiable)
   hideApplication: adminProcedure
     .input(z.object({
-      applicationId: z.number(),
-      reason: z.string().optional(),
+      applicationId: z.number().int().positive(),
+      reason: z.string().max(20_000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
@@ -1699,8 +1513,8 @@ const adminRouter = router({
   // Delete an application (soft delete - moves to hidden/deleted state)
   deleteApplication: adminProcedure
     .input(z.object({
-      applicationId: z.number(),
-      reason: z.string().optional(),
+      applicationId: z.number().int().positive(),
+      reason: z.string().max(20_000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
@@ -1727,15 +1541,19 @@ const adminRouter = router({
     }),
 
   allowResubmission: adminProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      if (app.submissionCount >= 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum resubmissions reached" });
-
-      await db.updateApplication(input.applicationId, {
-        status: "resubmission_required",
+      if (app.status !== "rejected" || app.submissionCount >= 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Only a rejected first submission can be opened for revision." });
+      const changed = await db.transitionApplicationStatus(input.applicationId, ["rejected"], {
+        status: "resubmission_required", stage1Passed: false, stage2Passed: false,
+        stage1AiScore: null, stage2AiScore: null, stage1AiFeedback: null, stage2AiFeedback: null, stage2AiFieldScores: null,
+        proceedDespiteStage1: false, proceedDespiteStage2: false,
+        proceedDespiteStage1Reason: null, proceedDespiteStage2Reason: null,
+        certificateUrl: null,
       });
+      if (!changed) throw new TRPCError({ code: "CONFLICT", message: "Application changed. Refresh and try again." });
 
       await db.addAuditLog({
         applicationId: input.applicationId,
@@ -1749,18 +1567,11 @@ const adminRouter = router({
 
   manualAssign: adminProcedure
     .input(z.object({
-      applicationId: z.number(),
-      committeeMemberId: z.number(),
+      applicationId: z.number().int().positive(),
+      committeeMemberId: z.number().int().positive(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await db.createReviewAssignment({
-        applicationId: input.applicationId,
-        committeeMemberId: input.committeeMemberId,
-        assignedBy: "admin",
-        status: "pending",
-        expiresAt,
-      });
+      await db.assignHumanReviewer(input.applicationId, input.committeeMemberId);
 
       await db.addAuditLog({
         applicationId: input.applicationId,
@@ -1773,11 +1584,6 @@ const adminRouter = router({
     }),
 
   allCommitteeMembers: adminProcedure.query(async () => {
-    try {
-      await ensureDefaultCommittee();
-    } catch (err) {
-      console.warn("[committee] auto-enroll on list failed", err);
-    }
     const members = await db.getAllCommitteeMembers();
     const enriched = await Promise.all(members.map(async (m) => {
       const user = await db.getUserById(m.userId);
@@ -1788,28 +1594,23 @@ const adminRouter = router({
 
   addCommitteeMember: adminProcedure
     .input(z.object({
-      userId: z.number(),
-      specialization: z.string().optional(),
-      title: z.string().optional(),
-      institution: z.string().optional(),
+      userId: z.number().int().positive(),
+      qualificationReference: z.string().trim().min(10).max(2000),
+      specialization: z.string().max(20_000).optional(),
+      title: z.string().max(20_000).optional(),
+      institution: z.string().max(20_000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const user = await db.getUserById(input.userId);
+      if (!user || user.loginMethod === "digital_reviewer" || user.loginMethod === "deleted" || user.openId.startsWith("digital-reviewer:")) throw new TRPCError({ code: "BAD_REQUEST", message: "Only a verified human account may be appointed." });
+      const appointment = { qualificationReference: input.qualificationReference, appointedByUserId: ctx.user.id, appointedAt: new Date(), isActive: true };
       const existing = await db.getCommitteeMemberByUserId(input.userId);
       let memberId: number;
       if (existing) {
-        if (!existing.isActive) {
-          await db.updateCommitteeMember(existing.id, { isActive: true });
-          memberId = existing.id;
-        } else {
-          throw new TRPCError({ code: "CONFLICT", message: "User is already a committee member" });
-        }
+        await db.updateCommitteeMember(existing.id, { ...appointment, specialization: input.specialization || null, title: input.title || null, institution: input.institution || null });
+        memberId = existing.id;
       } else {
-        memberId = await db.addCommitteeMember({
-          userId: input.userId,
-          specialization: input.specialization || null,
-          title: input.title || null,
-          institution: input.institution || null,
-        });
+        memberId = await db.addCommitteeMember({ userId: input.userId, ...appointment, specialization: input.specialization || null, title: input.title || null, institution: input.institution || null });
       }
       await db.addAuditLog({
         userId: ctx.user.id,
@@ -1817,70 +1618,11 @@ const adminRouter = router({
         details: `User #${input.userId} added as committee member (id #${memberId})`,
       });
 
-      // Auto-reassign queued (pending_admin) applications now that we
-      // have a fresh reviewer in the pool. Each queued app gets up to
-      // 5 unique reviewers, capped at how many active members exist.
-      // Best-effort: a failure here doesn't block the membership add.
-      try {
-        const queued = await db.getApplicationsByStatus("pending_admin");
-        if (queued.length > 0) {
-          const activeMembers = await db.getActiveCommitteeMembers();
-          let promoted = 0;
-          for (const app of queued) {
-            const existingAssignments = await db.getReviewsByApplication(app.id);
-            const assignedIds = new Set(existingAssignments.map(r => r.committeeMemberId));
-            const available = activeMembers.filter(m => !assignedIds.has(m.id));
-            const need = 5 - existingAssignments.length;
-            if (need <= 0 || available.length === 0) continue;
-            const shuffled = [...available].sort(() => Math.random() - 0.5);
-            const pick = shuffled.slice(0, Math.min(need, shuffled.length));
-            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-            for (const m of pick) {
-              await db.createReviewAssignment({
-                applicationId: app.id,
-                committeeMemberId: m.id,
-                assignedBy: "system",
-                status: "pending",
-                expiresAt,
-              });
-              await db.updateCommitteeMember(m.id, { totalAssignments: m.totalAssignments + 1 });
-              try {
-                await emailService.notifyCommitteeAssigned(m.id, app.id, app.researchTitle || "Untitled");
-              } catch { /* best-effort */ }
-            }
-            // Promote to under_review only if we now have the full 5.
-            const totalAfter = existingAssignments.length + pick.length;
-            if (totalAfter >= 5) {
-              await db.updateApplication(app.id, { status: "under_review" });
-              promoted++;
-              try {
-                await emailService.createNotification({
-                  userId: app.applicantId,
-                  applicationId: app.id,
-                  type: "committee_assigned",
-                  title: "Reviewers assigned — committee review begins",
-                  message: `Your application "${(app.researchTitle || "Untitled").slice(0, 80)}" now has 5 committee reviewers and has entered active review.`,
-                });
-              } catch { /* best-effort */ }
-            }
-          }
-          if (promoted > 0) {
-            await db.addAuditLog({
-              userId: ctx.user.id,
-              action: "auto_reassigned_queued_applications",
-              details: `New committee member triggered reassignment: ${promoted} application(s) promoted from pending_admin to under_review.`,
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("[addCommitteeMember] auto-reassign failed:", err);
-      }
-
       return { id: memberId };
     }),
 
   removeCommitteeMember: adminProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       await db.removeCommitteeMember(input.id);
       await db.addAuditLog({
@@ -1910,11 +1652,12 @@ const adminRouter = router({
   // roles — so a compromised or rogue admin can't mint more admins or strip
   // the owner. Secondary admins get the same FORBIDDEN as any non-owner.
   updateUserRole: ownerProcedure
-    .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
+    .input(z.object({ userId: z.number().int().positive(), role: z.enum(["user", "admin"]) }))
     .mutation(async ({ ctx, input }) => {
       if (input.userId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot change your own role" });
       // Refuse to demote the platform owner account itself.
       const target = await db.getUserById(input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
       if (target && isPlatformOwner(target) && input.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Platform owner cannot be demoted" });
       }
@@ -1944,7 +1687,7 @@ const adminRouter = router({
   }),
 
   auditLog: adminProcedure
-    .input(z.object({ applicationId: z.number().optional() }).optional())
+    .input(z.object({ applicationId: z.number().int().positive().optional() }).optional())
     .query(async ({ input }) => {
       if (input?.applicationId) {
         return db.getAuditLogByApplication(input.applicationId);
@@ -1958,7 +1701,7 @@ const adminRouter = router({
 
   // Analytics endpoints
   monthlyAnalytics: adminProcedure
-    .input(z.object({ months: z.number().optional() }).optional())
+    .input(z.object({ months: z.number().int().min(1).max(60).optional() }).optional())
     .query(async ({ input }) => {
       return db.getMonthlyAnalytics(input?.months || 12);
     }),
@@ -1996,17 +1739,12 @@ const adminRouter = router({
 
       if (available.length > 0) {
         const newMember = available[Math.floor(Math.random() * available.length)];
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await db.createReviewAssignment({
-          applicationId: review.applicationId,
-          committeeMemberId: newMember.id,
-          assignedBy: "system",
-          status: "pending",
-          expiresAt,
-        });
-        await db.updateCommitteeMember(newMember.id, {
-          totalAssignments: newMember.totalAssignments + 1,
-        });
+        try {
+          await db.assignHumanReviewer(review.applicationId, newMember.id);
+        } catch (error) {
+          if (error instanceof TRPCError && error.code === "CONFLICT") continue;
+          throw error;
+        }
         reassigned++;
 
         try {
@@ -2030,34 +1768,18 @@ const adminRouter = router({
   continuingReviewSweep: adminProcedure
     .input(z.object({ daysAhead: z.number().int().min(1).max(365).default(30) }))
     .mutation(async ({ ctx, input }) => {
-      const all = await db.getAllApplications();
-      const now = Date.now();
-      const oneYear = 365 * 24 * 60 * 60 * 1000;
-      const window = input.daysAhead * 24 * 60 * 60 * 1000;
-      const dueSoon = all.filter(a => {
-        if (a.status !== "approved" || !a.approvedAt) return false;
-        const anniversary = new Date(a.approvedAt).getTime() + oneYear;
-        return anniversary >= now && anniversary - now <= window;
-      });
+      const all = await db.getApplicationsByStatus("approved");
+      let dueSoon = 0;
       let notified = 0;
-      for (const a of dueSoon) {
-        try {
-          await emailService.createNotification({
-            userId: a.applicantId,
-            applicationId: a.id,
-            type: "general",
-            title: "Annual continuing review due soon",
-            message: `Your IRB approval (${a.irbNumber || `#${a.id}`}, "${(a.researchTitle || "").slice(0, 80)}") expires within ${input.daysAhead} days. Submit a continuing review or request an amendment to keep the study active.`,
-          });
-          await db.addAuditLog({
-            applicationId: a.id, userId: ctx.user.id,
-            action: "continuing_review_reminder_sent",
-            details: `30-day window. Approved ${a.approvedAt ? new Date(a.approvedAt).toISOString().slice(0,10) : "?"}.`,
-          });
-          notified++;
-        } catch { /* best-effort per application */ }
+      for (const app of all) {
+        if (!app.approvedAt || !app.humanDecisionAt) continue;
+        const anniversary = new Date(app.approvedAt);
+        anniversary.setUTCFullYear(anniversary.getUTCFullYear() + 1);
+        if (anniversary.getTime() - Date.now() > input.daysAhead * 86_400_000) continue;
+        dueSoon++;
+        if (await db.enqueueContinuingReviewReminder(app.id, ctx.user.id, input.daysAhead)) notified++;
       }
-      return { dueSoon: dueSoon.length, notified };
+      return { dueSoon, notified };
     }),
 });
 
@@ -2073,7 +1795,7 @@ const notificationRouter = router({
   }),
 
   markRead: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       await emailService.markNotificationRead(input.id, ctx.user.id);
       return { success: true };
@@ -2091,8 +1813,8 @@ const reportsRouter = router({
   performance: adminProcedure
     .input(z.object({
       period: z.enum(["monthly", "annual"]),
-      year: z.number().optional(),
-      month: z.number().optional(),
+      year: z.number().int().min(1900).max(3000).optional(),
+      month: z.number().int().min(1).max(12).optional(),
     }))
     .query(async ({ input }) => {
       const stats = await db.getApplicationStats();
@@ -2118,7 +1840,7 @@ const reportsRouter = router({
       const avgProcessingDays = filtered
         .filter(a => a.approvedAt && a.submittedAt)
         .map(a => (new Date(a.approvedAt!).getTime() - new Date(a.submittedAt!).getTime()) / (1000 * 60 * 60 * 24));
-      const avgDays = avgProcessingDays.length > 0 ? avgProcessingDays.reduce((a, b) => a + b, 0) / avgProcessingDays.length : 0;
+      const avgDays = avgProcessingDays.length > 0 ? avgProcessingDays.reduce((a, b) => a + b, 0) / avgProcessingDays.length : null;
 
       const memberStats = await Promise.all(members.map(async (m) => {
         const user = await db.getUserById(m.userId);
@@ -2129,7 +1851,7 @@ const reportsRouter = router({
           totalApprovals: m.totalApprovals,
           totalRejections: m.totalRejections,
           responseRate: m.totalAssignments > 0 ? Math.round((m.totalResponses / m.totalAssignments) * 100) : 0,
-          avgResponseHours: m.averageResponseTimeMs ? Math.round(m.averageResponseTimeMs / (1000 * 60 * 60) * 10) / 10 : 0,
+          avgResponseHours: m.totalResponses > 0 && m.averageResponseTimeMs != null ? Math.round(m.averageResponseTimeMs / (1000 * 60 * 60) * 10) / 10 : null,
         };
       }));
 
@@ -2148,7 +1870,7 @@ const reportsRouter = router({
         rejected,
         pending,
         approvalRate: filtered.length > 0 ? Math.round((approved / filtered.length) * 100) : 0,
-        avgProcessingDays: Math.round(avgDays * 10) / 10,
+        avgProcessingDays: avgDays == null ? null : Math.round(avgDays * 10) / 10,
         memberStats,
         typeDistribution,
         overallStats: stats,
@@ -2186,7 +1908,7 @@ const publicStatsRouter = router({
 const adverseEventsRouter = router({
   report: protectedProcedure
     .input(z.object({
-      applicationId: z.number(),
+      applicationId: z.number().int().positive(),
       occurredAt: z.string().datetime().or(z.date()),
       severity: z.enum(["mild", "moderate", "serious", "life_threatening", "fatal"]),
       expected: z.boolean().optional(),
@@ -2203,7 +1925,11 @@ const adverseEventsRouter = router({
       if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      if (app.applicantId !== ctx.user.id) assertStaffMfa(ctx.user);
+      if (new Date(input.occurredAt).getTime() > Date.now() + 300_000) throw new TRPCError({ code: "BAD_REQUEST", message: "Adverse-event occurrence time cannot be in the future." });
+      const isCritical = ["serious", "life_threatening", "fatal"].includes(input.severity);
       const id = await db.createAdverseEvent({
+        status: isCritical ? "escalated" : "reported",
         applicationId: input.applicationId,
         reportedByUserId: ctx.user.id,
         occurredAt: new Date(input.occurredAt as any),
@@ -2216,7 +1942,6 @@ const adverseEventsRouter = router({
       });
       // Auto-escalate serious / life-threatening / fatal events to
       // admin attention via notification + audit.
-      const isCritical = ["serious", "life_threatening", "fatal"].includes(input.severity);
       try {
         await db.addAuditLog({
           applicationId: input.applicationId,
@@ -2235,13 +1960,14 @@ const adverseEventsRouter = router({
     }),
 
   byApplication: protectedProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      if (app.applicantId !== ctx.user.id) assertStaffMfa(ctx.user);
       return db.getAdverseEventsByApplication(input.applicationId);
     }),
 
@@ -2251,7 +1977,7 @@ const adverseEventsRouter = router({
   // Admin updates an AE — change status, add notes
   adminUpdate: adminProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.number().int().positive(),
       status: z.enum(["reported", "under_review", "acknowledged", "escalated", "closed"]).optional(),
       adminNotes: z.string().max(20000).optional(),
     }))
@@ -2276,13 +2002,13 @@ const adverseEventsRouter = router({
 const amendmentsRouter = router({
   submit: protectedProcedure
     .input(z.object({
-      applicationId: z.number(),
+      applicationId: z.number().int().positive(),
       type: z.enum(["minor", "moderate", "major"]),
       title: z.string().min(3).max(255),
       rationale: z.string().min(10).max(20000),
       changedFields: z.record(
-        z.string(),
-        z.object({ before: z.string().optional(), after: z.string() })
+        z.string().max(20_000),
+        z.object({ before: z.string().max(20_000).optional(), after: z.string() })
       ).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -2291,10 +2017,11 @@ const amendmentsRouter = router({
       if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      if (app.applicantId !== ctx.user.id) assertStaffMfa(ctx.user);
       // Amendments only make sense post-approval (or at least after
       // submission). Block on draft / declaration_pending.
-      if (["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(app.status as string)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Submit the application first; amendments apply to active studies only." });
+      if (!["under_review", "pending_admin", "approved"].includes(app.status)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Amendments apply only to active submitted or approved studies." });
       }
       const id = await db.createAmendment({
         applicationId: input.applicationId,
@@ -2320,13 +2047,14 @@ const amendmentsRouter = router({
     }),
 
   byApplication: protectedProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      if (app.applicantId !== ctx.user.id) assertStaffMfa(ctx.user);
       return db.getAmendmentsByApplication(input.applicationId);
     }),
 
@@ -2334,21 +2062,12 @@ const amendmentsRouter = router({
 
   adminDecide: adminProcedure
     .input(z.object({
-      id: z.number(),
+      id: z.number().int().positive(),
       decision: z.enum(["approved", "rejected"]),
       adminNotes: z.string().max(20000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await db.updateAmendment(input.id, {
-        status: input.decision,
-        adminNotes: input.adminNotes,
-        decidedAt: new Date(),
-      });
-      await db.addAuditLog({
-        userId: ctx.user.id,
-        action: "amendment_decided",
-        details: `Amendment #${input.id} → ${input.decision}`,
-      });
+      await db.decideAmendment({ ...input, actorUserId: ctx.user.id });
       return { success: true };
     }),
 });
@@ -2360,7 +2079,7 @@ const amendmentsRouter = router({
 
 const literatureRouter = router({
   // Free-form search — useful for the resource centre / browsing.
-  search: publicProcedure
+  search: protectedProcedure
     .input(
       z.object({
         query: z.string().min(2).max(500),
@@ -2374,27 +2093,11 @@ const literatureRouter = router({
   // Application-scoped search — owner or admin only. Builds a query
   // from the proposal's title + objectives so it's directly relevant.
   searchByApplication: protectedProcedure
-    .input(z.object({ applicationId: z.number() }))
+    .input(z.object({ applicationId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.applicationId);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      // Allow: applicant, admin, or any committee member assigned to the app.
-      // Reviewers see literature so they have prior-art context before voting.
-      const isOwner = app.applicantId === ctx.user.id;
-      const isAdmin = ctx.user.role === "admin";
-      let isAssignedReviewer = false;
-      if (!isOwner && !isAdmin) {
-        const member = await db.getCommitteeMemberByUserId(ctx.user.id);
-        if (member) {
-          const reviews = await db.getReviewsByApplication(input.applicationId);
-          isAssignedReviewer = reviews.some(
-            r => r.committeeMemberId === member.id
-          );
-        }
-      }
-      if (!isOwner && !isAdmin && !isAssignedReviewer) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      await loadApplicationForViewer(ctx, input.applicationId);
       const query = [app.researchTitle, app.researchObjectives]
         .filter(Boolean)
         .join(" — ")
@@ -2413,10 +2116,8 @@ const literatureRouter = router({
 });
 
 // ─── AI Swarm Review Router (owner-only, hidden from public) ────────────────
-// Two fully independent AI panels, each simulating 510 expert reviewers
-// across six specialty clusters. This is an AUTHORIZED official decision
-// pathway: dual-panel pass auto-approves; otherwise the 4 digital reviewers
-// run; both fail alerts the owner. Invisible to non-owners.
+// AI panels offer advisory findings across specialty perspectives.
+// Their output cannot approve studies or replace a qualified human committee.
 
 const aiSwarmRouter = router({
   // The only non-owner-gated endpoint: lets the SPA decide whether to
@@ -2535,40 +2236,14 @@ const aiSwarmRouter = router({
             }
           }
 
-          const bothPass =
-            !panel1.unavailable &&
-            !panel2.unavailable &&
-            panel1.verdict === "pass" &&
-            panel2.verdict === "pass";
-          if (bothPass) {
-            const live = await db.getApplicationById(input.applicationId);
-            const swarmScore = Math.round(((panel1.score ?? 0) + (panel2.score ?? 0)) / 2);
-            await applyOfficialDigitalApproval({
-              applicationId: input.applicationId,
-              actorUserId: requesterId,
-              via: "Owner-triggered dual-panel AI Swarm (authorized official pathway)",
-              swarm: live
-                ? { ...runSwarmReview(live), passed: true, overallScore: swarmScore, summary: "Dual-panel LLM swarm PASS" }
-                : {
-                    passed: true,
-                    overallScore: swarmScore,
-                    panels: [],
-                    summary: "Dual-panel LLM swarm PASS",
-                  },
-              bots: { passed: false, unanimous: false, approvals: 0, reviewers: [] },
-            });
-          } else {
-            await runAcceleratedPipeline(input.applicationId, requesterId);
-          }
-
           await db.addAuditLog({
             applicationId: input.applicationId,
             userId: requesterId,
             action: "ai_swarm_review_run",
-            details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Authorized official pathway — status may change.`,
+            details: `Dual-panel swarm audit (${runGroup}): Panel 1 ${panel1.unavailable ? "UNAVAILABLE" : `${panel1.verdict.toUpperCase()} ${panel1.score}/100`}, Panel 2 ${panel2.unavailable ? "UNAVAILABLE" : `${panel2.verdict.toUpperCase()} ${panel2.score}/100`}. Advisory assessment only; qualified human committee decision required.`,
           });
         } catch (err) {
-          console.error("[AI Swarm] background run failed:", err);
+          console.error("[AI Swarm] background run failed:", safeLogError(err));
           for (const id of rowIds) {
             try {
               await db.updateAiSwarmReview(id, {
@@ -2647,6 +2322,7 @@ const chatApplicationRouter = router({
       if (app.applicantId !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      if (app.applicantId !== ctx.user.id) assertStaffMfa(ctx.user);
       const rows = await db.getChatApplicationMessages(input.applicationId, app.applicantId);
       const { listMissingRequirements } = await import("./services/irb.validation");
       return {
@@ -2669,9 +2345,20 @@ export const appRouter = router({
       // Surface owner status so the client can show the Owner badge and
       // gate promote/demote (owner-only) in the UI. Authoritative checks
       // still happen server-side on ownerProcedure.
-      return { ...u, isOwner: isPlatformOwner(u) };
+      const { passwordHash: _passwordHash, ...safeUser } = u;
+      return {
+        ...safeUser,
+        authLevel: u.authLevel ?? "aal1",
+        staffMfaRequired: ENV.isProduction && process.env.STAFF_MFA_REQUIRED !== "false",
+        isOwner: isPlatformOwner(u),
+      };
     }),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      try {
+        await sdk.revokeRequestSession(ctx.req);
+      } catch {
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Session revocation is temporarily unavailable. Please retry signing out." });
+      }
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;

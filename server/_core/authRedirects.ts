@@ -12,14 +12,15 @@ export function registerAuthRedirectRoutes(app: Express) {
   const redirectToAuth = (req: Request, res: Response) => {
     const dest = authSpaUrl(req);
     const next = typeof req.query.next === "string" ? req.query.next : "";
-    if (next && /^\/(?!\/)/.test(next)) {
+    if (next && /^\/(?![\/\\])[^\\\x00-\x1f]*$/.test(next)) {
       res.redirect(302, `${dest}?next=${encodeURIComponent(next)}`);
       return;
     }
     res.redirect(302, dest);
   };
 
-  app.get("/api/sign-in", (req, res) => {
+  app.get("/api/sign-in", (req, res, next) => {
+    if (ENV.devLoginEnabled || ENV.pilotLoginEnabled) return next();
     if (ENV.supabaseEnabled || ENV.publicAppUrl) {
       redirectToAuth(req, res);
       return;
@@ -27,7 +28,8 @@ export function registerAuthRedirectRoutes(app: Express) {
     res.status(404).json({ error: "not found", path: req.path, hint: "Use /auth" });
   });
 
-  app.get("/api/dev/login", (req, res) => {
+  app.get("/api/dev/login", (req, res, next) => {
+    if (ENV.devLoginEnabled) return next();
     if (ENV.supabaseEnabled || ENV.publicAppUrl) {
       redirectToAuth(req, res);
       return;

@@ -42,6 +42,8 @@ export default function GuidelineDoc() {
         </h1>
         <p className="text-ink-soft mt-3 leading-relaxed">{isAr ? doc.descAr : doc.descEn}</p>
 
+        <p className="mt-5 rounded-lg border p-4 text-sm text-ink-soft">{isAr ? "هذا ملخص للإعداد ولا يحل محل النصوص الرسمية أو قرار اللجنة المختصة. راجع المصادر الرسمية والمتطلبات الحالية قبل تطبيقه على دراستك." : "This preparation summary does not replace official texts or the responsible committee’s decision. Check official sources and current requirements before applying it to your study."}</p>
+        <p className="mt-3 flex flex-wrap gap-4 text-sm"><a href="https://www.ncbe.kacst.edu.sa" rel="noopener noreferrer" target="_blank" className="underline">NCBE</a><a href="https://sdaia.gov.sa/en/SDAIA/about/Pages/RegulationsAndPolicies.aspx" rel="noopener noreferrer" target="_blank" className="underline">SDAIA / PDPL</a><a href="https://www.wma.net/policies-post/wma-declaration-of-helsinki/" rel="noopener noreferrer" target="_blank" className="underline">{isAr ? "إعلان هلسنكي" : "Declaration of Helsinki"}</a><a href="https://www.ich.org/page/efficacy-guidelines" rel="noopener noreferrer" target="_blank" className="underline">ICH guidelines</a></p>
         <div className="mt-10 space-y-10">
           {doc.sections.map((section, i) => (
             <section key={i}>

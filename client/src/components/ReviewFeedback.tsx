@@ -64,14 +64,14 @@ export default function ReviewFeedback({
 }: Props) {
   const parsed = parseFeedback(text);
 
-  const useThis = () => {
+  const useThis = async () => {
     if (!parsed.example) return;
     if (fieldKey && onApplyExample) {
       onApplyExample(fieldKey, parsed.example);
       toast.success(isAr ? "تم تطبيق المثال" : "Example applied to field");
     } else {
-      navigator.clipboard.writeText(parsed.example);
-      toast.success(isAr ? "تم نسخ المثال" : "Example copied to clipboard");
+      try { await navigator.clipboard.writeText(parsed.example); toast.success(isAr ? "تم نسخ المثال" : "Example copied to clipboard"); }
+      catch { toast.error(isAr ? "تعذر النسخ. يمكنك تحديد النص ونسخه يدوياً." : "Copy failed. Select the text and copy it manually."); }
     }
   };
 

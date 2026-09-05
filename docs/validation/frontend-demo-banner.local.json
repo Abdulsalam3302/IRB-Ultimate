@@ -1,0 +1,14 @@
+{
+  "at": "2026-09-05T01:44:54.849Z",
+  "base": "http://127.0.0.1:3017",
+  "checks": [
+    "/: global evaluation notice visible; mobile width fits",
+    "/auth: global evaluation notice visible; mobile width fits",
+    "/chat-apply: global evaluation notice visible; mobile width fits",
+    "/profile: global evaluation notice visible; mobile width fits",
+    "/not-a-real-page: global evaluation notice visible; mobile width fits",
+    "Arabic notice translated; mobile homepage and registry screenshots captured"
+  ],
+  "browserErrors": [],
+  "evidenceScope": "Final VITE_PUBLIC_DEMO_BANNER=1 production-build local visibility check; anonymous routes including authenticated-page sign-in states"
+}

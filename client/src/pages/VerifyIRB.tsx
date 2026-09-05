@@ -1,3 +1,5 @@
+import { useLocation } from "wouter";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,9 +18,12 @@ import type { ResearchType } from "@shared/types";
 import { SiteFooter } from "@/components/design/SiteFooter";
 
 export default function VerifyIRB() {
-  const { t } = useT();
+  const { t, lang } = useT();
+  const [location] = useLocation();
+  const isAr = lang === "ar";
   const [searchValue, setSearchValue] = useState("");
-  const [searchTriggered, setSearchTriggered] = useState(false);
+  const [submittedValue, setSubmittedValue] = useState<string | null>(null);
+  const searchTriggered = submittedValue !== null;
 
   // Honour deep links: /verify?n=IRB-2026-001 (Registry, emails) AND
   // /verify/IRB-SA-2026-00123 (the QR code printed on certificates).
@@ -26,31 +31,40 @@ export default function VerifyIRB() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const pathMatch = window.location.pathname.match(/^\/verify\/([^/]+)$/);
-    const prefill =
-      params.get("n") || params.get("irb") ||
-      (pathMatch ? decodeURIComponent(pathMatch[1]) : "");
-    const cleaned = prefill.trim().toUpperCase();
-    if (cleaned && cleaned.length >= 3) {
+    let pathValue = "";
+    try { pathValue = pathMatch ? decodeURIComponent(pathMatch[1]) : ""; } catch { /* malformed URL */ }
+    const cleaned = (params.get("n") || params.get("irb") || pathValue).trim().toUpperCase();
+    if (/^[A-Z0-9-]{3,80}$/.test(cleaned)) {
       setSearchValue(cleaned);
-      setSearchTriggered(true);
+      setSubmittedValue(cleaned);
+    } else {
+      setSearchValue("");
+      setSubmittedValue(null);
     }
-  }, []);
+  }, [location]);
 
-  const { data: result, isLoading, refetch } = trpc.verify.verifyIrb.useQuery(
-    { irbNumber: searchValue },
-    { enabled: searchTriggered && searchValue.length >= 3 }
+  const { data: result, isFetching: isLoading, error, refetch } = trpc.verify.verifyIrb.useQuery(
+    { irbNumber: submittedValue || "" },
+    { enabled: submittedValue !== null, retry: false, staleTime: 0 }
   );
 
   const certDownload = trpc.verify.certificateDownload.useMutation({
     onSuccess: (data) => {
-      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+      try {
+        const url = new URL(data.url, window.location.origin);
+        if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/export/certificate/")) throw new Error("Invalid download address");
+        window.location.assign(url.href);
+      } catch { toast.error(isAr ? "تعذر فتح رابط الشهادة" : "Could not open the certificate download"); }
     },
+    onError: () => toast.error(isAr ? "تعذر تنزيل الشهادة. أعد المحاولة لاحقاً." : "Certificate download is unavailable. Please retry later."),
   });
 
   const handleSearch = () => {
-    if (searchValue.trim().length < 3) return;
-    setSearchTriggered(true);
-    refetch();
+    const value = searchValue.trim().toUpperCase();
+    if (!/^[A-Z0-9-]{3,80}$/.test(value)) return;
+    setSearchValue(value);
+    if (value === submittedValue) void refetch();
+    else setSubmittedValue(value);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -72,16 +86,20 @@ export default function VerifyIRB() {
 
         <Card className="mb-8">
           <CardContent className="pt-6">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Input
+                aria-label={t("verify.placeholder")}
+                maxLength={80}
+                autoComplete="off"
+                spellCheck={false}
                 placeholder={t("verify.placeholder")}
                 value={searchValue}
-                onChange={(e) => { setSearchValue(e.target.value); setSearchTriggered(false); }}
+                onChange={(e) => { setSearchValue(e.target.value); setSubmittedValue(null); }}
                 onKeyDown={handleKeyDown}
                 className="text-base h-12 font-mono"
                 dir="ltr"
               />
-              <Button size="lg" className="h-12 px-6" onClick={handleSearch} disabled={isLoading || searchValue.trim().length < 3}>
+              <Button size="lg" className="h-12 px-6" onClick={handleSearch} disabled={isLoading || !/^[A-Za-z0-9-]{3,80}$/.test(searchValue.trim())}>
                 {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5 me-1" />}
                 {isLoading ? t("verify.searching") : t("verify.button")}
               </Button>
@@ -89,7 +107,8 @@ export default function VerifyIRB() {
           </CardContent>
         </Card>
 
-        {searchTriggered && !isLoading && result && (
+        {searchTriggered && error && <div role="alert" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-900">{isAr ? "خدمة التحقق غير متاحة حالياً. لم نتمكن من تأكيد حالة هذا السجل. أعد المحاولة لاحقاً." : "Verification is temporarily unavailable. The status of this record could not be confirmed. Please retry later."}</div>}
+        {searchTriggered && !isLoading && !error && result && (
           <>
             {result.found && result.retracted ? (
               /* ─── RETRACTED APPLICATION ─── */
@@ -120,7 +139,7 @@ export default function VerifyIRB() {
                     <p className="text-sm text-red-800">{result.retractionReason}</p>
                     <div className="flex items-center gap-2 text-xs text-red-600">
                       <Calendar className="h-3 w-3" />
-                      <span>{t("retract.date")}: {result.retractedAt ? new Date(result.retractedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A"}</span>
+                      <span>{t("retract.date")}: {result.retractedAt ? new Date(result.retractedAt).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A"}</span>
                     </div>
                   </div>
 
@@ -144,7 +163,7 @@ export default function VerifyIRB() {
                     {result.approvedAt && (
                       <div>
                         <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("verify.approvedDate")} (Original)</span>
-                        <p className="text-sm font-medium">{new Date(result.approvedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
+                        <p className="text-sm font-medium">{new Date(result.approvedAt).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
                       </div>
                     )}
                   </div>
@@ -246,7 +265,7 @@ export default function VerifyIRB() {
                         <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t("verify.approvedDate")}</span>
                       </div>
                       <p className="text-sm font-medium text-primary">
-                        {result.approvedAt ? new Date(result.approvedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A"}
+                        {result.approvedAt ? new Date(result.approvedAt).toLocaleDateString(isAr ? "ar-SA" : "en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A"}
                       </p>
                     </div>
                   </div>

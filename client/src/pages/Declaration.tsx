@@ -1,3 +1,4 @@
+import { readUploadBase64 } from "@/lib/files";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -54,11 +55,7 @@ export default function Declaration() {
   const handleCertUpload = async (file: File) => {
     setUploading(true);
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve) => {
-        reader.onload = () => { resolve((reader.result as string).split(",")[1]); };
-        reader.readAsDataURL(file);
-      });
+      const base64 = await readUploadBase64(file);
       const result = await uploadFile.mutateAsync({
         fileName: file.name,
         fileData: base64,

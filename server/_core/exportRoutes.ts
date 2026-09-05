@@ -1,3 +1,6 @@
+import { safeLogError } from "./safeLog";
+import { assertStaffMfa } from "./staffAuth";
+import { z } from "zod";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { sdk } from "./sdk";
@@ -23,13 +26,11 @@ import {
 } from "../snihProposalExport";
 import { reserveLlmCall } from "./budget";
 
-type GenerateFormatBody = {
-  slug?: string;
-  lang?: string;
-  format?: string;
-  answers?: Record<string, string>;
-  appId?: number;
-};
+function staffExportAllowed(user: { authLevel?: string }, res: Response): boolean {
+  try { assertStaffMfa(user); return true; }
+  catch { res.status(403).type("text/plain").send("Staff exports require multi-factor authentication"); return false; }
+}
+
 
 /**
  * Streamed export endpoints. Two formats:
@@ -41,10 +42,35 @@ type GenerateFormatBody = {
  *   - ZIP : admin only (the bundle is intended for regulatory inspection)
  */
 export function registerExportRoutes(app: Express) {
+  // Protocols and decision documents must not enter shared caches or execute
+  // active content when viewed inline on the application's authenticated origin.
+  app.use("/api/export", (_req, res, next) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+    next();
+  });
+
+  app.get("/api/export/public-certificate/:irbNumber", async (req, res) => {
+    try {
+      const number = req.params.irbNumber;
+      if (!/^[A-Za-z0-9-]{5,64}$/.test(number)) { res.status(404).send("not found"); return; }
+      const application = await db.getApplicationByIrbNumber(number);
+      if (!application || !["approved", "retracted"].includes(application.status) || !application.humanDecisionByUserId || !application.humanDecisionAt) { res.status(404).send("not found"); return; }
+      const artifact = await renderCertificateArtifact({ app: application, applicantName: null, applicantEmail: null, redactForPublic: true });
+      res.setHeader("Content-Type", artifact.contentType);
+      res.setHeader("Content-Disposition", `attachment; filename="irb-record-${number}.${artifact.extension}"`);
+      res.send(artifact.buffer);
+    } catch {
+      if (!res.headersSent) res.status(503).type("text/plain").send("Decision document temporarily unavailable");
+    }
+  });
   app.get("/api/export/application/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
-      if (!Number.isFinite(id)) {
+      const id = /^\d+$/.test(req.params.id) ? Number(req.params.id) : NaN;
+      if (!Number.isSafeInteger(id) || id <= 0) {
         res.status(400).type("text/plain").send("invalid id");
         return;
       }
@@ -62,6 +88,7 @@ export function registerExportRoutes(app: Express) {
         res.status(403).type("text/plain").send("forbidden");
         return;
       }
+      if (application.applicantId !== user.id && !staffExportAllowed(user, res)) return;
 
       const [authors, audit, applicant] = await Promise.all([
         db.getAuthorsByApplication(id),
@@ -78,7 +105,7 @@ export function registerExportRoutes(app: Express) {
           department: a.department,
           country: a.country,
         })),
-        audit: audit.map(a => ({
+        audit: (user.role === "admin" ? audit : []).map(a => ({
           action: a.action,
           details: a.details,
           createdAt: a.createdAt,
@@ -94,15 +121,15 @@ export function registerExportRoutes(app: Express) {
       );
       res.send(html);
     } catch (err) {
-      console.error("[Export HTML] failed:", err);
+      console.error("[Export HTML] failed:", safeLogError(err));
       if (!res.headersSent) res.status(500).type("text/plain").send("export failed");
     }
   });
 
   app.get("/api/export/inspector/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
-      if (!Number.isFinite(id)) {
+      const id = /^\d+$/.test(req.params.id) ? Number(req.params.id) : NaN;
+      if (!Number.isSafeInteger(id) || id <= 0) {
         res.status(400).type("text/plain").send("invalid id");
         return;
       }
@@ -117,6 +144,7 @@ export function registerExportRoutes(app: Express) {
         res.status(403).type("text/plain").send("admin required");
         return;
       }
+      if (!staffExportAllowed(user, res)) return;
       const application = await db.getApplicationById(id);
       if (!application) {
         res.status(404).type("text/plain").send("not found");
@@ -149,9 +177,14 @@ export function registerExportRoutes(app: Express) {
 
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      stream.on("error", () => {
+        if (!res.headersSent) res.status(500).end("Archive generation failed");
+        else res.destroy();
+      });
+      res.on("close", () => { if (!res.writableEnded) stream.destroy(); });
       stream.pipe(res);
     } catch (err) {
-      console.error("[Export ZIP] failed:", err);
+      console.error("[Export ZIP] failed:", safeLogError(err));
       if (!res.headersSent) res.status(500).type("text/plain").send("export failed");
     }
   });
@@ -171,8 +204,8 @@ export function registerExportRoutes(app: Express) {
       applicantEmail: string | null;
     } | null = null;
     try {
-      const id = parseInt(req.params.id, 10);
-      if (!Number.isFinite(id)) {
+      const id = /^\d+$/.test(req.params.id) ? Number(req.params.id) : NaN;
+      if (!Number.isSafeInteger(id) || id <= 0) {
         res.status(400).type("text/plain").send("invalid id"); return;
       }
       const user = await sdk.authenticateRequest(req).catch(() => null);
@@ -183,6 +216,7 @@ export function registerExportRoutes(app: Express) {
       if (!application || (application.applicantId !== user.id && user.role !== "admin")) {
         res.status(404).type("text/plain").send("not found"); return;
       }
+      if (application.applicantId !== user.id && !staffExportAllowed(user, res)) return;
       if (!isCertificateEligibleStatus(application.status)) {
         res.status(409).type("text/plain").send("certificate is issued only for approved, rejected, or retracted applications");
         return;
@@ -222,7 +256,7 @@ export function registerExportRoutes(app: Express) {
       );
       res.send(artifact.buffer);
     } catch (err) {
-      console.error("[Export Cert] failed:", err);
+      console.error("[Export Cert] failed:", safeLogError(err));
       if (res.headersSent) return;
       if (eligiblePayload) {
         try {
@@ -280,7 +314,7 @@ export function registerExportRoutes(app: Express) {
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.send(pdf);
     } catch (err) {
-      console.error("[Export Resource] failed:", err);
+      console.error("[Export Resource] failed:", safeLogError(err));
       if (!res.headersSent)
         res.status(500).type("text/plain").send("resource generation failed");
     }
@@ -290,8 +324,8 @@ export function registerExportRoutes(app: Express) {
   // Generates a pre-filled template from the applicant's saved data.
   app.get("/api/export/application/:id/format/:fileName", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
-      if (!Number.isFinite(id)) {
+      const id = /^\d+$/.test(req.params.id) ? Number(req.params.id) : NaN;
+      if (!Number.isSafeInteger(id) || id <= 0) {
         res.status(400).type("text/plain").send("invalid id");
         return;
       }
@@ -309,6 +343,7 @@ export function registerExportRoutes(app: Express) {
         res.status(403).type("text/plain").send("forbidden");
         return;
       }
+      if (application.applicantId !== user.id && !staffExportAllowed(user, res)) return;
 
       const fileName = req.params.fileName || "";
       const m = fileName.match(/^([a-z0-9-]{1,64})\.(pdf|docx)$/i);
@@ -359,7 +394,7 @@ export function registerExportRoutes(app: Express) {
       res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
       res.send(pdf);
     } catch (err) {
-      console.error("[Export Format] failed:", err);
+      console.error("[Export Format] failed:", safeLogError(err));
       if (!res.headersSent) res.status(500).type("text/plain").send("format export failed");
     }
   });
@@ -368,7 +403,19 @@ export function registerExportRoutes(app: Express) {
   // User answers questions in the wizard, then generates a stamped document.
   app.post("/api/export/format/generate", async (req: Request, res: Response) => {
     try {
-      const body = req.body as GenerateFormatBody;
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) { res.status(401).type("text/plain").send("authentication required"); return; }
+      const parsedBody = z.object({
+        slug: z.string().regex(/^[a-z0-9-]{1,64}$/),
+        lang: z.enum(["en", "ar"]).optional(),
+        format: z.enum(["pdf", "docx"]).optional(),
+        answers: z.record(z.string().max(100), z.string().max(8000)).optional(),
+        appId: z.number().int().positive().optional(),
+      }).strict().safeParse(req.body);
+      if (!parsedBody.success || Object.keys(parsedBody.data.answers ?? {}).length > 120 || JSON.stringify(parsedBody.data.answers ?? {}).length > 64000) {
+        res.status(400).type("text/plain").send("Invalid or oversized template answers"); return;
+      }
+      const body = parsedBody.data;
       const slug = typeof body.slug === "string" ? body.slug : "";
       if (!isFormattableSlug(slug)) {
         res.status(400).type("text/plain").send("invalid or unsupported template slug");
@@ -396,6 +443,7 @@ export function registerExportRoutes(app: Express) {
           res.status(403).type("text/plain").send("forbidden");
           return;
         }
+        if (application.applicantId !== user.id && !staffExportAllowed(user, res)) return;
       }
 
       const lang = parseExportLang(body.lang);
@@ -428,7 +476,7 @@ export function registerExportRoutes(app: Express) {
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.send(pdf);
     } catch (err) {
-      console.error("[Export Format Generate] failed:", err);
+      console.error("[Export Format Generate] failed:", safeLogError(err));
       if (!res.headersSent) res.status(500).type("text/plain").send("format generation failed");
     }
   });
@@ -436,8 +484,9 @@ export function registerExportRoutes(app: Express) {
   // SNIH combined proposal DOCX — Stage 2 must be complete (all core fields filled)
   app.get("/api/export/proposal/:id.docx", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
-      if (!Number.isFinite(id)) {
+      if (req.get("sec-fetch-site") === "cross-site") { res.status(403).type("text/plain").send("Open the proposal download from your application"); return; }
+      const id = /^\d+$/.test(req.params.id) ? Number(req.params.id) : NaN;
+      if (!Number.isSafeInteger(id) || id <= 0) {
         res.status(400).type("text/plain").send("invalid id");
         return;
       }
@@ -455,6 +504,7 @@ export function registerExportRoutes(app: Express) {
         res.status(403).type("text/plain").send("forbidden");
         return;
       }
+      if (application.applicantId !== user.id && !staffExportAllowed(user, res)) return;
       if (!isStage2CompleteForProposal(application)) {
         res.status(400).type("text/plain").send("Complete Stage 2 before generating the proposal package.");
         return;
@@ -478,7 +528,7 @@ export function registerExportRoutes(app: Express) {
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.send(buf);
     } catch (err) {
-      console.error("[Export Proposal] failed:", err);
+      console.error("[Export Proposal] failed:", safeLogError(err));
       if (!res.headersSent) res.status(500).type("text/plain").send("proposal generation failed");
     }
   });

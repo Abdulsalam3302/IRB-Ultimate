@@ -32,6 +32,9 @@ export const committeeMembers = mysqlTable("committee_members", {
   title: varchar("title", { length: 128 }),
   institution: varchar("institution", { length: 255 }),
   isActive: boolean("isActive").default(true).notNull(),
+  qualificationReference: text("qualificationReference"),
+  appointedByUserId: int("appointedByUserId"),
+  appointedAt: timestamp("appointedAt"),
   totalAssignments: int("totalAssignments").default(0).notNull(),
   totalResponses: int("totalResponses").default(0).notNull(),
   totalApprovals: int("totalApprovals").default(0).notNull(),
@@ -153,6 +156,8 @@ export const applications = mysqlTable("applications", {
   certificateUrl: text("certificateUrl"),
   retractionCertificateUrl: text("retractionCertificateUrl"),
   approvedAt: timestamp("approvedAt"),
+  humanDecisionByUserId: int("humanDecisionByUserId"),
+  humanDecisionAt: timestamp("humanDecisionAt"),
   retractedAt: timestamp("retractedAt"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),

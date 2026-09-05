@@ -1,222 +1,87 @@
-# IRB Ultimate
+# IRB Ultimate 2.2.0
 
-AI-powered Institutional Review Board platform for Saudi Arabia. Submit research
-protocols, run a two-stage AI compliance and ethics review, route to a scientific
-committee, and issue downloadable IRB certificates — all aligned with NBCE
-regulations and Saudi Vision 2030.
+IRB Ultimate is a bilingual Arabic/English research ethics workflow platform being prepared for a controlled Saudi Arabia pilot. It supports protocol drafting, advisory AI checks, qualified human committee review, decision records, and public verification of eligible decisions.
 
-Built and approved by **Dr. Abdulsalam Aleid** in partnership with the
-**Advanced Healthcare Systems Society (AHSS)**.
+**The software does not confer IRB registration, government endorsement, institutional authority, or international recognition.** Approval and issuance remain disabled by default (`IRB_ISSUANCE_ENABLED=false`). A qualified, authorized human committee must make final decisions. Planned global expansion in 2027 requires validation for each jurisdiction and institution; recognition is not activated by the calendar.
 
----
+## What the platform does
 
-## Stack
+- Guides applicants through declarations, classification, detailed protocols, uploads, and revisions in Arabic and English.
+- Provides bounded AI drafting and advisory review. Missing information, malformed output, and unavailable providers remain explicit; AI does not issue approval or manufacture evidence.
+- Runs two advisory model panels, each comprising six domain analyses and a synthesis. These are model outputs, not hundreds of experts, independent human votes, or a committee quorum.
+- Records human committee assignments, decisions, audit history and decision provenance. Draft edits invalidate prior AI checks, and locked applications reject chat changes.
+- Generates status-aware PDF/DOCX decision records, draft proposals, and bilingual resource templates. Public decision copies are redacted and require recorded human provenance; legacy automated approvals are not retroactively attested.
+- Exposes public information for search/answer engines and read-only browser WebMCP tools and authenticated server MCP workflow tools (including draft edits and submission). Automation receives no authority to approve research or bypass authentication.
 
-- **Frontend:** React 19 + Vite + TailwindCSS + Radix UI + tRPC + React Query + Wouter
-- **Backend:** Node.js + Express + tRPC + Drizzle ORM + MySQL 8
-- **AI:** Any OpenAI-compatible `/v1/chat/completions` endpoint (Forge / OpenAI / etc.)
-- **Storage:** S3-compatible bucket (optional — uploads no-op if unconfigured)
-- **Auth:** External OAuth provider, with a local **Dev Login** fallback for development
+## Runtime and local setup
 
----
-
-## Quick start (local)
+Use **Node.js 24.x** and **pnpm 10.34.5**, matching `package.json`, `.node-version`, Docker and CI. The frontend uses React 19/Vite; the API uses Express/tRPC, Drizzle and a MySQL-compatible database. CI uses MariaDB 11. Existing migration syntax is also designed for TiDB; do not assume stock MySQL 8 compatibility without a fresh migration test.
 
 ```bash
-# 1. Install deps
-pnpm install
-
-# 2. Configure env
+npm install -g pnpm@10.34.5
+pnpm install --frozen-lockfile
 cp .env.example .env
-#   Edit .env — at minimum set DATABASE_URL and JWT_SECRET.
-#   Leave OAUTH_SERVER_URL empty to enable the local /api/dev/login bypass.
+```
 
-# 3. Create the database (MySQL 8+)
-mysql -uroot -e "CREATE DATABASE IF NOT EXISTS irb_platform;"
+Edit the local file with a dedicated development database and a generated session secret (`openssl rand -hex 48`). Keep credentials out of Git and chat. Create the development database using your database administrator, then:
 
-# 4. Run migrations
-pnpm db:push
-
-# 5. Start the dev server
+```bash
+pnpm db:migrate
+pnpm exec playwright install chromium
 pnpm dev
-#   → http://localhost:3000  (or next free port)
-#   → http://localhost:3000/api/dev/login  (sign in as admin in dev mode)
 ```
 
-Visit `/api/dev/login`, accept the defaults, and you're signed in as the platform owner.
-Set `OWNER_OPEN_ID=dev-owner-001` in `.env` to auto-promote that openId to admin.
+The development server binds to loopback, normally port 3000. Native applicant registration is available. Local developer login requires explicit `DEV_LOGIN_ENABLED=1`; it is always disabled in production. For a disposable local owner account, set `OWNER_OPEN_ID=dev-owner-001` and use the local developer flow. Do not expose that environment through a public tunnel.
 
----
+AI credentials are optional for local startup. Without an enabled, working provider, model operations report unavailable. Submission rules and human review remain enforced; no neutral score substitutes for a failed model call. Local development uses private disk storage when remote storage is unconfigured. Production rejects that fallback unless an operator explicitly provisions a durable private volume.
 
-## Scripts
+## Commands and verification
 
-| Command         | What it does                                        |
-| --------------- | --------------------------------------------------- |
-| `pnpm dev`      | Start the dev server with hot reload (tsx watch)    |
-| `pnpm build`    | Build the SPA + bundle the server to `dist/`        |
-| `pnpm start`    | Run the production bundle (`NODE_ENV=production`)   |
-| `pnpm check`    | TypeScript typecheck (no emit)                      |
-| `pnpm test`     | Run the vitest suite                                |
-| `pnpm db:push`  | Generate + apply Drizzle migrations                 |
-| `pnpm format`   | Prettier write across the repo                      |
+| Command                                                             | Purpose                                                                       |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `pnpm dev`                                                          | Start the development server                                                  |
+| `pnpm check`                                                        | TypeScript verification                                                       |
+| `pnpm test`                                                         | Vitest; database-backed cases need an isolated test database                  |
+| `pnpm build`                                                        | Build public SEO pages, workspace frontend, server and templates              |
+| `pnpm start`                                                        | Run the production bundle                                                     |
+| `pnpm db:migrate`                                                   | Apply checked-in migrations                                                   |
+| `pnpm db:push`                                                      | Generate and apply migrations during schema development; review generated SQL |
+| `node scripts/check-bundle.mjs`                                     | Check frontend bundle budgets after building                                  |
+| `NODE_ENV=test pnpm exec tsx scripts/verify-document-generation.ts` | Generate synthetic PDF/DOCX fixtures                                          |
 
----
+Tests do not load developer `.env`. If `DATABASE_URL` is supplied, it must point to loopback and its database name must end in `_test`. Create a disposable database first; never use a research database. For example, with a locally provisioned test-only account:
 
-## Environment variables
-
-See `.env.example` for the canonical list. Highlights:
-
-| Variable                     | Required | Notes |
-| ---------------------------- | :------: | ----- |
-| `DATABASE_URL`               | yes      | `mysql://user:pass@host:3306/db` |
-| `JWT_SECRET`                 | yes      | Strong random — used to sign session cookies |
-| `VITE_APP_ID`                | yes      | Any non-empty string; appears in JWT claims |
-| `OWNER_OPEN_ID`              | yes      | First admin's openId |
-| `OAUTH_SERVER_URL`           | prod     | OAuth gateway (leave blank in dev to use the dev login) |
-| `VITE_OAUTH_PORTAL_URL`      | prod     | Public OAuth portal the SPA redirects to |
-| `BUILT_IN_FORGE_API_URL`     | optional | OpenAI-compatible base URL for AI review |
-| `BUILT_IN_FORGE_API_KEY`     | optional | API key for the above |
-| `AWS_REGION` / `S3_BUCKET` …  | optional | S3 for file uploads & certificates |
-
-Without an LLM key the platform still runs end-to-end — AI scoring falls back to
-neutral defaults so you can exercise the full workflow.
-
----
-
-## Architecture
-
-```
-client/                  Vite SPA (React 19 + tRPC client)
-  src/pages/             Route components (landing, dashboard, admin, …)
-  src/contexts/          Auth, language (Arabic/English RTL), theme
-server/
-  _core/
-    index.ts             Express bootstrap + middleware
-    security.ts          Headers, rate-limit, error handler
-    devLogin.ts          Local /api/dev/login bypass (dev only)
-    oauth.ts             OAuth callback handler
-    sdk.ts               OAuth + JWT session SDK
-    llm.ts               OpenAI-compatible chat-completions client
-  routers.ts             Full tRPC API surface
-  aiReview.ts            Stage 1 & Stage 2 AI compliance reviewers
-  aiSwarmReview.ts       Owner-only dual-panel AI swarm deep-audit engine
-  certificate.ts         Approved-IRB certificate generator
-  retractionCertificate.ts  Retraction certificate (white/red)
-  emailService.ts        SMTP notifications (no-op when unset)
-  storage.ts             S3 presigned upload helpers
-  db.ts                  Drizzle data-access helpers
-shared/                  Cross-cutting types & constants
-drizzle/                 SQL migrations + schema
+```bash
+DATABASE_URL='mysql://irb_test:test_only_password@127.0.0.1:3306/irb_ci_test' pnpm db:migrate
+DATABASE_URL='mysql://irb_test:test_only_password@127.0.0.1:3306/irb_ci_test' pnpm test
+pnpm check
+pnpm build
+node scripts/check-bundle.mjs
 ```
 
-### Workflow (3 phases)
+These commands are the verification procedure, not a claim that a particular commit or live deployment passed. Current evidence and pending release checks belong in [production readiness](docs/production-readiness.md). The CI workflow includes isolated migration, dependency audit, typecheck, tests, build, browser and bounded load checks. Historical scripts such as `e2e:roles` are development tools; use the current CI readiness workflow for release acceptance.
 
-1. **Phase 0 — Declaration of Honesty:** NBCE bioethics certificate + truth consent.
-2. **Stage 1 — Classification:** research type, IRB category, PI info → AI gateway review.
-3. **Stage 2 — Detailed Ethics:** methodology, sample size, consent, risk/benefit → AI ethics review.
+## Security and deployment
 
-Submitted applications are randomly assigned to 5 scientific committee members
-with a 24-hour expiry. Three approvals advance to admin for final decision.
-Approved IRBs receive a downloadable certificate; retracted IRBs return a
-retraction PDF on the public verify page.
+Production controls include revocable signed sessions, shared database-backed request/AI accounting, staff MFA, origin checks, bounded expensive operations, private downloads, upload scanning, strict model output validation, and privacy-filtered external notifications. These controls require correctly configured infrastructure and operating procedures; prompt defenses are not complete data-loss prevention.
 
-### AI Swarm Review (owner-only)
+Start with [DEPLOY.md](DEPLOY.md) for institutional and infrastructure prerequisites, [PUBLIC_DEPLOY.md](PUBLIC_DEPLOY.md) for the checked-in Render/Vercel topology, and [the operations runbook](docs/operations-runbook.md) for incidents, backup restoration and release checks. [SECURITY.md](SECURITY.md) describes reporting and security boundaries. `.env.example` contains safe configuration placeholders.
 
-The platform owner — and only the owner — can run a **dual-panel AI swarm
-deep audit** on any application from the admin panel's *AI Swarm* tab
-(`server/aiSwarmReview.ts`, `client/src/components/AiSwarmConsole.tsx`):
+The checked-in Render blueprint is a free Frankfurt service with automatic deployment disabled. It is a synthetic pilot topology, not evidence of Saudi data residency, production capacity, backup durability or live availability. A split frontend/API deployment routes API traffic through both providers, which must be included in the data-flow assessment.
 
-- **Two fully independent panels** per run (Panel Alpha — adversarial audit;
-  Panel Beta — standards review). They never see each other's output and are
-  persisted separately so the owner can compare them for agreement.
-- **510 simulated expert perspectives per panel** across six specialty
-  clusters: methodology & biostatistics, ethics & consent, regulatory & legal,
-  patient & community advocacy, data privacy & security, scientific merit &
-  novelty. Each cluster reports vote tallies, findings, red flags, required
-  changes, and dissenting opinions; a panel chair synthesises the verdict.
-- **Strict by construction.** The pass/fail verdict is enforced server-side
-  (score ≥ 80, every cluster ≥ 60, zero red flags, ≥ 70% approve votes) — a
-  lenient model cannot soften it, and fenced applicant input defeats prompt
-  injection.
-- **Fair and unbiased.** Binding anti-bias rules in every prompt, evidence-only
-  scoring, mandatory actionable feedback on every fail, and dissent reporting.
-- **Advisory and hidden.** It never changes application status, never notifies
-  the applicant, and is invisible to applicants, reviewers, and even secondary
-  admins (`ownerProcedure` fails closed; the UI tab renders only for the
-  owner). Results live in the `ai_swarm_reviews` table; every run is audited.
-- **Budgeted.** One run reserves 14 LLM calls against the owner's daily AI
-  budget up front (SA-03 policy, no refunds on failure).
+## Source map
 
-The owner is identified by `OWNER_OPEN_ID` (or `OWNER_EMAIL`) captured at
-boot — if neither is set, the feature is disabled for everyone (fails closed).
+| Directory/file                                  | Responsibility                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------- |
+| `client/src/`                                   | Applicant/staff interface, bilingual content and public pages    |
+| `server/routers.ts`, `server/db.ts`             | Authorization, application transitions and persistent records    |
+| `server/_core/`                                 | Authentication, abuse controls, transport, readiness and exports |
+| `server/aiReview.ts`, `server/aiSwarmReview.ts` | Advisory AI evaluations                                          |
+| `server/services/`                              | Chat drafting, advisory pipeline, upload scanning and backups    |
+| `server/certificateV2.ts`, `server/templates/`  | Decision records and templates                                   |
+| `server/literature/`                            | Bounded external evidence discovery with source status           |
+| `server/emailService.ts`                        | In-app notifications; no SMTP email transport is implemented     |
+| `drizzle/`, `shared/`                           | Schema/migrations and shared contracts                           |
+| `docs/`                                         | Audit evidence, operational requirements and launch preparation  |
 
----
-
-## Going to production
-
-A non-exhaustive checklist before exposing this publicly:
-
-1. **Rotate secrets** — generate a fresh `JWT_SECRET` (`openssl rand -hex 48`).
-   Set strong DB credentials and never commit `.env`.
-2. **Replace dev login** — set `OAUTH_SERVER_URL` and `VITE_OAUTH_PORTAL_URL`.
-   Dev login auto-disables when `NODE_ENV=production` *or* `OAUTH_SERVER_URL` is
-   set, but verify in your deploy.
-3. **TLS only** — terminate HTTPS at your load balancer. Session cookies use
-   `SameSite=Lax` (+ `Secure` when the request is HTTPS).
-4. **DB:** point `DATABASE_URL` at a managed MySQL (RDS, PlanetScale, etc.).
-   Run `pnpm db:push` once on deploy.
-5. **AI provider:** configure `BUILT_IN_FORGE_API_URL` + `BUILT_IN_FORGE_API_KEY`.
-6. **S3:** configure `AWS_*` and `S3_BUCKET` so uploads and certificates persist.
-7. **SMTP:** configure `SMTP_*` so notification emails actually send.
-8. **Reverse proxy:** terminate TLS, set `X-Forwarded-For`, and respect
-   `app.set('trust proxy', 1)` (already enabled).
-9. **Backups:** enable point-in-time recovery on your MySQL instance — the
-   `audit_log` and `application_versions` tables are the truth-of-record.
-
-### Built-in hardening
-
-- Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
-  `Permissions-Policy`, HSTS in prod) — `server/_core/security.ts`.
-- In-memory IP rate-limit on `/api/*` (200 req/min general, 30/min strict,
-  5/min auth). Process-local — use Redis when running multiple nodes.
-- Session JWT/cookie TTL: **14 days** (`SESSION_TTL_MS`).
-- Error handler that hides stack traces in production.
-- Health probe at `GET /api/health` for load balancers.
-- Cookies `httpOnly`, `Secure` over HTTPS, `SameSite=Lax`.
-- Open beta: first-visit disclaimer gate; owner-only observability at
-  `/admin/observability`.
-
-### Public hosting (v1.1+)
-
-- **API:** Render free Web Service (`render.yaml`) — replaces Railway  
-- **SPA edge:** Vercel (rewrites `/api/*` → Render)  
-- **DB:** TiDB Cloud Serverless (MySQL-compatible) or any TLS MySQL  
-- Full steps: [`PUBLIC_DEPLOY.md`](PUBLIC_DEPLOY.md)
-
----
-
-## Testing
-
-`pnpm test` runs the vitest suite (106 tests covering tRPC procedures, RBAC,
-input validation, owner-gating of the AI swarm, and shared types). The tests
-boot a real MySQL connection using `DATABASE_URL` from `.env` — make sure
-migrations are applied first.
-
-`pnpm e2e:roles` drives the running dev server through all five privilege
-levels — visitor, applier, reviewer, secondary admin, and owner — covering
-registration/login, the full application journey, committee voting, final
-approval + public certificate verification, and the owner-only AI swarm
-endpoints (57 checks). Requires `DEV_LOGIN_ENABLED=1` and
-`OWNER_OPEN_ID=dev-owner-001` in `.env`.
-
----
-
-## License
-
-MIT — see `package.json`.
-
-## Acknowledgements
-
-Made with love in Saudi Arabia with the
-[Advanced Healthcare Systems Society](https://www.ahss-sa.org/).
-Approved by [Dr. Abdulsalam Aleid](https://www.linkedin.com/in/abdulsalam-aleid-mbbs-mba-mim-911446142).
+Package metadata declares the MIT license. Confirm distribution and third-party asset rights as part of release management.

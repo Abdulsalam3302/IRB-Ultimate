@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { signOutSupabase } from "@/lib/supabase";
@@ -13,6 +14,7 @@ export function useAuth(options?: UseAuthOptions) {
   const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
     options ?? {};
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
@@ -29,19 +31,19 @@ export function useAuth(options?: UseAuthOptions) {
     try {
       await logoutMutation.mutateAsync();
     } catch (error: unknown) {
-      if (
-        error instanceof TRPCClientError &&
-        error.data?.code === "UNAUTHORIZED"
-      ) {
-        return;
+      // An unavailable server cannot prove that its httpOnly cookie was revoked.
+      if (!(error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED")) {
+        await queryClient.cancelQueries();
+        queryClient.clear();
+        throw error;
       }
-      throw error;
-    } finally {
-      await signOutSupabase();
-      utils.auth.me.setData(undefined, null);
-      await utils.auth.me.invalidate();
     }
-  }, [logoutMutation, utils]);
+    await signOutSupabase();
+    await queryClient.cancelQueries();
+    // Clear every protocol, review, chat, and mutation cache before another login.
+    queryClient.clear();
+    utils.auth.me.setData(undefined, null);
+  }, [logoutMutation, queryClient, utils]);
 
   const state = useMemo(() => {
     // Do not persist the user profile (email/role/openId) to localStorage —

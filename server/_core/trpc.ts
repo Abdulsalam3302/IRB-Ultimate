@@ -4,6 +4,7 @@ import superjson from "superjson";
 import { reserveLlmCall } from "./budget";
 import type { TrpcContext } from "./context";
 import { ENV } from "./env";
+import { assertStaffMfa } from "./staffAuth";
 
 // Captured once at module init (same SA-26 rationale as db.ts): a mid-run
 // env mutation cannot re-target who counts as the platform owner.
@@ -64,6 +65,12 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+export const staffProcedure = protectedProcedure.use(t.middleware(async ({ ctx, next }) => {
+  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  assertStaffMfa(ctx.user);
+  return next();
+}));
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
@@ -71,6 +78,7 @@ export const adminProcedure = t.procedure.use(
     if (!ctx.user || ctx.user.role !== 'admin') {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
+    assertStaffMfa(ctx.user);
 
     return next({
       ctx: {
@@ -93,6 +101,7 @@ export const ownerProcedure = t.procedure.use(
     if (!isPlatformOwner(ctx.user)) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
+    assertStaffMfa(ctx.user!);
     return next({ ctx: { ...ctx, user: ctx.user! } });
   }),
 );

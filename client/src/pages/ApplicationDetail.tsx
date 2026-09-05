@@ -79,19 +79,16 @@ export default function ApplicationDetail() {
                 Chromium against the redesigned formal certificate template.
                 Available for any approved app — even if certificateUrl
                 wasn't persisted at approval time. */}
-            {app.status === "approved" && (
-              <Button onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank")}>
+            {app.status === "approved" && app.humanDecisionByUserId && app.humanDecisionAt && (
+              <Button onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank", "noopener,noreferrer")}>
                 <Download className="h-4 w-4 me-2" /> {isAr ? "تحميل الشهادة (PDF)" : "Download Certificate (PDF)"}
               </Button>
             )}
-            {app.certificateUrl && app.status !== "approved" && (
-              <Button variant="outline" onClick={() => window.open(app.certificateUrl!, "_blank")}>
-                <Download className="h-4 w-4 me-2" /> {isAr ? "الشهادة (نسخة قديمة)" : "Certificate (legacy)"}
-              </Button>
-            )}
+
           </div>
         </div>
 
+        {["approved", "rejected", "permanently_rejected", "retracted"].includes(app.status) && (!app.humanDecisionByUserId || !app.humanDecisionAt) && <div role="status" className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">{isAr ? "هذا سجل قرار سابق دون توثيق للقرار البشري المخول. يتطلب إعادة تحقق من المؤسسة قبل إصدار أو تنزيل شهادة أو الاعتماد عليه للموافقة الأخلاقية." : "This historical decision has no recorded authorized human decision provenance. Institutional revalidation is required before a certificate can be issued or downloaded, or the record relied on as ethics approval."}</div>}
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <Card>

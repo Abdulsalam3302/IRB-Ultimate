@@ -1,0 +1,24 @@
+{
+  "at": "2026-09-05T01:41:53.558Z",
+  "base": "http://127.0.0.1:3017",
+  "checks": [
+    "English homepage renders and government-affiliation claim absent",
+    "Arabic RTL mobile homepage renders without horizontal overflow",
+    "Arabic mobile /resources renders",
+    "Arabic mobile /policy renders",
+    "Arabic mobile /disclaimer renders",
+    "Arabic mobile /support renders",
+    "Arabic mobile /verify renders",
+    "Arabic mobile /registry renders",
+    "Arabic mobile /statistics renders",
+    "Auth route is usable on mobile and noindex without a public canonical",
+    "/format/not-a-template has safe 404 UI and noindex",
+    "/not-a-real-page has safe 404 UI and noindex",
+    "/registry reports unavailable during an API outage",
+    "/statistics reports unavailable during an API outage",
+    "Public UI and language toggle work when browser storage is denied"
+  ],
+  "browserErrors": [],
+  "thirdPartyRequests": [],
+  "evidenceScope": "Local production-mode public route smoke; no real login, model provider, certificate issuance, or native WebMCP invocation"
+}

@@ -17,7 +17,9 @@ if (!rawUrl) {
   process.exit(1);
 }
 
-const base = rawUrl.replace(/\/$/, "");
+const origin = new URL(rawUrl);
+if (origin.protocol !== "https:" || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) throw new Error("Expected an HTTPS backend origin without credentials or a path.");
+const base = origin.origin;
 let existing = {};
 try {
   existing = JSON.parse(fs.readFileSync(vercelPath, "utf8"));
@@ -30,14 +32,12 @@ const config = {
   installCommand: existing.installCommand ?? "pnpm install --frozen-lockfile",
   buildCommand: existing.buildCommand ?? "pnpm run build",
   outputDirectory: existing.outputDirectory ?? "dist/public",
-  rewrites: [
-    { source: "/api/:path*", destination: `${base}/api/:path*` },
-    { source: "/uploads/:path*", destination: `${base}/uploads/:path*` },
-    {
-      source: "/((?!assets/).*)",
-      destination: "/index.html",
-    },
-  ],
+  rewrites: existing.rewrites.map(row => {
+    if (row.source === "/api/:path*") return { ...row, destination: `${base}/api/:path*` };
+    if (row.source === "/uploads/:path*") return { ...row, destination: `${base}/uploads/:path*` };
+    if (row.source === "/.well-known/mcp.json") return { ...row, destination: `${base}/.well-known/mcp.json` };
+    return row;
+  }),
   redirects: existing.redirects ?? [
     { source: "/sign-in", destination: "/auth", permanent: false },
     { source: "/login", destination: "/auth", permanent: false },

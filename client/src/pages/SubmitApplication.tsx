@@ -91,19 +91,19 @@ export default function SubmitApplication() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <span>{isAr ? <>سيتم تعيين طلبك لـ <strong>5 أعضاء لجنة عشوائيين</strong></> : <>Your application will be assigned to <strong>5 random committee members</strong></>}</span>
+                  <span>{isAr ? <>يُحال الطلب إلى <strong>مراجعين بشريين مؤهلين ومُعيّنين</strong> وفق توفرهم</> : <>Your application enters the queue for <strong>qualified, appointed human reviewers</strong></>}</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <span>{isAr ? <>لكل مراجع <strong>24 ساعة</strong> لتقديم قراره</> : <>Each reviewer has <strong>24 hours</strong> to submit their decision</>}</span>
+                  <span>{isAr ? <>تحدد متطلبات اللجنة ومخاطر الدراسة وتوفر المراجعين مدة المراجعة</> : <>Timing depends on committee requirements, study risk, and reviewer availability</>}</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <span>{isAr ? <><strong>3 موافقات</strong> مطلوبة للتقدم لمراجعة المسؤول</> : <><strong>3 approvals</strong> are required to advance to admin review</>}</span>
+                  <span>{isAr ? <>يجب استكمال مراجعة اللجنة المطلوبة قبل القرار النهائي المخول</> : <>The required committee review must be completed before the authorized final decision</>}</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                  <span>{isAr ? <>عند الموافقة النهائية، سيتم إصدار <strong>شهادة IRB</strong> تلقائياً</> : <>Upon final approval, your <strong>IRB certificate</strong> will be generated automatically</>}</span>
+                  <span>{isAr ? <>تُصدر سجلات القرار بعد التحقق من استيفاء متطلبات الصلاحية المؤسسية</> : <>Decision records are issued after institutional authority requirements are verified</>}</span>
                 </li>
               </ul>
             </div>

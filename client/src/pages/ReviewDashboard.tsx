@@ -1,3 +1,4 @@
+import { StaffMfaNotice } from "@/components/StaffMfaNotice";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,9 +21,10 @@ export default function ReviewDashboard() {
   const [, setLocation] = useLocation();
   const { lang } = useT();
   const isAr = lang === "ar";
+  const needsMfa = Boolean(user?.staffMfaRequired && user.authLevel !== "aal2");
 
-  const { data: pendingReviews, isLoading: pendingLoading, refetch: refetchPending } = trpc.review.myPendingReviews.useQuery(undefined, { enabled: isAuthenticated });
-  const { data: allReviews, isLoading: allLoading, refetch: refetchAll } = trpc.review.myAllReviews.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: pendingReviews, isLoading: pendingLoading, refetch: refetchPending } = trpc.review.myPendingReviews.useQuery(undefined, { enabled: isAuthenticated && !needsMfa });
+  const { data: allReviews, isLoading: allLoading, refetch: refetchAll } = trpc.review.myAllReviews.useQuery(undefined, { enabled: isAuthenticated && !needsMfa });
   const [comments, setComments] = useState<Record<number, string>>({});
 
   const submitReview = trpc.review.submitReview.useMutation({
@@ -42,6 +44,8 @@ export default function ReviewDashboard() {
       </div>
     );
   }
+
+  if (needsMfa) return <StaffMfaNotice />;
 
   const getTimeRemaining = (expiresAt: Date) => {
     const diff = new Date(expiresAt).getTime() - Date.now();
@@ -91,8 +95,8 @@ export default function ReviewDashboard() {
                             )}
                           </div>
                           <div className="flex items-center gap-3 mt-2 text-xs">
-                            {review.application?.stage1AiScore !== null && <span>{isAr ? "المرحلة 1:" : "AI Stage 1:"} <strong>{review.application.stage1AiScore}/100</strong></span>}
-                            {review.application?.stage2AiScore !== null && <span>{isAr ? "المرحلة 2:" : "AI Stage 2:"} <strong>{review.application.stage2AiScore}/100</strong></span>}
+                            {review.application?.stage1AiScore != null && <span>{isAr ? "المرحلة 1:" : "AI Stage 1:"} <strong>{review.application.stage1AiScore}/100</strong></span>}
+                            {review.application?.stage2AiScore != null && <span>{isAr ? "المرحلة 2:" : "AI Stage 2:"} <strong>{review.application.stage2AiScore}/100</strong></span>}
                           </div>
                           <div className="flex items-center gap-2 mt-2">
                             <Timer className="h-3 w-3 text-yellow-600" />

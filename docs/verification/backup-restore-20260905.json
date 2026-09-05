@@ -1,0 +1,290 @@
+{
+  "verifiedAt": "2026-09-05T01:42:37.858Z",
+  "source": "isolated local irb_readiness_test",
+  "target": "new isolated local irb_restore_test",
+  "productionDataAccessed": false,
+  "archiveEncryption": "AES-256-GCM, PBKDF2-SHA256 600000 iterations, random salt/IV, authenticated header",
+  "archive": "/tmp/irb-backup-restore-drill-20260905/irb-irb_readiness_test-20260905T014116Z-77e24216.sql.gz.enc",
+  "tables": [
+    {
+      "table": "__drizzle_migrations",
+      "sourceRows": 20,
+      "restoredRows": 20,
+      "sourceSha256": "aec774146b9ed35fb0fb08c830042186c2f85e7f095d49a161c5e60046855b1a",
+      "restoredSha256": "aec774146b9ed35fb0fb08c830042186c2f85e7f095d49a161c5e60046855b1a",
+      "match": true
+    },
+    {
+      "table": "adverse_events",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "ai_swarm_reviews",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "amendments",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "analytics_events",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "analytics_sessions",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "application_versions",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "applications",
+      "sourceRows": 17,
+      "restoredRows": 17,
+      "sourceSha256": "e87b39be6f2e385e4d44a8390404fa6611e1bc9762fe19cb9d9097fd44c2226c",
+      "restoredSha256": "e87b39be6f2e385e4d44a8390404fa6611e1bc9762fe19cb9d9097fd44c2226c",
+      "match": true
+    },
+    {
+      "table": "audit_log",
+      "sourceRows": 19,
+      "restoredRows": 19,
+      "sourceSha256": "477f1d05628366c4e147606e8a5e8434a28d2964b702dda7dd01ed101093957f",
+      "restoredSha256": "477f1d05628366c4e147606e8a5e8434a28d2964b702dda7dd01ed101093957f",
+      "match": true
+    },
+    {
+      "table": "chat_application_messages",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "committee_members",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "file_uploads",
+      "sourceRows": 2,
+      "restoredRows": 2,
+      "sourceSha256": "b261755a0d5601ccf3c4b266d9e1dadc1d486680cd0347cb23baff3abc2ef913",
+      "restoredSha256": "b261755a0d5601ccf3c4b266d9e1dadc1d486680cd0347cb23baff3abc2ef913",
+      "match": true
+    },
+    {
+      "table": "llm_usage_daily",
+      "sourceRows": 2,
+      "restoredRows": 2,
+      "sourceSha256": "654f53768427073a12fd8f7ac3d7e04cd52f62c7a3b103c88bc30722308618d7",
+      "restoredSha256": "654f53768427073a12fd8f7ac3d7e04cd52f62c7a3b103c88bc30722308618d7",
+      "match": true
+    },
+    {
+      "table": "notifications",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "request_limits",
+      "sourceRows": 3,
+      "restoredRows": 5,
+      "sourceSha256": "33a41bc6c485a6a4d5ed71f201bf2a0637af05c5d79b1b2e62e5a9685165d49e",
+      "restoredSha256": "f8dae9b5143992b74b8a31bf37e05460ac145d95167e81ea60ea9c5989cec89d",
+      "match": false
+    },
+    {
+      "table": "research_authors",
+      "sourceRows": 7,
+      "restoredRows": 7,
+      "sourceSha256": "f51b061c634391310000190b8af222a5a02ee4d90c3f8a7c282c47f0b2c5b369",
+      "restoredSha256": "f51b061c634391310000190b8af222a5a02ee4d90c3f8a7c282c47f0b2c5b369",
+      "match": true
+    },
+    {
+      "table": "review_assignments",
+      "sourceRows": 0,
+      "restoredRows": 0,
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "match": true
+    },
+    {
+      "table": "session_revocations",
+      "sourceRows": 1,
+      "restoredRows": 1,
+      "sourceSha256": "1a0b8653920b093cb1a22bff0e952313770d7a31b8fddad8bec63e0f12724d54",
+      "restoredSha256": "1a0b8653920b093cb1a22bff0e952313770d7a31b8fddad8bec63e0f12724d54",
+      "match": true
+    },
+    {
+      "table": "support_tickets",
+      "sourceRows": 14,
+      "restoredRows": 14,
+      "sourceSha256": "20e4b4f0595199f7f691174ed98215ab5482785b902feb6b6dab2238a2c1db23",
+      "restoredSha256": "20e4b4f0595199f7f691174ed98215ab5482785b902feb6b6dab2238a2c1db23",
+      "match": true
+    },
+    {
+      "table": "users",
+      "sourceRows": 6,
+      "restoredRows": 6,
+      "sourceSha256": "d0ebaff800bb4d9ae033af84ea377afe3cb2dec3cb39447366142f2dc294d90d",
+      "restoredSha256": "d0ebaff800bb4d9ae033af84ea377afe3cb2dec3cb39447366142f2dc294d90d",
+      "match": true
+    }
+  ],
+  "allRowsMatch": false,
+  "currentSourceComparisonNote": "The live request_limits table expired between snapshot and comparison; other 19 tables matched. The authoritative archive INSERT-content comparison below covers every populated restored table.",
+  "archiveDataVerification": {
+    "method": "Authenticated archive decompressed in memory; all INSERT statements compared against a fresh target dump with identical mysqldump options",
+    "archiveInsertSha256": "6a385663b916c37d722d07d715f367af2eff58ad2363975e39742e6723a5fed6",
+    "restoredInsertSha256": "6a385663b916c37d722d07d715f367af2eff58ad2363975e39742e6723a5fed6",
+    "allSnapshotDataMatches": true,
+    "insertStatements": 10
+  },
+  "negativeChecks": [
+    {
+      "name": "checksum mismatch prevents writes",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "Backup checksum mismatch; target was not modified"
+    },
+    {
+      "name": "authenticated encryption rejects modified ciphertext even with recomputed checksum",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "Backup authentication/decryption failed; target was not modified"
+    },
+    {
+      "name": "wrong passphrase prevents writes",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "Backup authentication/decryption failed; target was not modified"
+    },
+    {
+      "name": "exact target confirmation required",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: RESTORE_CONFIRM_DB must equal the exact target database name; CONFIRM=yes is not accepted"
+    },
+    {
+      "name": "legacy CONFIRM=yes cannot authorize restore",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: RESTORE_CONFIRM_DB must equal the exact target database name; CONFIRM=yes is not accepted"
+    },
+    {
+      "name": "URL newline injection rejected",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: Database URL validation failed"
+    },
+    {
+      "name": "URL database SQL injection rejected",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: Database URL validation failed"
+    },
+    {
+      "name": "unencrypted remote transport rejected",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: Database URL validation failed"
+    },
+    {
+      "name": "unverified remote TLS rejected",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: Remote restores require a readable BACKUP_DB_SSL_CA certificate"
+    },
+    {
+      "name": "backup encryption mandatory",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: Encrypted backups require a GPG recipient or passphrase"
+    },
+    {
+      "name": "backup rejects weak passphrase",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: BACKUP_PASSPHRASE must contain at least 20 characters"
+    },
+    {
+      "name": "failed dump cleans private plaintext workspace",
+      "passed": true,
+      "exitCode": 2,
+      "diagnostic": "[2026-09-05T01:45:57Z] ERROR: Database dump failed; temporary plaintext removed"
+    },
+    {
+      "name": "no failed plaintext or archive left in backup directory",
+      "passed": true
+    },
+    {
+      "name": "authenticated but invalid gzip rejected before writes",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:58Z] ERROR: Compressed backup integrity validation failed; target was not modified"
+    },
+    {
+      "name": "database switching directive rejected before writes",
+      "passed": true,
+      "exitCode": 1,
+      "diagnostic": "[2026-09-05T01:45:58Z] ERROR: Archive contains database-switching directives; use an institution-reviewed migration instead"
+    },
+    {
+      "name": "all target table contents unchanged after rejected restores",
+      "passed": true,
+      "beforeSha256": "2ca915a78159cc87379558cf8a61fa51b9d55b6a55e57cced741531b82600274",
+      "afterSha256": "2ca915a78159cc87379558cf8a61fa51b9d55b6a55e57cced741531b82600274"
+    },
+    {
+      "name": "private archive mode irb-irb_readiness_test-20260905T014116Z-77e24216.sql.gz.enc",
+      "passed": true,
+      "mode": "600"
+    },
+    {
+      "name": "private archive mode irb-irb_readiness_test-20260905T014116Z-77e24216.sql.gz.enc.sha256",
+      "passed": true,
+      "mode": "600"
+    },
+    {
+      "name": "all restore/decryption temp directories cleaned",
+      "passed": true
+    }
+  ],
+  "allNegativeChecksPassed": true
+}

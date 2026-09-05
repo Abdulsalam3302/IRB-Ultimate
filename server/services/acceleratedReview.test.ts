@@ -92,17 +92,17 @@ describe("accelerated review swarm + bots", () => {
 });
 
 describe("accelerated pipeline decision order", () => {
-  it("auto-approves on swarm pass without requiring bots", () => {
-    expect(decideAcceleratedOutcome(true, null)).toBe("auto_approve");
+  it("requires a human decision after swarm readiness", () => {
+    expect(decideAcceleratedOutcome(true, null)).toBe("human_review");
   });
 
   it("runs bots only after swarm issues", () => {
     expect(decideAcceleratedOutcome(false, null)).toBe("run_bots");
   });
 
-  it("auto-approves on unanimous bots after swarm fail", () => {
+  it("requires a human decision after unanimous automated checklists", () => {
     const bots = runBotPanelReview(app());
-    expect(decideAcceleratedOutcome(false, bots)).toBe("auto_approve");
+    expect(decideAcceleratedOutcome(false, bots)).toBe("human_review");
   });
 
   it("alerts the owner when swarm and bots both fail", () => {

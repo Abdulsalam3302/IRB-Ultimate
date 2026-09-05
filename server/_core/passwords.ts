@@ -1,5 +1,7 @@
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { Semaphore } from "./concurrency";
+const passwordWork = new Semaphore(2, 8, 3000);
 
 const scrypt = promisify(scryptCb) as (
   password: string | Buffer,
@@ -28,7 +30,7 @@ const PREFIX = "scrypt";
  */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(SALT_BYTES);
-  const derived = await scrypt(password, salt, KEYLEN, { N, r: R, p: P, maxmem: MAXMEM });
+  const derived = await passwordWork.run(() => scrypt(password, salt, KEYLEN, { N, r: R, p: P, maxmem: MAXMEM }));
   return [PREFIX, N, R, P, salt.toString("hex"), derived.toString("hex")].join("$");
 }
 
@@ -38,14 +40,14 @@ export async function hashPassword(password: string): Promise<string> {
  * throwing, so a corrupt row can never crash the login route.
  */
 export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
-  if (!stored) return false;
+  if (!stored || password.length > 200 || stored.length > 300) return false;
   const parts = stored.split("$");
   if (parts.length !== 6 || parts[0] !== PREFIX) return false;
 
   const n = Number.parseInt(parts[1]!, 10);
   const r = Number.parseInt(parts[2]!, 10);
   const p = Number.parseInt(parts[3]!, 10);
-  if (!Number.isInteger(n) || !Number.isInteger(r) || !Number.isInteger(p)) return false;
+  if (n !== N || r !== R || p !== P || !/^[a-f0-9]{32}$/i.test(parts[4]!) || !/^[a-f0-9]{128}$/i.test(parts[5]!)) return false;
 
   let salt: Buffer;
   let expected: Buffer;
@@ -58,7 +60,7 @@ export async function verifyPassword(password: string, stored: string | null | u
   if (salt.length === 0 || expected.length === 0) return false;
 
   try {
-    const derived = await scrypt(password, salt, expected.length, { N: n, r, p, maxmem: MAXMEM });
+    const derived = await passwordWork.run(() => scrypt(password, salt, expected.length, { N: n, r, p, maxmem: MAXMEM }));
     if (derived.length !== expected.length) return false;
     return timingSafeEqual(derived, expected);
   } catch {

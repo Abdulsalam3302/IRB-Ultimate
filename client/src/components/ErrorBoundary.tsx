@@ -30,9 +30,8 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Log full detail to console regardless of env — engineers need the
-    // stack for triage. End-users get a clean fallback (below) instead.
-    console.error("[ErrorBoundary]", error, info?.componentStack);
+    // Protocol content must not be copied into production console diagnostics.
+    if (isDev) console.error("[ErrorBoundary]", error, info?.componentStack);
   }
 
   render() {
@@ -47,8 +46,8 @@ class ErrorBoundary extends Component<Props, State> {
 
             <h2 className="text-2xl font-semibold mb-2">Something went wrong.</h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-md">
-              The page hit an unexpected error. Your data is safe — try reloading,
-              or go home and re-open this page from the dashboard.
+              The page could not finish loading. Reload it or return to your dashboard.
+              Unsaved changes may need to be entered again.
             </p>
 
             {isDev && this.state.error?.stack && (

@@ -60,19 +60,34 @@ export default function ChatApplication() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const params = useMemo(() => new URLSearchParams(search), [search]);
-  const appId = Number(params.get("id") || 0);
+  const rawAppId = Number(params.get("id") || 0);
+  const appId = Number.isSafeInteger(rawAppId) && rawAppId > 0 ? rawAppId : 0;
   const { lang } = useT();
   const isAr = lang === "ar";
   const started = useRef(false);
+  const invalidAppId = params.has("id") && !appId;
 
   const [messages, setMessages] = useState<Message[]>(() => [
     introMessage(isAr),
   ]);
-  const [missing, setMissing] = useState<string[]>([]);
+  const [missing, setMissing] = useState<string[] | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const pendingUserText = useRef<string | null>(null);
   const hydrated = useRef(false);
+  const inFlight = useRef(false);
+  const activeAppId = useRef(appId);
+  activeAppId.current = appId;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    if (appId) started.current = false;
+    hydrated.current = false;
+    pendingUserText.current = null;
+    setMessages([introMessage(isAr)]);
+    setMissing(null);
+    setLastError(null);
+  }, [appId]);
 
   const history = trpc.chatApplication.history.useQuery(
     { applicationId: appId },
@@ -83,8 +98,8 @@ export default function ChatApplication() {
     if (hydrated.current || !history.data) return;
     if (history.data.messages.length > 0) {
       setMessages(history.data.messages);
-      setMissing(history.data.missing);
     }
+    setMissing(history.data.missing);
     hydrated.current = true;
   }, [history.data]);
 
@@ -100,13 +115,12 @@ export default function ChatApplication() {
   });
 
   useEffect(() => {
-    if (loading || !isAuthenticated || appId || started.current) return;
+    if (loading || !isAuthenticated || appId || invalidAppId || started.current) return;
     started.current = true;
     createApp.mutate({ intakeChannel: "chatbot" });
-  }, [loading, isAuthenticated, appId, createApp]);
+  }, [loading, isAuthenticated, appId, invalidAppId, createApp]);
 
   const chat = trpc.chatApplication.sendMessage.useMutation();
-  const aliasChat = trpc.application.sendChatMessage.useMutation();
 
   const applyReply = (data: { reply: string; missing: string[]; updatesApplied: string[] }) => {
     setLastError(null);
@@ -127,31 +141,27 @@ export default function ChatApplication() {
     messages: { role: "user" | "assistant"; content: string }[];
     lang: "ar" | "en";
   }) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setSending(true);
     setLastError(null);
     try {
-      const data = await sendChatApplicationTurn(payload, async () => {
-        try {
-          return await chat.mutateAsync(payload);
-        } catch (err) {
-          try {
-            return await aliasChat.mutateAsync(payload);
-          } catch {
-            throw err;
-          }
-        }
-      });
+      const data = await sendChatApplicationTurn(payload, () => chat.mutateAsync(payload));
+      if (!mounted.current || activeAppId.current !== payload.applicationId) return;
       applyReply(data);
     } catch {
+      if (!mounted.current || activeAppId.current !== payload.applicationId) return;
       const friendly = friendlyChatSendError(isAr);
       setLastError(friendly);
       toast.error(friendly);
     } finally {
-      setSending(false);
+      inFlight.current = false;
+      if (mounted.current) setSending(false);
     }
   };
 
   const send = (content: string) => {
+    if (inFlight.current || !appId || !hydrated.current || history.isError || !content.trim() || content.length > 4000) return;
     const next = [...messages, { role: "user" as const, content }];
     setMessages(next);
     pendingUserText.current = content;
@@ -201,6 +211,8 @@ export default function ChatApplication() {
     );
   }
 
+  if (invalidAppId) return <div className="min-h-screen"><Navbar showBack backTo="/dashboard" /><p role="alert" className="container py-12">{isAr ? "رقم الطلب غير صالح. افتح الطلب من لوحة التحكم." : "Invalid application reference. Open the application from your dashboard."}</p></div>;
+
   if (!appId) {
     return (
       <div className="min-h-screen bg-background">
@@ -241,9 +253,9 @@ export default function ChatApplication() {
     );
   }
 
-  const remaining = missing.length;
+  const remaining = missing?.length;
   const progress =
-    remaining === 0 ? 100 : Math.max(8, Math.min(95, 100 - remaining * 4));
+    remaining == null ? 0 : remaining === 0 ? 100 : Math.max(8, Math.min(95, 100 - remaining * 4));
 
   return (
     <div className="min-h-screen bg-background">
@@ -277,7 +289,9 @@ export default function ChatApplication() {
                 {isAr ? "تقدم الطلب" : "Application progress"}
               </span>
               <span className="text-muted-foreground">
-                {remaining === 0
+                {remaining == null
+                  ? (isAr ? "جارٍ التحقق من المتطلبات" : "Checking requirements")
+                  : remaining === 0
                   ? isAr
                     ? "جاهز للمتابعة في النموذج التقليدي لإكمال الإقرار والمراجعة"
                     : "Ready — finish declaration & AI review in the traditional form"
@@ -287,7 +301,7 @@ export default function ChatApplication() {
               </span>
             </div>
             <Progress value={progress} className="h-1.5" />
-            {missing.length > 0 && (
+            {missing && missing.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 <span className="font-medium">
                   {isAr ? "التالي:" : "Next:"}
@@ -321,9 +335,13 @@ export default function ChatApplication() {
           </p>
         )}
 
+        <p className="mb-4 rounded-lg border bg-muted/30 p-3 text-sm">
+          {isAr ? "استخدم معلومات البروتوكول فقط. لا تُدخل أسماء المرضى أو أرقام هوياتهم أو سجلاتهم الطبية أو كلمات المرور أو مفاتيح API. قد تُعالج الرسائل لدى مزود الذكاء الاصطناعي المضبوط للمنصة. راجع الحقول التي يعدلها المساعد قبل التقديم؛ لا يصدر المساعد موافقة أخلاقية." : "Use protocol-level information only. Do not enter patient names, identifiers, medical records, passwords, or API keys. Messages may be processed by the platform’s configured AI provider. Review fields changed by the assistant before submission; the assistant does not issue ethics approval."}
+        </p>
+        {history.isError && <div role="alert" className="mb-4 rounded-lg border p-3"><p>{isAr ? "تعذر تحميل سجل الطلب. أعد المحاولة قبل إرسال معلومات جديدة." : "The application history could not be loaded. Retry before sending more information."}</p><Button variant="outline" onClick={() => history.refetch()}>{isAr ? "إعادة التحميل" : "Reload history"}</Button></div>}
         <AIChatBox
           messages={messages}
-          isLoading={sending}
+          isLoading={sending || history.isLoading || history.isError || !hydrated.current}
           onSendMessage={send}
           placeholder={
             isAr ? "اكتب إجابتك هنا..." : "Type your answer here..."

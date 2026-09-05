@@ -18,7 +18,7 @@ import { SiteFooter } from "@/components/design/SiteFooter";
 
 export default function Support() {
   const [, setLocation] = useLocation();
-  const { t } = useT();
+  const { t, lang } = useT();
   const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -31,6 +31,7 @@ export default function Support() {
   const createTicket = trpc.support.create.useMutation();
 
   const handleSubmit = async () => {
+    if (createTicket.isPending) return;
     if (!form.name || !form.email || !form.subject || !form.category || !form.message) {
       toast.error(t("support.fillAll"));
       return;
@@ -90,20 +91,27 @@ export default function Support() {
             <CardDescription>{t("support.formDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا تُدرج بيانات المرضى أو كلمات المرور أو مفاتيح API. أرسل وصفاً مختصراً للمشكلة." : "Do not include patient information, passwords, or API keys. Send a brief description of the issue."}</p>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t("support.name")} *</Label>
+                <Label htmlFor="support-name">{t("support.name")} *</Label>
                 <Input
                   placeholder={t("support.namePlaceholder")}
+                  id="support-name"
+                  aria-label={t("support.name")}
+                  maxLength={200}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t("support.email")} *</Label>
+                <Label htmlFor="support-email">{t("support.email")} *</Label>
                 <Input
                   type="email"
                   placeholder="your@email.com"
+                  id="support-email"
+                  aria-label={t("support.email")}
+                  maxLength={320}
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   dir="ltr"
@@ -133,19 +141,25 @@ export default function Support() {
             </div>
 
             <div className="space-y-2">
-              <Label>{t("support.subject")} *</Label>
+              <Label htmlFor="support-subject">{t("support.subject")} *</Label>
               <Input
                 placeholder={t("support.subjectPlaceholder")}
-                value={form.subject}
+                id="support-subject"
+                  aria-label={t("support.subject")}
+                  maxLength={300}
+                  value={form.subject}
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
-              <Label>{t("support.message")} *</Label>
+              <Label htmlFor="support-message">{t("support.message")} *</Label>
               <Textarea
                 placeholder={t("support.messagePlaceholder")}
-                value={form.message}
+                id="support-message"
+                  aria-label={t("support.message")}
+                  maxLength={5000}
+                  value={form.message}
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 rows={5}
               />

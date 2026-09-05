@@ -1,5 +1,5 @@
 import type { LiteratureItem } from "./types";
-import { fetchWithTimeout, trim } from "./http";
+import { fetchWithTimeout, trim, sourceTotal } from "./http";
 
 const BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 
@@ -7,8 +7,8 @@ export async function searchPubMed(
   query: string,
   limit: number,
   apiKey?: string
-): Promise<{ items: LiteratureItem[]; total: number }> {
-  const keyParam = apiKey ? `&api_key=${apiKey}` : "";
+): Promise<{ items: LiteratureItem[]; total?: number }> {
+  const keyParam = apiKey ? `&api_key=${encodeURIComponent(apiKey)}` : "";
 
   // 1) esearch — get PMIDs
   const searchUrl = `${BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(
@@ -17,8 +17,9 @@ export async function searchPubMed(
   const searchRes = await fetchWithTimeout(searchUrl, { timeoutMs: 8000 });
   if (!searchRes.ok) throw new Error(`PubMed esearch ${searchRes.status}`);
   const searchJson = (await searchRes.json()) as any;
-  const ids: string[] = searchJson?.esearchresult?.idlist ?? [];
-  const total: number = parseInt(searchJson?.esearchresult?.count ?? "0", 10);
+  if (!Array.isArray(searchJson?.esearchresult?.idlist)) throw new Error("Invalid PubMed search response");
+  const ids: string[] = Array.isArray(searchJson?.esearchresult?.idlist) ? searchJson.esearchresult.idlist.filter((id: unknown): id is string => typeof id === "string" && /^\d+$/.test(id)).slice(0, limit) : [];
+  const total = sourceTotal(searchJson?.esearchresult?.count);
   if (ids.length === 0) return { items: [], total };
 
   // 2) esummary — get titles/authors/year/journal

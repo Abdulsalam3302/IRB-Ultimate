@@ -26,13 +26,13 @@ export function useT() {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(() => {
-    const saved = localStorage.getItem("irb-lang");
-    return (saved === "ar" ? "ar" : "en") as Language;
+    try { return localStorage.getItem("irb-lang") === "ar" ? "ar" : "en"; }
+    catch { return "en"; }
   });
 
   const setLang = (newLang: Language) => {
     setLangState(newLang);
-    localStorage.setItem("irb-lang", newLang);
+    try { localStorage.setItem("irb-lang", newLang); } catch { /* storage unavailable */ }
   };
 
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -80,115 +80,109 @@ const en: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "Official digital IRB of the National Committee of BioEthics (NCBE) of Saudi Arabia — operated with AHSS. PDPL-compliant digital certification aligned with NCBE guidelines, the Declaration of Helsinki, and Vision 2030.",
+    "Independent software for research ethics workflows in Saudi Arabia. AI assists preparation; authorized human review determines ethics decisions.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
-    "Demo environment — do not submit real participant data or PHI. This deployment is for evaluation and feedback only.",
+    "Evaluation deployment. Use synthetic data only. Do not upload participant, patient, or confidential research data.",
 
   // Open beta (always on for v1.1.0)
-  "beta.banner": "Official launch · v2.0.0 — NBCE digital IRB for Saudi Arabia.",
+  "beta.banner": "Research ethics workflow platform · Saudi Arabia",
   "beta.learnMore": "About this platform",
 
   // Disclaimer / about
-  "disclaimer.badge": "Official · IRB Saudi Arabia v2.0.0",
+  "disclaimer.badge": "Independent platform · Saudi Arabia",
   "disclaimer.title": "About this platform",
-  "disclaimer.subtitle": "Official digital IRB of the National Committee of BioEthics (NCBE)",
+  "disclaimer.subtitle": "Digital tools for accountable research ethics review",
   "disclaimer.aboutFounder": "About the founder",
   "disclaimer.founderBody":
     "Dr. Abdulsalam Aleid is a physician and health-systems leader building tools that give researchers clear structure, honest guidance, and faster ethical review — without replacing human judgment.",
   "disclaimer.aboutProject": "About this project",
   "disclaimer.projectBody":
-    "IRB Saudi Arabia is the official digital Institutional Review Board of the National Committee of BioEthics (NCBE), operated with the Advanced Healthcare Systems Society (AHSS). Researchers prepare and submit IRB applications through transparent workflows and receive verifiable digital certificates.",
+    "IRB Saudi Arabia helps researchers prepare applications, organize documents, and track review. It is an independent software platform; no government affiliation or NCBE accreditation is asserted. AI findings support the responsible human committee.",
   "disclaimer.operatedBy": "Operated with",
-  "disclaimer.openBeta": "Official launch",
+  "disclaimer.openBeta": "Service scope and roadmap",
   "disclaimer.openBetaBody":
-    "Version 2.0.0 is the official launch of the NBCE digital IRB. Complete protocols that pass the AI Swarm or the four designated digital reviewers (Hanan Al-Dosari, Majed Al-Otaibi, Reem Al-Shammari, Yazeed Al-Ghamdi) receive official approval and an IRB certificate. Report issues via Support.",
-  "disclaimer.legal": "Official standing",
+    "The platform starts with Saudi research workflows. International expansion is planned from 2027 and depends on local requirements, qualified reviewers, institutional agreements, and operational readiness in each market. It does not make existing certificates globally valid.",
+  "disclaimer.legal": "Authority and limitations",
   "disclaimer.legalBody":
-    "IRB Saudi Arabia is the official digital IRB of the National Committee of BioEthics (NCBE) of Saudi Arabia. Researchers remain responsible for the accuracy of their submissions and for following applicable institutional requirements alongside this review.",
+    "An AI assessment, draft document, or platform account does not confer research approval. Confirm the responsible committee’s authority and your institution’s acceptance before research begins. Platform verification confirms its own record, not legal acceptance by another institution or country.",
   "disclaimer.acknowledge": "Continue",
   "disclaimer.linkedinCta": "Visit LinkedIn profile",
 
-  "footer.version": "v2.0.0",
+  "footer.version": "Research workflow platform",
 
   // Hero
-  "hero.badge": "Official NBCE Digital IRB · Saudi Arabia",
+  "hero.badge": "Digital research ethics · Saudi Arabia",
   "hero.title": "Institutional Review Board",
-  "hero.subtitle": "Official digital ethical review for research in the Kingdom",
-  "hero.desc": "The official digital IRB of the National Committee of BioEthics (NCBE) — AI-powered review, four designated digital reviewers, and verifiable certificates that reduce approval time from weeks to 24–48 hours.",
-  "hero.apply": "Apply for IRB Approval",
+  "hero.subtitle": "Research ethics workflows, without the paperwork",
+  "hero.desc": "Prepare clear research applications, organize your documents, and follow every review step in one place. AI helps identify gaps while the responsible human committee retains decision authority.",
+  "hero.apply": "Prepare an application",
   "hero.verify": "Verify an IRB Certificate",
   "hero.learnMore": "Learn More",
   "hero.cta.title": "Ready to Submit Your Research?",
-  "hero.cta.desc": "Join researchers across Saudi Arabia who are accelerating their IRB approvals with our AI-powered platform.",
+  "hero.cta.desc": "Start a structured application and review your protocol, consent materials, and responsibilities before submission.",
 
   // Stats
-  "stats.target": "24-48h Target",
-  "stats.targetDesc": "Approval Time",
+  "stats.target": "Track progress",
+  "stats.targetDesc": "From draft to decision",
   "stats.ai": "AI-Powered",
-  "stats.aiDesc": "Compliance Check",
-  "stats.committee": "Scientific Committee",
-  "stats.committeeDesc": "Per Application",
+  "stats.aiDesc": "Preparation assistance",
+  "stats.committee": "Human review",
+  "stats.committeeDesc": "Accountable decisions",
   "stats.digital": "100% Digital",
   "stats.digitalDesc": "Paperless Process",
 
   // Vision/Mission
   "vision.title": "Our Vision",
-  "vision.text": "To be the leading digital IRB platform in Saudi Arabia, setting the standard for ethical research oversight through innovation, transparency, and efficiency — fully aligned with the Kingdom's Vision 2030.",
+  "vision.text": "Make research ethics administration clearer and more accessible for researchers and committees in Saudi Arabia, with transparent responsibilities and a complete digital record.",
   "mission.title": "Our Mission",
-  "mission.text": "To accelerate the ethical review process by leveraging artificial intelligence and modern technology, ensuring every research project receives thorough, fair, and timely evaluation while maintaining the highest standards of bioethics compliance.",
+  "mission.text": "Help researchers prepare complete protocols and support reviewers with structured information, documented findings, and traceable decisions.",
   "aim.title": "Our Aim",
-  "aim.text": "To reduce IRB approval time to 24–48 hours through AI-integrated pre-screening, automated committee assignment, and digital certification — minimizing cost, effort, and bureaucratic delays while maximizing research outcomes.",
+  "aim.text": "Reduce avoidable administration and repeated revisions through guided intake, document preparation, and review tracking. Review time depends on study risk, completeness, and committee capacity.",
 
   // How It Works
   "how.title": "How It Works",
   "how.step1.title": "Submit Application",
-  "how.step1.desc": "Complete a two-stage application form with AI-powered compliance checks at each stage.",
+  "how.step1.desc": "Prepare your protocol and supporting documents with structured forms or the application assistant.",
   "how.step2.title": "Committee Review",
-  "how.step2.desc": "Your application is randomly assigned to 5 committee members who have 24 hours to review.",
-  "how.step3.title": "Admin Approval",
-  "how.step3.desc": "Once 3 members approve, the application moves to the admin for final decision.",
+  "how.step2.desc": "Appointed human reviewers assess the submission and any AI findings, with conflicts of interest considered.",
+  "how.step3.title": "Documented decision",
+  "how.step3.desc": "The authorized decision maker records the outcome and any conditions after the required review.",
   "how.step4.title": "IRB Certificate",
-  "how.step4.desc": "Upon approval, receive your IRB certificate with a unique serial number instantly.",
+  "how.step4.desc": "Access the issued record after approval and verify its status, dates, and scope.",
 
   // Features
   "features.title": "Platform Features",
   "features.ai.title": "AI Pre-Screening",
-  "features.ai.desc": "Automated compliance checks against NCBE ethical guidelines, the Declaration of Helsinki, and ICH-GCP standards before human review.",
+  "features.ai.desc": "Identify missing information and potential ethics concerns for researcher correction and human review.",
   "features.fast.title": "Rapid Processing",
-  "features.fast.desc": "24-48 hour target turnaround with automated committee assignment and real-time status tracking.",
-  "features.secure.title": "Secure & Compliant",
-  "features.secure.desc": "End-to-end encryption, audit trails, and full compliance with Saudi data protection regulations.",
+  "features.fast.desc": "Guided preparation and status tracking help reduce repeated work. Approval timing and outcomes are not guaranteed.",
+  "features.secure.title": "Controlled access",
+  "features.secure.desc": "Role-based access and activity records support responsible handling of application information. Use de-identified research content.",
   "features.digital.title": "Digital Certificates",
-  "features.digital.desc": "Instantly generated PDF certificates with unique IRB numbers, verifiable through our public portal.",
+  "features.digital.desc": "Generate draft documents and access verifiable records for authorized decisions. Drafts do not grant ethics approval.",
   "features.analytics.title": "Real-time Analytics",
   "features.analytics.desc": "Administrators can track metrics, response times, approval rates, and committee performance in real time.",
-  "features.vision.title": "Standards Compliant",
-  "features.vision.desc": "Designed to support NCBE ethical guidelines, PDPL, Helsinki, ICH-GCP, and Saudi Vision 2030 — as an independent AHSS platform.",
+  "features.vision.title": "Saudi research resources",
+  "features.vision.desc": "Preparation resources reference Saudi research ethics requirements and international guidance. Your committee determines the applicable requirements.",
 
   // Footer
-  "footer.brand": "IRB Review Platform",
-  "footer.desc": "Official digital IRB of the National Committee of BioEthics (NCBE) of Saudi Arabia — AI-powered workflows and digital certification, operated with AHSS.",
-  "footer.independence": "Official digital Institutional Review Board of the National Committee of BioEthics (NCBE) of Saudi Arabia, operated with AHSS, with AI-powered workflows and digital certification in alignment with applicable Saudi regulations and international ethical standards.",
+  "footer.desc": "Independent digital tools for research ethics applications in Saudi Arabia.",
+  "footer.independence": "AI supports preparation and assessment. Ethics decisions remain with authorized human reviewers; institutional and jurisdictional requirements apply.",
   "footer.quickLinks": "Quick Links",
   "footer.legal": "Legal",
   "footer.contact": "Contact",
   "footer.privacy": "Privacy Policy",
   "footer.terms": "Terms of Service",
   "footer.madeWith": "Made with Love in Saudi Arabia",
-  "footer.org": "Advanced Healthcare Systems Society",
-  "footer.stamp.ahss": "AHSS Independent",
-  "footer.stamp.pdpl": "PDPL compliant",
+  "footer.stamp.ahss": "Saudi-focused",
+  "footer.stamp.pdpl": "Privacy guidance",
   "footer.stamp.nbceGuidelines": "NCBE guidelines",
   "footer.stamp.helsinki": "Helsinki",
   "footer.stamp.vision2030": "Vision 2030",
   "footer.nbceReference": "For official NCBE regulations and guidance, visit",
-  "footer.founded": "Founded by Dr. Abdulsalam Aleid",
-  "footer.nbceLink": "National Committee of BioEthics (NCBE)",
-  "footer.vision2030": "Saudi Vision 2030",
   "footer.feedback": "Suggestions & complaints",
-  "footer.feedbackCta": "Reach Dr. Aleid on LinkedIn",
   "footer.copyright": "©",
   "footer.partnership": "For partnership and cooperation inquiries, reach us on LinkedIn.",
   "footer.partnershipCta": "Connect on LinkedIn",
@@ -202,8 +196,8 @@ const en: Record<string, string> = {
   "format.generatePdf": "Generate PDF",
   "format.generateDocx": "Generate DOCX",
   "format.missingFields": "{n} field(s) still empty — you can generate anyway or complete them first.",
-  "format.readyToGenerate": "All fields completed. Ready to generate your stamped document.",
-  "format.stampNote": "Every generated document includes Dr. Abdulsalam Aleid's authorized signature and platform seal.",
+  "format.readyToGenerate": "All fields completed. Review accuracy before generating your draft.",
+  "format.stampNote": "Generated templates are drafts for review. They do not carry a reviewer signature or ethics approval.",
   "format.enterHint": "Enter:",
   "format.showExample": "Show ideal example",
   "format.answerPlaceholder": "Type your answer here…",
@@ -324,7 +318,7 @@ const en: Record<string, string> = {
   "verify.button": "Verify",
   "verify.searching": "Searching...",
   "verify.found": "Certificate Verified",
-  "verify.foundDesc": "This IRB number is authentic and was issued by the official NBCE digital IRB.",
+  "verify.foundDesc": "This reference matches an issued platform record. Check its dates and status; institutional acceptance must be confirmed separately.",
   "verify.notFound": "No valid IRB certificate found with this number.",
   "verify.notFoundDesc": "No approved certificate matches this serial. Check the number and try again.",
   "verify.download": "Download Certificate",
@@ -472,7 +466,7 @@ const en: Record<string, string> = {
   "auth.tryAgain": "Try again",
   "auth.notConfigured": "Sign-in is being updated. Please try again in a few minutes or contact support.",
   "auth.invalidEmail": "Please enter a valid email address.",
-  "auth.weakPassword": "Password must be at least 12 characters.",
+  "auth.weakPassword": "Use at least 12 characters for your new password.",
   "auth.emailExists": "An account with this email already exists. Please sign in.",
   "auth.invalidCredentials": "Invalid email or password.",
   "auth.rateLimited": "Too many attempts. Please wait a few minutes and try again.",
@@ -527,113 +521,107 @@ const ar: Record<string, string> = {
 
   // Platform independence notice (always visible)
   "platform.notice":
-    "المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية — تُشغَّل مع AHSS. شهادات رقمية متوافقة مع PDPL وإرشادات NCBE وإعلان هلسنكي ورؤية 2030.",
+    "منصة مستقلة لإدارة إجراءات أخلاقيات البحث في السعودية. يساعد الذكاء الاصطناعي في الإعداد، وتصدر القرارات الأخلاقية عن المراجعة البشرية المخولة.",
 
   // Demo / pilot banner (VITE_PUBLIC_DEMO_BANNER=1)
   "demo.banner":
-    "بيئة تجريبية — لا تُدخل بيانات مشاركين حقيقية أو معلومات صحية محمية. هذه النسخة مخصصة للتقييم وجمع الملاحظات فقط.",
+    "نسخة للتقييم. استخدم بيانات افتراضية فقط. لا ترفع بيانات المشاركين أو المرضى أو بيانات بحثية سرية.",
 
-  "beta.banner": "الإطلاق الرسمي · v2.0.0 — المنصة الرقمية لـ NCBE في المملكة العربية السعودية.",
+  "beta.banner": "منصة لإدارة إجراءات أخلاقيات البحث · المملكة العربية السعودية",
   "beta.learnMore": "عن المنصة",
 
-  "disclaimer.badge": "رسمي · IRB السعودية v2.0.0",
+  "disclaimer.badge": "منصة مستقلة · المملكة العربية السعودية",
   "disclaimer.title": "عن المنصة",
-  "disclaimer.subtitle": "المنصة الرقمية الرسمية للجنة الوطنية للأخلاقيات الحيوية (NCBE)",
+  "disclaimer.subtitle": "أدوات رقمية لمراجعة أخلاقيات البحث بمسؤولية",
   "disclaimer.aboutFounder": "عن المؤسس",
   "disclaimer.founderBody":
     "د. عبدالسلام العيد طبيب وقائد في أنظمة الرعاية الصحية يبني أدوات تمنح الباحثين هيكلاً واضحاً وإرشاداً صادقاً ومراجعة أخلاقية أسرع — دون أن تحل محل الحكم البشري.",
   "disclaimer.aboutProject": "عن المشروع",
   "disclaimer.projectBody":
-    "IRB السعودية هي المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE)، وتُشغَّل مع جمعية أنظمة الرعاية الصحية المتقدمة (AHSS). يُعدّ الباحثون طلبات IRB عبر مسارات شفافة ويتلقون شهادات رقمية قابلة للتحقق.",
+    "تساعد منصة IRB السعودية الباحثين على إعداد الطلبات وتنظيم المستندات ومتابعة المراجعة. وهي منصة برمجية مستقلة، ولا تدّعي التبعية لجهة حكومية أو الاعتماد من اللجنة الوطنية للأخلاقيات الحيوية. تدعم نتائج الذكاء الاصطناعي عمل اللجنة البشرية المختصة.",
   "disclaimer.operatedBy": "تُشغَّل مع",
-  "disclaimer.openBeta": "الإطلاق الرسمي",
+  "disclaimer.openBeta": "نطاق الخدمة وخطة التطوير",
   "disclaimer.openBetaBody":
-    "الإصدار 2.0.0 هو الإطلاق الرسمي للمنصة الرقمية لـ NCBE. البروتوكولات المكتملة التي تجتاز سرب الذكاء الاصطناعي أو المراجعين الرقميين الأربعة (حنان الدوسري، ماجد العتيبي، ريم الشمري، يزيد الغامدي) تحصل على الموافقة الرسمية وشهادة IRB. أبلغ عن المشكلات عبر الدعم.",
-  "disclaimer.legal": "الصفة الرسمية",
+    "تبدأ المنصة بإجراءات البحوث في السعودية. ويُخطط للتوسع الدولي ابتداءً من 2027 وفق متطلبات كل دولة وتوفر المراجعين المؤهلين والاتفاقات المؤسسية والجاهزية التشغيلية. ولا يمنح ذلك الشهادات الحالية صلاحية عالمية.",
+  "disclaimer.legal": "الصلاحيات وحدود الخدمة",
   "disclaimer.legalBody":
-    "IRB السعودية هي المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE). يبقى الباحثون مسؤولين عن دقة طلباتهم وعن اتباع متطلبات مؤسساتهم إلى جانب هذه المراجعة.",
+    "لا يمنح تقييم الذكاء الاصطناعي أو مسودة المستند أو حساب المنصة موافقة لإجراء البحث. تحقّق من صلاحية اللجنة المختصة وقبول مؤسستك قبل بدء البحث. يؤكد التحقق وجود سجل في المنصة، ولا يثبت قبوله نظامياً لدى مؤسسة أو دولة أخرى.",
   "disclaimer.acknowledge": "متابعة",
   "disclaimer.linkedinCta": "زيارة ملف LinkedIn",
 
-  "footer.version": "v2.0.0",
+  "footer.version": "منصة لإجراءات البحوث",
 
   // Hero
-  "hero.badge": "المنصة الرقمية الرسمية لـ NCBE · المملكة العربية السعودية",
+  "hero.badge": "أخلاقيات البحث رقمياً · السعودية",
   "hero.title": "لجنة أخلاقيات البحث العلمي",
-  "hero.subtitle": "المراجعة الأخلاقية الرقمية الرسمية للبحوث في المملكة",
-  "hero.desc": "المنصة الرقمية الرسمية للجنة الوطنية للأخلاقيات الحيوية (NCBE) — مراجعة بالذكاء الاصطناعي، أربعة مراجعون رقميون معيّنون، وشهادات قابلة للتحقق تختصر مدة الموافقة من أسابيع إلى 24–48 ساعة.",
-  "hero.apply": "تقديم طلب موافقة IRB",
+  "hero.subtitle": "إجراءات أخلاقيات البحث، من الورق إلى المنصة",
+  "hero.desc": "أعدّ طلباً بحثياً واضحاً ونظّم مستنداتك وتابع مراحل المراجعة في مكان واحد. يساعد الذكاء الاصطناعي على اكتشاف النواقص، وتبقى صلاحية القرار لدى اللجنة البشرية المختصة.",
+  "hero.apply": "إعداد طلب",
   "hero.verify": "التحقق من شهادة IRB",
   "hero.learnMore": "اعرف المزيد",
   "hero.cta.title": "هل أنت مستعد لتقديم بحثك؟",
-  "hero.cta.desc": "انضم إلى باحثين من مختلف مناطق المملكة العربية السعودية يحصلون على موافقات IRB بوتيرة أسرع عبر منصتنا.",
+  "hero.cta.desc": "ابدأ طلباً منظماً وراجع بروتوكولك ومستندات الموافقة المستنيرة ومسؤولياتك قبل التقديم.",
 
   // Stats
-  "stats.target": "24-48 ساعة",
-  "stats.targetDesc": "وقت الموافقة المستهدف",
+  "stats.target": "تابع التقدم",
+  "stats.targetDesc": "من المسودة إلى القرار",
   "stats.ai": "ذكاء اصطناعي",
-  "stats.aiDesc": "فحص الامتثال",
-  "stats.committee": "لجنة علمية",
-  "stats.committeeDesc": "لكل طلب",
+  "stats.aiDesc": "مساعدة في الإعداد",
+  "stats.committee": "مراجعة بشرية",
+  "stats.committeeDesc": "قرارات مسؤولة",
   "stats.digital": "100% رقمي",
   "stats.digitalDesc": "بدون ورق",
 
   // Vision/Mission
   "vision.title": "رؤيتنا",
-  "vision.text": "أن نكون المنصة الرقمية الرائدة للمراجعة الأخلاقية للبحوث في المملكة العربية السعودية، وأن نرسي معيار الرقابة الأخلاقية على البحوث عبر الابتكار والشفافية والكفاءة — بما يتوافق مع رؤية المملكة 2030.",
+  "vision.text": "جعل إدارة أخلاقيات البحث أوضح وأسهل للباحثين واللجان في السعودية، مع مسؤوليات محددة وسجل رقمي متكامل.",
   "mission.title": "رسالتنا",
-  "mission.text": "تسريع المراجعة الأخلاقية بالاستفادة من الذكاء الاصطناعي والتقنيات الحديثة، بما يضمن حصول كل مشروع بحثي على تقييم شامل وعادل في وقته، مع الالتزام بأعلى معايير أخلاقيات البحث العلمي.",
+  "mission.text": "مساعدة الباحثين على إعداد بروتوكولات مكتملة ودعم المراجعين بمعلومات منظمة وملاحظات موثقة وقرارات يمكن تتبعها.",
   "aim.title": "هدفنا",
-  "aim.text": "خفض مدة الحصول على موافقة IRB إلى 24-48 ساعة عبر الفحص المسبق بالذكاء الاصطناعي والإسناد التلقائي للجان والشهادات الرقمية، بما يقلّل التكلفة والجهد والتأخير الإجرائي ويعزّز مخرجات البحث.",
+  "aim.text": "تقليل الإجراءات المتكررة وطلبات الاستكمال بإدخال موجه وإعداد المستندات ومتابعة المراجعة. وتعتمد مدة المراجعة على مخاطر الدراسة واكتمال الطلب وقدرة اللجنة.",
 
   // How It Works
   "how.title": "كيف تعمل المنصة",
   "how.step1.title": "تقديم الطلب",
-  "how.step1.desc": "أكمل نموذج الطلب على مرحلتين، مع فحص امتثال بالذكاء الاصطناعي في كل مرحلة.",
+  "how.step1.desc": "أعدّ بروتوكولك والمستندات الداعمة باستخدام النماذج المنظمة أو مساعد الطلبات.",
   "how.step2.title": "مراجعة اللجنة",
-  "how.step2.desc": "يُسند طلبك عشوائيًا إلى خمسة من أعضاء اللجنة، ولكل منهم 24 ساعة لإتمام المراجعة.",
-  "how.step3.title": "موافقة الإدارة",
-  "how.step3.desc": "عند موافقة ثلاثة أعضاء، يُحال الطلب إلى الإدارة لاتخاذ القرار النهائي.",
+  "how.step2.desc": "يقيّم المراجعون البشريون المعيّنون الطلب وملاحظات الذكاء الاصطناعي مع مراعاة تعارض المصالح.",
+  "how.step3.title": "قرار موثّق",
+  "how.step3.desc": "يسجّل صاحب الصلاحية النتيجة والشروط بعد استكمال المراجعة المطلوبة.",
   "how.step4.title": "شهادة IRB",
-  "how.step4.desc": "بعد اعتماد الطلب، تحصل فورًا على شهادة IRB برقم تسلسلي فريد.",
+  "how.step4.desc": "اطلع على السجل الصادر بعد الموافقة وتحقق من حالته وتواريخه ونطاقه.",
 
   // Features
   "features.title": "مميزات المنصة",
   "features.ai.title": "فحص مسبق بالذكاء الاصطناعي",
-  "features.ai.desc": "فحوصات امتثال تلقائية وفقًا لإرشادات NCBE وإعلان هلسنكي ومعايير ICH-GCP قبل المراجعة البشرية.",
+  "features.ai.desc": "اكتشاف المعلومات الناقصة والمخاوف الأخلاقية المحتملة لاستكمالها وعرضها على المراجعة البشرية.",
   "features.fast.title": "معالجة سريعة",
-  "features.fast.desc": "إنجاز مستهدف خلال 24-48 ساعة، مع إسناد تلقائي للجان وتتبّع حالة الطلب لحظة بلحظة.",
-  "features.secure.title": "آمنة ومتوافقة",
-  "features.secure.desc": "تشفير شامل وسجلات تدقيق، وامتثال كامل لأنظمة حماية البيانات في المملكة.",
+  "features.fast.desc": "يساعد الإعداد الموجه وتتبع الحالة على تقليل العمل المتكرر، دون ضمان مدة محددة للموافقة أو نتيجتها.",
+  "features.secure.title": "وصول منضبط",
+  "features.secure.desc": "تدعم صلاحيات الوصول وسجلات النشاط التعامل المسؤول مع معلومات الطلبات. استخدم محتوى بحثياً منزوع الهوية.",
   "features.digital.title": "شهادات رقمية",
-  "features.digital.desc": "شهادات PDF تصدر فورًا بأرقام IRB فريدة، ويمكن التحقق منها عبر البوابة العامة للمنصة.",
+  "features.digital.desc": "أنشئ مسودات المستندات واطلع على سجلات القرارات المخولة القابلة للتحقق. المسودات لا تمنح موافقة أخلاقية.",
   "features.analytics.title": "تحليلات لحظية",
   "features.analytics.desc": "تتيح للمشرفين متابعة المؤشرات وأوقات الاستجابة ومعدلات الموافقة وأداء اللجان لحظة بلحظة.",
-  "features.vision.title": "متوافقة مع المعايير",
-  "features.vision.desc": "منصة مستقلة من AHSS صُممت بما يدعم إرشادات NCBE الأخلاقية ونظام حماية البيانات الشخصية (PDPL) وإعلان هلسنكي ومعايير ICH-GCP ورؤية 2030.",
+  "features.vision.title": "موارد للبحوث السعودية",
+  "features.vision.desc": "تستند موارد الإعداد إلى متطلبات أخلاقيات البحث السعودية والإرشادات الدولية. وتحدد لجنتك المتطلبات المنطبقة على الدراسة.",
 
   // Footer
-  "footer.brand": "منصة مراجعة IRB",
-  "footer.desc": "المنصة الرقمية الرسمية للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية — سير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية، تُشغَّل مع AHSS.",
-  "footer.independence": "المنصة الرقمية الرسمية للجنة أخلاقيات البحث المؤسسية التابعة للجنة الوطنية للأخلاقيات الحيوية (NCBE) في المملكة العربية السعودية، تُشغَّل مع AHSS بسير عمل مدعوم بالذكاء الاصطناعي وشهادات رقمية وفق الأنظمة السعودية والمعايير الأخلاقية الدولية.",
+  "footer.desc": "أدوات رقمية مستقلة لطلبات أخلاقيات البحث في المملكة العربية السعودية.",
+  "footer.independence": "يدعم الذكاء الاصطناعي الإعداد والتقييم. وتبقى القرارات الأخلاقية لدى المراجعين البشريين المخولين، وفق متطلبات المؤسسة والدولة المعنية.",
   "footer.quickLinks": "روابط سريعة",
   "footer.legal": "قانوني",
   "footer.contact": "اتصل بنا",
   "footer.privacy": "سياسة الخصوصية",
   "footer.terms": "شروط الخدمة",
   "footer.madeWith": "صُنعت بحب في المملكة العربية السعودية",
-  "footer.org": "جمعية أنظمة الرعاية الصحية المتقدمة",
-  "footer.stamp.ahss": "مستقلة من AHSS",
-  "footer.stamp.pdpl": "متوافقة مع PDPL",
+  "footer.stamp.ahss": "للبحوث في السعودية",
+  "footer.stamp.pdpl": "إرشادات الخصوصية",
   "footer.stamp.nbceGuidelines": "إرشادات NCBE",
   "footer.stamp.helsinki": "هلسنكي",
   "footer.stamp.vision2030": "رؤية 2030",
   "footer.nbceReference": "للاطلاع على لوائح NCBE الرسمية وإرشاداتها، تفضل بزيارة",
-  "footer.founded": "أسسها د. عبدالسلام العيد",
-  "footer.nbceLink": "اللجنة الوطنية للأخلاقيات الحيوية (NCBE)",
-  "footer.vision2030": "رؤية السعودية 2030",
   "footer.feedback": "اقتراحات وشكاوى",
-  "footer.feedbackCta": "تواصل مع د. العيد على لينكدإن",
   "footer.copyright": "©",
   "footer.partnership": "للشراكة والتعاون، تواصل معنا عبر لينكدإن.",
   "footer.partnershipCta": "تواصل عبر لينكدإن",
@@ -647,8 +635,8 @@ const ar: Record<string, string> = {
   "format.generatePdf": "إنشاء PDF",
   "format.generateDocx": "إنشاء DOCX",
   "format.missingFields": "لا تزال {n} من الحقول فارغة — يمكنك إنشاء المستند الآن أو إكمالها أولًا.",
-  "format.readyToGenerate": "اكتملت جميع الحقول، ويمكنك الآن إنشاء مستندك المختوم.",
-  "format.stampNote": "يتضمن كل مستند صادر عن المنصة التوقيع المعتمد للدكتور عبدالسلام العيد وختم المنصة.",
+  "format.readyToGenerate": "اكتملت الحقول. راجع الدقة قبل إنشاء المسودة.",
+  "format.stampNote": "النماذج المنشأة مسودات للمراجعة. ولا تحمل توقيع مراجع أو موافقة أخلاقية.",
   "format.enterHint": "أدخل:",
   "format.showExample": "عرض مثال مثالي",
   "format.answerPlaceholder": "اكتب إجابتك هنا…",
@@ -769,7 +757,7 @@ const ar: Record<string, string> = {
   "verify.button": "تحقق",
   "verify.searching": "جاري البحث...",
   "verify.found": "تم التحقق من الشهادة",
-  "verify.foundDesc": "رقم IRB هذا أصلي وصدر عن مجلس المراجعة المؤسسية الرقمي الرسمي للجنة الوطنية للأخلاقيات الحيوية.",
+  "verify.foundDesc": "يطابق هذا المرجع سجلاً صادراً في المنصة. تحقق من تواريخه وحالته، وتأكد من قبوله لدى المؤسسة المعنية.",
   "verify.notFound": "لم يتم العثور على شهادة IRB صالحة بهذا الرقم.",
   "verify.notFoundDesc": "لا توجد شهادة معتمدة مطابقة لهذا الرقم. تحقق من الرقم وحاول مرة أخرى.",
   "verify.download": "تحميل الشهادة",
@@ -917,7 +905,7 @@ const ar: Record<string, string> = {
   "auth.tryAgain": "حاول مرة أخرى",
   "auth.notConfigured": "جاري تحديث تسجيل الدخول. حاول بعد دقائق أو تواصل مع الدعم.",
   "auth.invalidEmail": "يرجى إدخال بريد إلكتروني صالح.",
-  "auth.weakPassword": "يجب أن تتكون كلمة المرور من 12 حرفًا على الأقل.",
+  "auth.weakPassword": "استخدم 12 محرفاً على الأقل لكلمة المرور الجديدة.",
   "auth.emailExists": "يوجد حساب بهذا البريد الإلكتروني بالفعل. يرجى تسجيل الدخول.",
   "auth.invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
   "auth.rateLimited": "محاولات كثيرة جدًا. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.",

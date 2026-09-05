@@ -1,183 +1,70 @@
-# Public deployment — IRB Saudi Arabia (v1.1 open beta)
+# Render/Vercel pilot deployment — 2.2.0
 
-## Chosen stack (free + capable)
+This guide describes the checked-in configuration, not the current state of any hosting account. The Render blueprint selects a **free Frankfurt** service and disables automatic deployment. Use this topology for synthetic pilot data while institutional authority, processor/residency review, durability and capacity are being established. Free-tier capacity and availability must be checked against the provider's current terms; no uptime or load guarantee follows from this repository.
 
-| Layer | Service | Why |
-|-------|---------|-----|
-| **API + SPA build** | [Render](https://render.com) free Web Service (Node) | Runs the Express monolith; free tier; Git auto-deploy; health checks |
-| **Frontend edge** | [Vercel](https://vercel.com) (existing) | CDN SPA; rewrites `/api/*` → Render |
-| **Database** | [TiDB Cloud](https://tidbcloud.com) Serverless (MySQL-compatible) | Free Developer Tier; TLS; works with Drizzle/MySQL |
-| **Not used** | Railway | Trial expired / paid — replaced |
+## Topology and data flows
 
-> **Vercel alone is not enough** for this app: certificates/Playwright and a long-lived Express server need a real Node process. Render hosts that; Vercel fronts the SPA.
+Render runs the Node 24 Express process and Chromium document generation. It can serve both the frontend and API. Optional Vercel hosting serves `dist/public` and proxies `/api/*` to Render using `vercel.json`. **Both providers handle proxied API traffic**, including authenticated payloads. Include them in the data-flow and processor assessment.
 
-Free-tier notes:
-- Render spins down after ~15 minutes idle → first request can take ~30–60s. GitHub `keep-warm.yml` pings every 12 minutes.
-- Free Render RAM is limited; PDF certificate generation may skip (approval still works). Upgrade to Starter when you need reliable certs.
+An external MySQL-compatible database stores application, decision, audit, session-revocation, request-limit and AI usage records. The code requires private durable storage for production uploads and a working malware scanner; the blueprint does not provision those services, staff MFA or an operating committee.
 
----
+## Build and launch settings
 
-## One-time setup (≈20 minutes)
+Apply `render.yaml` only after reviewing the region, plan, repository and environment for the intended deployment. For a manually configured Node service, use the same settings:
 
-### 1. TiDB Cloud (MySQL)
-
-1. Create a free Serverless cluster at https://tidbcloud.com  
-2. Create a database named `irb_platform`  
-3. Copy the connection string (include SSL), e.g.  
-   `mysql://user:pass@gateway01….tidbcloud.com:4000/irb_platform?ssl=true`
-
-### 2. Render Web Service
-
-**Option A — Blueprint (recommended)**  
-1. https://dashboard.render.com/select-repo?type=blueprint  
-2. Select `Abdulsalam3302/IRB-Ultimate` → apply [`render.yaml`](render.yaml)  
-3. Service name: `irb-saudi-arabia` → URL becomes  
-   `https://irb-saudi-arabia.onrender.com`
-
-**Option B — Manual**  
-- New → Web Service → this repo  
-- Runtime: Node  
-- Build: `corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install --frozen-lockfile && pnpm run build`  
-- Start: `node dist/index.js`  
-- Health: `/api/health`  
-- Plan: Free  
-
-**Environment variables on Render:**
-
-```
-NODE_ENV=production
-PORT=10000
-DATABASE_URL=<tidb url with ssl>
-JWT_SECRET=<openssl rand -hex 48>
-OWNER_EMAIL=<your real email — first register becomes admin>
-VITE_APP_ID=irb-sa-prod
-VITE_PUBLIC_DEMO_BANNER=1
-PUBLIC_APP_URL=https://irb-saudi-arabia.vercel.app
-VITE_PUBLIC_SITE_URL=https://irb-saudi-arabia.vercel.app
-ALLOWED_ORIGINS=https://irb-saudi-arabia.vercel.app,https://irb-saudi-arabia.onrender.com
+```text
+Node: 24
+Build: npm install -g pnpm@10.34.5 && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm run build
+Start: node dist/index.js
+Readiness path: /api/ready
 ```
 
-Optional (if using Supabase social login):
-```
-SUPABASE_URL=...
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-```
+The Dockerfile is an alternative image build with matching Chromium system dependencies and an unprivileged runtime user. Confirm real PDF generation in the chosen hosting image; installing a browser in a developer workstation does not prove the host has its fonts, libraries or memory.
 
-**AI generation (required for Stage 1/2 review, enhance, auto-complete, swarm):**
-```
-LLM_API_URL=https://api.minimax.io
-LLM_API_KEY=<MiniMax coding-plan or API key — set only on Render / local .env>
-LLM_MODEL=MiniMax-M3
-LLM_PROVIDER=openai
-LLM_MAX_TOKENS=8192
-LLM_FAST_MAX_TOKENS=4096
-LLM_THINKING=disabled
-LLM_TIMEOUT_MS=90000
-```
-Or OpenAI-compatible:
-```
-LLM_API_URL=https://api.openai.com
-LLM_API_KEY=sk-...
-LLM_MODEL=gpt-4o-mini
-LLM_PROVIDER=openai
-```
-Without a working key/credits, AI endpoints return `[AI_UNAVAILABLE]` (applications can still proceed via proceed-despite).
-Never commit API keys to git. Rotate any key that was pasted into chat or tickets.
+Production startup applies checked-in migrations and fails if they cannot complete. Back up and test migrations on staging first. The preferred reviewed migration command is `pnpm db:migrate`; do not generate new migrations during deployment.
 
-Verify after login as owner:
-```
-PORT=3010 node scripts/check-ai.mjs
-# or against production once Render is live:
-BASE_URL=https://irb-saudi-arabia.onrender.com OWNER_EMAIL=... OWNER_PASSWORD=... node scripts/check-ai.mjs
-```
+## Environment
 
-Migrations run automatically on boot (`server/migrate.ts`).
+Use `.env.example` as the variable reference, keeping server credentials in the hosting secret store. Configure:
 
-### 3. Point Vercel at Render
+- `NODE_ENV=production`, a strong `JWT_SECRET`, `VITE_APP_ID`, `DATABASE_URL` with verified TLS, and bounded database pool/queue values appropriate to the service.
+- `PUBLIC_APP_URL`, `PUBLIC_SITE_URL` and build-time `VITE_PUBLIC_SITE_URL` to the final HTTPS public origin. `ALLOWED_ORIGINS` must contain the exact permitted browser origins. Set `TRUST_PROXY_HOPS` from the actual edge/API path and restrict direct-origin access.
+- Institutional `SUPABASE_URL`, `VITE_SUPABASE_URL`, and public `VITE_SUPABASE_ANON_KEY`. Register the exact `/auth/callback` URLs in Supabase. Update the static `connect-src` policy in `vercel.json` if its configured project changes; environment variables do not rewrite that policy.
+- `OWNER_OPEN_ID=sb:<verified-Supabase-user-subject>` for the intended owner and `STAFF_MFA_REQUIRED=true`. Confirm the signed session carries `aal2` after MFA. A native email/password account or an email match alone is not the production staff setup.
+- `DEV_LOGIN_ENABLED=0`, `PILOT_LOGIN_ENABLED=0`, `IRB_ISSUANCE_ENABLED=false` and a visible pilot notice (`VITE_PUBLIC_DEMO_BANNER=1`).
+- `UPLOAD_SCAN_REQUIRED=true`, private `CLAMAV_HOST`/port, and a private S3 bucket plus the supported AWS credential/region settings. The code writes S3 objects with AES256 server-side encryption; enforce private access and retention in bucket/IAM policy as well.
+- An approved OpenAI-compatible LLM endpoint/key/model when AI processing is authorized. Keep `AI_ENABLED=0` until provider contracts/data flows are cleared, then explicitly enable it. Set user/global call ceilings and provider-side spend limits. Native Anthropic request format is not supported by the current client.
+
+The default `PDF_MAX_CONCURRENCY=1` limits rendering memory pressure. Production upload scanning and durable storage deliberately fail closed when missing; disabling safeguards to make a free host accept real data is not release acceptance.
+
+## Optional Vercel frontend
+
+Retain the public SEO-page rewrites, workspace fallback, robots/sitemap/llms assets, security headers and private-route noindex/no-store rules in `vercel.json`. The helper updates backend destinations while preserving the other routes:
 
 ```bash
-node scripts/update-vercel-rewrites.mjs https://irb-saudi-arabia.onrender.com
-git add vercel.json && git commit -m "Point Vercel API rewrites at Render" && git push
+node scripts/update-vercel-rewrites.mjs https://your-api.example.com
 ```
 
-Or set rewrites in the Vercel dashboard to the same destinations.
+Review the resulting configuration before committing. Set public build-time variables on Vercel as well as Render, then rebuild. All `VITE_` variables are exposed to browsers; API keys, session secrets and service credentials must never use that prefix.
 
-Fix GitHub secret `VERCEL_TOKEN` if CI deploy fails (current token was invalid).
+The checked-in Vercel Git deployment switch and Render automatic deployment switch are disabled. Review current GitHub workflow dispatch requirements and hosting configuration before publishing; pushing source does not by itself prove either host deployed. Do not treat old domain URLs or historical token errors in prior notes as current evidence.
 
-### 4. Verify
+## Verify the actual deployment
+
+Use the chosen origin in these read-only checks:
 
 ```bash
-curl -sS https://irb-saudi-arabia.onrender.com/api/health
-curl -sS https://irb-saudi-arabia.vercel.app/api/health
+curl --fail --silent --show-error https://your-api.example.com/api/health
+curl --fail --silent --show-error https://your-api.example.com/api/ready
+curl --fail --silent --show-error https://your-public.example.com/api/ready
 ```
 
-Both should return healthy JSON (Vercel proxies to Render).
+Record the build identity/version, readiness result, time and host. `/api/health` is liveness/version information; `/api/ready` checks database and required security schema. Neither proves scanner health, provider contracts, backup restoration or committee authority.
 
-### 5. Create owner admin
+Complete the synthetic acceptance checklist in [the runbook](docs/operations-runbook.md), including browser login/MFA, upload scanning, private download denial, AI outage behavior, document rendering, restart persistence and bounded load. Confirm the actual host's memory, latency and error rates. On constrained infrastructure, reject excess work cleanly; document failures must remain visible and must not be represented as successful PDF delivery.
 
-1. Open https://irb-saudi-arabia.vercel.app/disclaimer → acknowledge  
-2. Register at `/auth` with **exactly** `OWNER_EMAIL`  
-3. Password ≥ 12 characters  
-4. Open https://irb-saudi-arabia.vercel.app/admin/observability  
+Before accepting real applications or paid-ad traffic, close the requirements in [DEPLOY.md](DEPLOY.md) and record release evidence in [production readiness](docs/production-readiness.md). A custom domain is only one part of that decision.
 
----
+### Container frontend configuration
 
-## GitHub secrets / vars
-
-| Name | Purpose |
-|------|---------|
-| `RENDER_DEPLOY_HOOK` | Optional — Render → Settings → Deploy Hook. **Not set today.** Until it is, after each `main` push: Render → `irb-saudi-arabia` → Manual Deploy. Confirm `/api/health` `version` is the new Git SHA (not `e9de9c03…`) and `appVersion` is current. |
-| `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | Frontend CI deploy |
-| `JWT_SECRET` | Prefer setting on Render dashboard (not only GitHub) |
-| var `RENDER_URL` | Keep-warm + docs (`https://….onrender.com`) |
-
-Railway secrets/vars can be removed.
-
----
-
-## Local helper
-
-```bash
-chmod +x scripts/deploy-render.sh
-RENDER_URL=https://irb-saudi-arabia.onrender.com ./scripts/deploy-render.sh
-```
-
----
-
-## Security checklist (public beta)
-
-- [ ] Strong `JWT_SECRET` (≥ 32 chars) on Render  
-- [ ] `ALLOWED_ORIGINS` lists Vercel + Render URLs only  
-- [ ] `OWNER_EMAIL` is your address; register that account first  
-- [ ] `DEV_LOGIN_ENABLED` unset; `PILOT_LOGIN_ENABLED=0` for real public use  
-- [ ] TiDB TLS enabled (`ssl=true` in URL)  
-- [ ] No real PHI until KSA-resident hosting + PDPL review  
-- [ ] Health green on both Render and Vercel proxy  
-
----
-
-## URLs
-
-| Surface | URL |
-|---------|-----|
-| Public site | https://irb-saudi-arabia.vercel.app |
-| API (Render) | https://irb-saudi-arabia.onrender.com |
-| Health | `/api/health` |
-| Observability | `/admin/observability` (owner only) |
-
-## Live stack (as of 2026-07-15)
-
-| Layer | Status |
-|-------|--------|
-| Render `irb-saudi-arabia` (Frankfurt, free) | Live — auto-deploy from `main` |
-| TiDB Serverless `irb-saudi-arabia` (eu-central-1) | Active — DB `irb_platform`, TLS |
-| Vercel SPA + `/api` rewrite → Render | Live |
-| Keep-warm GitHub Action | Every 12 minutes |
-| Owner bootstrap | Register with `OWNER_EMAIL` (= Render account email) first |
-
-**Ops notes**
-- Migrations use `CREATE INDEX IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` (TiDB cannot run MySQL stored procedures).
-- Render build uses `npm i -g pnpm@10.4.1` (not `corepack enable` — EROFS on free images).
-- Pin Node `20.x` via `engines` + `.node-version`.
-- `DATABASE_POOL_MAX=5` for TiDB Serverless.
+Vite public configuration is compiled into the browser build. Supply `--build-arg VITE_PUBLIC_SITE_URL=...`, `--build-arg VITE_SUPABASE_URL=...`, `--build-arg VITE_SUPABASE_ANON_KEY=...` and `--build-arg VITE_APP_ID=irb-sa-prod` when building the image. The evaluation banner defaults to `VITE_PUBLIC_DEMO_BANNER=1`. These are public browser values; never pass a service-role key or other secret as a build argument. Runtime-only environment variables cannot change an already built frontend. The container still needs its separate server/database/model/scanner secrets at runtime.

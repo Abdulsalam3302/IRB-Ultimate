@@ -1,3 +1,4 @@
+import { safeNextPath } from "@/lib/navigation";
 export { COOKIE_NAME, ONE_YEAR_MS, SESSION_TTL_MS } from "@shared/const";
 
 /**
@@ -12,7 +13,7 @@ export { COOKIE_NAME, ONE_YEAR_MS, SESSION_TTL_MS } from "@shared/const";
  * anything that doesn't begin with "/".
  */
 export const getLoginUrl = (next?: string) => {
-  const safeNext = typeof next === "string" && /^\/(?!\/)/.test(next) ? next : "";
+  const safeNext = safeNextPath(next, "");
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 

@@ -1,62 +1,45 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { useEffect } from "react";
+import { registerBrowserTools, type BrowserModelContext, type BrowserTool } from "@/lib/webmcp";
 
-type McpTool = {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-};
-
-const APPLICANT_TOOLS: McpTool[] = [
-  { name: "irb_list_applications", description: "List the authenticated user's IRB applications", inputSchema: { type: "object", properties: {} } },
-  { name: "irb_create_application", description: "Create a new IRB application draft", inputSchema: { type: "object", properties: {} } },
-  { name: "irb_get_application", description: "Get one IRB application by id", inputSchema: { type: "object", properties: { applicationId: { type: "number" } }, required: ["applicationId"] } },
-  { name: "irb_missing_requirements", description: "List missing fields for an application", inputSchema: { type: "object", properties: { applicationId: { type: "number" } }, required: ["applicationId"] } },
-  { name: "irb_submit_application", description: "Submit an application (triggers authorized digital review)", inputSchema: { type: "object", properties: { applicationId: { type: "number" } }, required: ["applicationId"] } },
-  { name: "irb_chat_send", description: "Send a chatbot application turn", inputSchema: { type: "object", properties: { applicationId: { type: "number" }, messages: { type: "array" } }, required: ["applicationId", "messages"] } },
-];
-
-const ADMIN_TOOLS: McpTool[] = [
-  { name: "irb_admin_committee_members", description: "List active IRB committee members", inputSchema: { type: "object", properties: {} } },
-];
-
-/**
- * App-wide WebMCP discovery. Tools are advertised by role; authorization
- * is always enforced on POST /mcp (never trust the client catalog).
- */
+/** Browser WebMCP is distinct from the server's authenticated MCP transport. */
 export function WebMcpProvider({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
-
+  const { user } = useAuth();
+  const utils = trpc.useUtils();
+  const userId = user?.id;
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    let link = document.querySelector('link[rel="mcp"]');
-    if (!link) {
-      link = document.createElement("link");
-      link.setAttribute("rel", "mcp");
-      document.head.appendChild(link);
-    }
-    link.setAttribute("href", "/.well-known/mcp.json");
-    link.setAttribute("type", "application/json");
-
-    const tools = [
-      ...APPLICANT_TOOLS,
-      ...(user?.role === "admin" ? ADMIN_TOOLS : []),
-    ];
-    const nav = navigator as Navigator & {
-      modelContext?: {
-        registerToolProvider?: (provider: unknown) => void;
-      };
-    };
-    try {
-      nav.modelContext?.registerToolProvider?.({
-        name: "irb-ultimate",
-        tools: isAuthenticated ? tools : [],
-        endpoint: "/mcp",
-      });
-    } catch {
-      /* experimental API */
-    }
-  }, [isAuthenticated, user?.role]);
-
+    if (!window.isSecureContext) return;
+    const current = (document as Document & { modelContext?: BrowserModelContext }).modelContext;
+    const preview = (navigator as Navigator & { modelContext?: BrowserModelContext }).modelContext;
+    const context = typeof current?.registerTool === "function" ? current : preview;
+    if (typeof context?.registerTool !== "function") return;
+    const tools: BrowserTool[] = [{
+      name: "irb_platform_guidance",
+      description: "Read public guidance about the IRB Saudi Arabia workflow and its human decision authority. No personal information is returned.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      annotations: { readOnlyHint: true },
+      execute: async () => ({
+        platform: "IRB Saudi Arabia",
+        scope: "Independent research ethics workflow software for Saudi Arabia. AI assessments are advisory; authorized human review determines ethics decisions.",
+        pages: { resources: "/resources", policy: "/policy", privacy: "/resources/guideline/privacy-policy", support: "/support" },
+        roadmap: "International expansion planned from 2027, subject to requirements in each jurisdiction; no automatic global certificate validity.",
+      }),
+    }];
+    if (userId != null) tools.push({
+      name: "irb_list_application_statuses",
+      description: "Read up to 20 application reference IDs and workflow statuses owned by the signed-in researcher. No names, protocol text, documents, messages, certificates, or investigator details are returned.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      annotations: { readOnlyHint: true },
+      execute: async (_input, options) => {
+        // Revalidate the session server-side on every call; never trust the role catalog.
+        const session = await utils.client.auth.me.query(undefined, { signal: options?.signal });
+        if (!session || session.id !== userId) throw new Error("Sign in again to access application status");
+        const applications = await utils.client.application.myApplications.query(undefined, { signal: options?.signal });
+        return { applications: applications.slice(0, 20).map(row => ({ applicationId: row.id, status: row.status })), hasMore: applications.length > 20 };
+      },
+    });
+    return registerBrowserTools(context, tools);
+  }, [userId, utils.client]);
   return <>{children}</>;
 }

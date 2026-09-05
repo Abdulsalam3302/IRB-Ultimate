@@ -84,7 +84,7 @@ export const RESOURCES: ResourceItem[] = [
     titleEn: "Informed Consent Form Template",
     titleAr: "نموذج الموافقة المستنيرة",
     descEn:
-      "Template for creating participant informed consent forms compliant with Saudi regulations and NCBE guidelines.",
+      "Draft template for preparing participant informed consent materials for review by the responsible committee.",
     descAr:
       "نموذج لإنشاء نماذج الموافقة المستنيرة للمشاركين متوافقة مع اللوائح السعودية وإرشادات NCBE.",
     sections: [

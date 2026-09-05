@@ -1,3 +1,4 @@
+import { readUploadBase64 } from "@/lib/files";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -206,12 +207,7 @@ export default function ApplyStage1() {
   const handleFileUpload = async (file: File, field: "questionnaireFileUrl" | "supplementaryFilesJson") => {
     setUploading(true);
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => { resolve((reader.result as string).split(",")[1]); };
-        reader.onerror = () => reject(reader.error || new Error("read failed"));
-        reader.readAsDataURL(file);
-      });
+      const base64 = await readUploadBase64(file);
       const result = await uploadFile.mutateAsync({ fileName: file.name, fileData: base64, contentType: file.type, applicationId: appId, category: field === "supplementaryFilesJson" ? "supplementary" : "questionnaire" });
       if (field === "supplementaryFilesJson") {
         // Functional update — when the user multi-selects N files, all N
@@ -271,7 +267,11 @@ export default function ApplyStage1() {
       return;
     }
     try {
-      await saveStage1.mutateAsync({ id: appId, ...form, labHeadApproval: form.labHeadApproval || undefined });
+      if (!(form.researchType in RESEARCH_TYPE_LABELS) || !["exempt", "expedited", "full_board"].includes(form.irbCategory)) {
+        toast.error(isAr ? "اختر نوع البحث وفئة المراجعة الصحيحة" : "Select a valid research type and review category");
+        return;
+      }
+      await saveStage1.mutateAsync({ id: appId, ...form, researchType: form.researchType as ResearchType, irbCategory: form.irbCategory as "exempt" | "expedited" | "full_board", labHeadApproval: form.labHeadApproval || undefined });
       toast.success(isAr ? "تم حفظ المرحلة الأولى. جاري مراجعة الذكاء الاصطناعي..." : "Stage 1 saved. Running AI review...");
       const result = await runAiReview.mutateAsync({ id: appId });
       setAiResult(result); setShowAiResult(true);

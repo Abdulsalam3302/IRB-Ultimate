@@ -1,30 +1,27 @@
-# Ping the Render free tier so cold-starts stay rare during open beta.
-name: Keep warm (Render)
-
+# Readiness monitoring. A successful ping is not a capacity or restore guarantee.
+name: Runtime readiness monitor
 on:
   schedule:
     - cron: "*/12 * * * *"
   workflow_dispatch:
-
+permissions:
+  contents: read
+concurrency:
+  group: irb-readiness-monitor
+  cancel-in-progress: false
 jobs:
-  ping:
+  readiness:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Health ping
+      - name: Verify backend and public proxy readiness
         env:
           RENDER_URL: ${{ vars.RENDER_URL }}
           PUBLIC_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: |
-          RENDER_URL="${RENDER_URL:-https://irb-saudi-arabia.onrender.com}"
-          PUBLIC_URL="${PUBLIC_URL:-https://irb-saudi-arabia.vercel.app}"
-          for url in "$RENDER_URL/api/health" "$PUBLIC_URL/api/health"; do
-            echo "GET $url"
-            code=$(curl -sS -o /tmp/health.json -w "%{http_code}" --max-time 90 "$url" || echo "000")
-            echo "status=$code"
-            head -c 400 /tmp/health.json || true
-            echo
-            # Keep-warm should not fail the workflow on cold start blips.
-            if [ "$code" != "200" ]; then
-              echo "::warning::Health check returned $code for $url"
-            fi
+          set -euo pipefail
+          test -n "$RENDER_URL" && test -n "$PUBLIC_URL"
+          for url in "$RENDER_URL/api/ready" "$PUBLIC_URL/api/ready"; do
+            curl -fsS --retry 2 --retry-delay 3 --max-time 60 "$url" > /tmp/irb-readiness.json
+            jq -e '.ok == true and (.appVersion | type == "string")' /tmp/irb-readiness.json
           done

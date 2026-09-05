@@ -145,6 +145,7 @@ jobs:
           UPLOAD_SCAN_REQUIRED: "false" # Disposable loopback E2E; scanner protocol has separate tests.
         run: |
           pnpm build
+          node scripts/check-pdf-runtime.mjs
           NODE_ENV=production node dist/index.js > /tmp/irb-runtime.log 2>&1 &
           for i in {1..30}; do
             curl -fsS http://127.0.0.1:3000/api/ready >/dev/null && break

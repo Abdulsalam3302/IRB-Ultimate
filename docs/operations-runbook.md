@@ -54,3 +54,5 @@ Keep a verified pre-migration backup. Roll back application code only when compa
 `ALLOW_LOCAL_TEST_DB=1`, `ALLOW_UNENCRYPTED_BACKUP=true`, `UPLOAD_SCAN_REQUIRED=false`, `STAFF_MFA_REQUIRED=false`, developer/pilot login and ephemeral `ALLOW_LOCAL_STORAGE=true` are not public acceptance settings. CI may use specific exceptions with disposable loopback synthetic data; those exceptions must not propagate into hosting secrets.
 
 Reassess the data-flow map and controls whenever adding a provider, changing region/proxy topology, enabling analytics/ads, expanding internationally or altering AI decision behavior. Changes to the institution's legal or bioethics authority require its own approval process.
+
+On Render set `PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/.cache/playwright` for both build and runtime. The start command runs `scripts/check-pdf-runtime.mjs` before accepting traffic; it renders a fixed synthetic PDF with network and JavaScript disabled and emits only a diagnostic category on failure. Run the same check after changing Playwright or the host image.

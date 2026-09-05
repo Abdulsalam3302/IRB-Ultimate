@@ -20,8 +20,10 @@ services:
     healthCheckPath: /api/ready
     # Avoid `corepack enable` on Render free images (EROFS on /usr/bin/pnpm).
     buildCommand: npm install -g pnpm@10.34.5 && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm run build
-    startCommand: node dist/index.js
+    startCommand: node scripts/check-pdf-runtime.mjs && node dist/index.js
     envVars:
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/.cache/playwright
       - key: NODE_VERSION
         value: "24"
       - key: IRB_ISSUANCE_ENABLED

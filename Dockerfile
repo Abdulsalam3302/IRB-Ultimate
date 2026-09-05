@@ -24,8 +24,9 @@ RUN node node_modules/playwright/cli.js install --with-deps chromium && rm -rf /
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/scripts/check-pdf-runtime.mjs ./scripts/check-pdf-runtime.mjs
 RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/ready',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node scripts/check-pdf-runtime.mjs && exec node dist/index.js"]

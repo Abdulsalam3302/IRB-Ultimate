@@ -32,9 +32,9 @@ export const RESOURCES: ResourceItem[] = [
     titleEn: "IRB Application Form Template",
     titleAr: "نموذج طلب IRB",
     descEn:
-      "Complete application form template with all sections required for IRB submission, including PI information, research classification, and ethics declaration.",
+      "Draft application worksheet covering investigator information, research classification and ethics declarations. Confirm institution-specific submission requirements.",
     descAr:
-      "نموذج طلب كامل يتضمن جميع الأقسام المطلوبة لتقديم IRB، بما في ذلك معلومات الباحث الرئيسي وتصنيف البحث وإعلان الأخلاقيات.",
+      "ورقة عمل لإعداد الطلب تشمل بيانات الباحث وتصنيف البحث وإقرار الأخلاقيات. تحقق من متطلبات التقديم الخاصة بالمؤسسة.",
     sections: [
       {
         headingEn: "1. Principal Investigator",
@@ -86,7 +86,7 @@ export const RESOURCES: ResourceItem[] = [
     descEn:
       "Draft template for preparing participant informed consent materials for review by the responsible committee.",
     descAr:
-      "نموذج لإنشاء نماذج الموافقة المستنيرة للمشاركين متوافقة مع اللوائح السعودية وإرشادات NCBE.",
+      "مسودة لإعداد مواد الموافقة المستنيرة للمشاركين لمراجعتها من اللجنة المختصة.",
     sections: [
       {
         headingEn: "Purpose of the Study",
@@ -165,7 +165,8 @@ export const RESOURCES: ResourceItem[] = [
       {
         headingEn: "2. Objectives and Hypotheses",
         headingAr: "٢. الأهداف والفرضيات",
-        bodyEn: "Primary and secondary objectives. State each hypothesis in measurable terms.",
+        bodyEn:
+          "Primary and secondary objectives. State each hypothesis in measurable terms.",
         bodyAr: "الأهداف الأولية والثانوية. اذكر كل فرضية بشكل قابل للقياس.",
       },
       {
@@ -181,14 +182,16 @@ export const RESOURCES: ResourceItem[] = [
         headingAr: "٤. جمع البيانات وإدارتها",
         bodyEn:
           "Sources, instruments, data flow, storage location, encryption, retention, and erasure plan.",
-        bodyAr: "المصادر، الأدوات، تدفق البيانات، موقع التخزين، التشفير، فترة الاحتفاظ، وخطة الحذف.",
+        bodyAr:
+          "المصادر، الأدوات، تدفق البيانات، موقع التخزين، التشفير، فترة الاحتفاظ، وخطة الحذف.",
       },
       {
         headingEn: "5. Statistical Analysis",
         headingAr: "٥. التحليل الإحصائي",
         bodyEn:
           "Planned analyses for each objective, software, and how missing / outlier data will be handled.",
-        bodyAr: "التحليلات المخطط لها لكل هدف، البرامج، وكيفية التعامل مع البيانات المفقودة/الشاذة.",
+        bodyAr:
+          "التحليلات المخطط لها لكل هدف، البرامج، وكيفية التعامل مع البيانات المفقودة/الشاذة.",
       },
       {
         headingEn: "6. Ethical Considerations",
@@ -201,7 +204,8 @@ export const RESOURCES: ResourceItem[] = [
       {
         headingEn: "7. Timeline and Budget",
         headingAr: "٧. الجدول الزمني والميزانية",
-        bodyEn: "Milestones from kick-off to publication. Funding source and budget itemisation.",
+        bodyEn:
+          "Milestones from kick-off to publication. Funding source and budget itemisation.",
         bodyAr: "المعالم من البداية حتى النشر. مصدر التمويل وبنود الميزانية.",
       },
     ],
@@ -212,41 +216,41 @@ export const RESOURCES: ResourceItem[] = [
     titleEn: "NCBE Ethics Guidelines Summary",
     titleAr: "ملخص إرشادات NCBE الأخلاقية",
     descEn:
-      "Key principles and requirements for ethical research in Saudi Arabia, including informed consent, privacy, and Vision 2030 alignment.",
+      "Educational overview of research ethics topics for Saudi Arabia. Check current official requirements and the responsible committee policies.",
     descAr:
-      "المبادئ والمتطلبات الرئيسية للبحث الأخلاقي في المملكة العربية السعودية، بما في ذلك الموافقة المستنيرة والخصوصية والتوافق مع رؤية 2030.",
+      "نظرة تعليمية على موضوعات أخلاقيات البحث في السعودية. تحقق من المتطلبات الرسمية الحالية وسياسات اللجنة المختصة.",
     sections: [
       {
         headingEn: "Core Principles",
         headingAr: "المبادئ الأساسية",
         bodyEn:
-          "Respect for persons, beneficence, non-maleficence, justice, and integrity. All studies on human subjects must be approved by a registered IRB before recruitment begins.",
+          "Respect for persons, beneficence, non-maleficence, justice and integrity. Obtain the responsible committee determination and any required authorization before starting research or recruitment.",
         bodyAr:
-          "احترام الأشخاص، تحقيق المنفعة، عدم الإضرار، العدالة، والنزاهة. يجب اعتماد كل الدراسات التي تشمل البشر من قبل IRB مسجَّل قبل بدء التجنيد.",
+          "احترام الأشخاص وتحقيق المنفعة وعدم الإضرار والعدالة والنزاهة. احصل على قرار اللجنة المختصة والتصاريح اللازمة قبل بدء البحث أو تجنيد المشاركين.",
       },
       {
         headingEn: "Informed Consent",
         headingAr: "الموافقة المستنيرة",
         bodyEn:
-          "Written consent in the participant's preferred language, free of coercion, with mandatory disclosure of risks, benefits, and the right to withdraw.",
+          "Use a committee-reviewed consent process in language participants understand, without coercion, explaining relevant risks, benefits and withdrawal. Any waiver or alteration needs the applicable documented determination; this overview does not grant one.",
         bodyAr:
-          "موافقة كتابية باللغة المفضلة للمشارك، دون إكراه، مع الإفصاح الإلزامي عن المخاطر والفوائد وحق الانسحاب.",
+          "استخدم عملية موافقة راجعتها اللجنة بلغة يفهمها المشاركون، دون إكراه، مع توضيح المخاطر والفوائد والانسحاب. يتطلب أي إعفاء أو تعديل القرار الموثق اللازم؛ لا تمنح هذه النظرة التعليمية إعفاءً.",
       },
       {
         headingEn: "Privacy and Data Protection",
         headingAr: "الخصوصية وحماية البيانات",
         bodyEn:
-          "Compliance with PDPL (Personal Data Protection Law) and NDMO data-classification rules. Sensitive personal data — including health data — should be stored inside KSA unless an explicit cross-border transfer authorisation exists.",
+          "Document the data collected, lawful processing basis, storage and transfer locations, access, retention and deletion. Have the institutional privacy lead review applicable PDPL and other requirements; this overview does not determine compliance or a universal retention period.",
         bodyAr:
-          "الامتثال لنظام حماية البيانات الشخصية (PDPL) وقواعد تصنيف البيانات من NDMO. البيانات الشخصية الحساسة — بما فيها البيانات الصحية — يجب أن تُخزَّن داخل المملكة ما لم يوجد تصريح صريح للنقل عبر الحدود.",
+          "وثق البيانات المجمعة وأساس معالجتها ومواقع تخزينها ونقلها والوصول إليها والاحتفاظ بها وحذفها. اطلب مراجعة مسؤول الخصوصية بالمؤسسة لمتطلبات PDPL وغيرها من المتطلبات المنطبقة؛ لا تحدد هذه النظرة التعليمية الامتثال أو مدة احتفاظ موحدة.",
       },
       {
         headingEn: "Adverse Events and Amendments",
         headingAr: "الأحداث الضارة والتعديلات",
         bodyEn:
-          "Serious adverse events must be reported within 7 days. Any protocol change that affects risk-benefit must be filed as an amendment and approved before implementation.",
+          "Record the applicable committee, sponsor and regulatory reporting routes and deadlines before the study begins. Submit protocol changes for the required review; follow the approved policy for urgent participant-protection measures.",
         bodyAr:
-          "يجب الإبلاغ عن الأحداث الضارة الجسيمة خلال ٧ أيام. أي تغيير على البروتوكول يؤثر على ميزان المخاطر/الفوائد يجب تقديمه كتعديل واعتماده قبل التنفيذ.",
+          "حدد مسارات الإبلاغ ومواعيده المنطبقة لدى اللجنة والراعي والجهة التنظيمية قبل بدء الدراسة. قدم تعديلات البروتوكول للمراجعة اللازمة، واتبع السياسة المعتمدة للتدابير العاجلة لحماية المشاركين.",
       },
       {
         headingEn: "Vulnerable Populations",
@@ -271,13 +275,15 @@ export const RESOURCES: ResourceItem[] = [
       {
         headingEn: "Identification (de-identifiable)",
         headingAr: "تعريف الحالة (قابل لإزالة المعرّفات)",
-        bodyEn: "Participant code (NOT name). Date of data collection. Site / center code.",
+        bodyEn:
+          "Participant code (NOT name). Date of data collection. Site / center code.",
         bodyAr: "رمز المشارك (وليس الاسم). تاريخ الجمع. رمز الموقع / المركز.",
       },
       {
         headingEn: "Demographics",
         headingAr: "البيانات الديموغرافية",
-        bodyEn: "Age range. Sex. Nationality. Education level. Occupation category.",
+        bodyEn:
+          "Age range. Sex. Nationality. Education level. Occupation category.",
         bodyAr: "الفئة العمرية. الجنس. الجنسية. المستوى التعليمي. فئة الوظيفة.",
       },
       {
@@ -292,9 +298,9 @@ export const RESOURCES: ResourceItem[] = [
         headingEn: "Reliability Notes",
         headingAr: "ملاحظات الموثوقية",
         bodyEn:
-          "Pilot-test on 10–30 participants before launch. Report Cronbach's alpha or test-retest reliability for multi-item scales.",
+          "Plan a justified pilot appropriate to the instrument and population. Document the observed results and an appropriate reliability assessment; do not copy example statistics into a study record.",
         bodyAr:
-          "اختبر تجريبيًا على ١٠–٣٠ مشاركًا قبل الإطلاق. أبلغ عن ألفا كرونباخ أو موثوقية الاختبار-إعادة الاختبار للمقاييس متعددة البنود.",
+          "خطط لتجريب مبرر يناسب الأداة والمجتمع. وثق النتائج الفعلية وتقييم الموثوقية المناسب؛ لا تنسخ إحصاءات الأمثلة إلى سجل الدراسة.",
       },
     ],
   },

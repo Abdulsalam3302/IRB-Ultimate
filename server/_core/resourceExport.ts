@@ -1,5 +1,5 @@
 /**
- * Resource export — official EN or AR templates (PDF via Chromium, DOCX via docx).
+ * Resource export — draft EN or AR worksheets (PDF via Chromium, DOCX via docx).
  */
 
 import {
@@ -12,8 +12,12 @@ import {
   BorderStyle,
 } from "docx";
 import type { ResourceItem } from "@shared/resources";
-import { getTemplateSections, type TemplateField, type TemplateSection } from "@shared/templateFields";
-import { BRAND, STAMPED_TICK_SVG, AUTHOR, PLATFORM, PLATFORM_DISCLAIMER } from "@shared/branding";
+import {
+  getTemplateSections,
+  type TemplateField,
+  type TemplateSection,
+} from "@shared/templateFields";
+import { BRAND, STAMPED_TICK_SVG, AUTHOR, PLATFORM } from "@shared/branding";
 
 export type ExportLang = "en" | "ar";
 export type ExportMode = "blank" | "filled" | "generated";
@@ -27,18 +31,36 @@ function escapeHtml(s: string): string {
 }
 
 function blankLinesHtml(count: number, lang: ExportLang): string {
-  return Array.from({ length: count }, () =>
-    lang === "ar"
-      ? `<div class="blank-line" dir="rtl">_______________________________________________</div>`
-      : `<div class="blank-line">_______________________________________________</div>`,
+  return Array.from(
+    { length: count },
+    () =>
+      `<div class="blank-line" aria-hidden="true"${lang === "ar" ? ' dir="rtl"' : ""}></div>`
   ).join("");
+}
+
+function preparationNotice(
+  lang: ExportLang,
+  mode: ExportMode,
+  category: ResourceItem["category"] = "template"
+): string {
+  if (category === "guideline")
+    return lang === "ar"
+      ? "مرجع تعليمي مختصر. تحقق من المصادر الرسمية الحالية واطلب مراجعة المؤسسة لتحديد المتطلبات المنطبقة. لا يمثل سياسة رسمية أو قراراً تنظيمياً."
+      : "Brief educational reference. Check current official sources and obtain institutional review of applicable requirements. This is not an official policy or regulatory determination.";
+  if (mode === "generated")
+    return lang === "ar"
+      ? "مسودة من إجاباتك. تحقق من الحقائق واستكمل النواقص واطلب مراجعة اللجنة المختصة قبل الاستخدام. ليست موافقة أخلاقية."
+      : "Draft from your answers. Verify facts, complete missing information and obtain responsible committee review before use. This is not ethics approval.";
+  return lang === "ar"
+    ? "ورقة عمل للإعداد. الأمثلة توضيحية وليست حقائق عن دراستك. استبدلها ببيانات موثقة واطلب مراجعة اللجنة المختصة قبل الاستخدام."
+    : "Preparation worksheet. Examples are illustrative, not facts about your study. Replace them with verified details and obtain responsible committee review before use.";
 }
 
 function renderFieldHtml(
   field: TemplateField,
   lang: ExportLang,
   mode: ExportMode,
-  prefill?: Record<string, string>,
+  prefill?: Record<string, string>
 ): string {
   const isAr = lang === "ar";
   const label = isAr ? field.labelAr : field.labelEn;
@@ -60,7 +82,7 @@ function renderFieldHtml(
   const hintBlock = isGenerated
     ? ""
     : `<div class="field-hint"><strong>${isAr ? "↳ أدخل:" : "↳ Enter:"}</strong> ${escapeHtml(hint)}</div>
-      <div class="field-example"><strong>${isAr ? "★ مثال مثالي:" : "★ Ideal example:"}</strong> ${escapeHtml(example).replace(/\n/g, "<br/>")}</div>`;
+      <div class="field-example"><strong>${isAr ? "مثال توضيحي:" : "Illustrative example:"}</strong> ${escapeHtml(example).replace(/\n/g, "<br/>")}</div>`;
 
   return `
     <div class="field-block" ${dir}>
@@ -75,85 +97,74 @@ function renderSectionHtml(
   lang: ExportLang,
   mode: ExportMode,
   prefill?: Record<string, string>,
+  closingNote?: string
 ): string {
   const isAr = lang === "ar";
   const heading = isAr ? section.headingAr : section.headingEn;
   const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
-  const fields = section.fields.map(f => renderFieldHtml(f, lang, mode, prefill)).join("");
+  const fields = section.fields
+    .map((field, index) => {
+      const html = renderFieldHtml(field, lang, mode, prefill);
+      return closingNote && index === section.fields.length - 1
+        ? `<div class="document-closing">${html}${closingNote}</div>`
+        : html;
+    })
+    .join("");
   return `<section class="doc-section" ${dir}><h2>${escapeHtml(heading)}</h2>${fields}</section>`;
 }
 
-// Issuance stamp for templates. Deliberately NOT a signature block: a
-// fillable form that ships pre-"signed" by an "Approving Authority" could be
-// mistaken for — or passed off as — an approved document, e.g. shown to study
-// participants on a consent form. Real signature blocks belong only on
-// certificates of actual review decisions.
-function authorStampHtml(lang: ExportLang): string {
-  const isAr = lang === "ar";
-  const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
-  return `<div class="author-stamp" ${dir}>
-    ${STAMPED_TICK_SVG}
-    <div>
-      <div class="name">${isAr ? PLATFORM.nameAr : PLATFORM.nameEn}</div>
-      <div class="role">${isAr ? AUTHOR.orgAr : AUTHOR.orgEn}</div>
-      <div class="role" style="margin-top:8px;font-style:italic">
-        ${isAr
-          ? "قالب صادر عن المنصة للاستخدام البحثي · لا يُعدّ موافقة أخلاقية أو وثيقة معتمدة"
-          : "Template issued by the platform for research use · Not an ethics approval or certified document"}
-      </div>
-    </div>
-  </div>`;
-}
-
+// Compact closing note stays with the last field; no pre-signed approval stamp.
 function footerHtml(lang: ExportLang, dateStr: string): string {
   const isAr = lang === "ar";
-  return `<footer>
-    ${isAr ? `${PLATFORM.nameAr} — منصة AHSS مستقلة · PDPL · إرشادات NCBE` : `${PLATFORM.nameEn} — Independent AHSS platform · PDPL · NCBE guidelines`} · ${dateStr}<br/>
-    © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn} · AHSS · ${isAr ? "المملكة العربية السعودية" : "Kingdom of Saudi Arabia"}<br/>
-    <span style="font-size:8pt">${isAr ? PLATFORM_DISCLAIMER.ar : PLATFORM_DISCLAIMER.en}</span>
+  return `<footer class="document-note" lang="${lang}" dir="${isAr ? "rtl" : "ltr"}">
+    <strong>${isAr ? PLATFORM.nameAr : PLATFORM.nameEn} · AHSS</strong>
+    <p>${
+      isAr
+        ? "مسودة تعليمية تحتاج إلى مراجعة المؤسسة واللجنة المختصة. لا تثبت موافقة أخلاقية أو امتثالاً تنظيمياً."
+        : "Draft educational material requiring institutional and committee review. It does not establish ethics approval or regulatory compliance."
+    }</p>
+    <small>${dateStr} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}</small>
   </footer>`;
 }
 
 function officialStyles(lang: ExportLang): string {
   const isAr = lang === "ar";
   const bodyFont = isAr
-    ? '"Traditional Arabic", "Geeza Pro", Tahoma, Arial, sans-serif'
-    : '"Times New Roman", Times, serif';
-  const bodySize = isAr ? "14pt" : "12pt";
-
+    ? '"DejaVu Sans", "Noto Naskh Arabic", Tahoma, Arial, sans-serif'
+    : '"Liberation Serif", "Times New Roman", Times, serif';
   return `
-  @page { size: A4; margin: 20mm 18mm; }
-  body { font-family: ${bodyFont}; font-size: ${bodySize}; color: #111; line-height: 1.55; margin: 0;
-    ${isAr ? "direction: rtl; text-align: right;" : "direction: ltr; text-align: left;"}}
-  .official-header { border-bottom: 3px double ${BRAND.forest}; padding-bottom: 14px; margin-bottom: 22px;
-    display: flex; align-items: center; gap: 16px; ${isAr ? "flex-direction: row-reverse;" : ""}}
-  .official-header svg { width: 52px; height: 52px; flex-shrink: 0; }
-  .official-header .titles h1 { font-size: ${isAr ? "18pt" : "16pt"}; color: ${BRAND.forest}; margin: 0 0 4px; }
-  .official-header .titles .subtitle { font-size: 10pt; color: #555; }
-  .official-header .meta { margin-${isAr ? "right" : "left"}: auto; font-size: 9pt; color: #666;
-    text-align: ${isAr ? "left" : "right"}; }
-  .doc-section { margin: 20px 0; page-break-inside: avoid; }
-  .doc-section h2 { font-size: ${isAr ? "16pt" : "14pt"}; color: ${BRAND.forest};
-    border-bottom: 1.5px solid ${BRAND.jade}; padding-bottom: 4px; margin: 0 0 12px; }
-  .field-block { border: 1px solid #d4d4d8; border-${isAr ? "right" : "left"}: 4px solid ${BRAND.jade};
-    padding: 10px 12px; margin: 10px 0; background: #fafafa; page-break-inside: avoid; }
-  .field-label { font-weight: 700; margin-bottom: 6px; color: ${BRAND.forest}; }
-  .field-hint { font-size: 10pt; color: #444; margin-bottom: 4px; }
-  .field-example { font-size: 10pt; color: #065f46; background: #ecfdf5; border: 1px dashed ${BRAND.jade};
-    padding: 6px 8px; margin: 6px 0; border-radius: 4px; }
-  .blank-line { border-bottom: 1px solid #999; min-height: 1.6em; margin: 6px 0; }
-  .filled-value { background: #fff; border: 1px solid ${BRAND.forest}; padding: 8px 10px; white-space: pre-wrap; }
-  .filled-value.empty { color: #888; font-style: italic; }
-  .author-stamp {
-    margin-top: 32px; padding: 16px; border: 2px solid ${BRAND.forest};
-    display: flex; align-items: center; gap: 16px; page-break-inside: avoid;
-    ${isAr ? "flex-direction: row-reverse; direction: rtl;" : ""}
-  }
-  .author-stamp svg { width: 48px; height: 48px; flex-shrink: 0; }
-  .author-stamp .name { font-weight: 700; color: ${BRAND.forest}; font-size: ${isAr ? "13pt" : "12pt"}; }
-  .author-stamp .role { font-size: 10pt; color: #444; margin-top: 2px; }
-  footer { margin-top: 20px; padding-top: 10px; border-top: 2px solid ${BRAND.forest}; font-size: 9pt;
-    color: #666; text-align: center; }`;
+  @page { size: A4; margin: 15mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: ${bodyFont}; font-size: ${isAr ? "12pt" : "11pt"}; color: #111; line-height: 1.45; margin: 0;
+    direction: ${isAr ? "rtl" : "ltr"}; text-align: ${isAr ? "right" : "left"}; }
+  .official-header { border-bottom: 2px solid ${BRAND.forest}; padding-bottom: 10px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 12px; }
+  .official-header svg { width: 36px; height: 36px; flex-shrink: 0; }
+  .official-header .titles { flex: 1; min-width: 0; }
+  .official-header .titles h1 { font-size: ${isAr ? "17pt" : "16pt"}; color: ${BRAND.forest}; margin: 0 0 4px; }
+  .official-header .titles .subtitle { font-size: 9pt; color: #555; }
+  .official-header .meta { width: 112px; flex-shrink: 0; font-size: 8pt; color: #666; }
+  .preparation-notice { background: #f0f5f3; border-inline-start: 3px solid ${BRAND.forest};
+    padding: 7px 9px; font-size: 9pt; margin: 10px 0 16px; break-inside: avoid; }
+  .doc-section { margin: 14px 0; }
+  .doc-section h2 { font-size: ${isAr ? "14pt" : "13pt"}; color: ${BRAND.forest};
+    border-bottom: 1px solid ${BRAND.jade}; padding-bottom: 3px; margin: 0 0 8px; break-after: avoid; }
+  .field-block { border: 1px solid #d4d4d8; border-inline-start: 3px solid ${BRAND.jade};
+    padding: 8px 10px; margin: 8px 0; background: #fafafa; break-inside: avoid; }
+  .field-label { font-weight: 700; margin-bottom: 4px; color: ${BRAND.forest}; break-after: avoid; }
+  .field-hint { font-size: 9pt; color: #444; margin-bottom: 4px; }
+  .field-example { font-size: 9pt; color: #065f46; background: #ecfdf5; border: 1px dashed ${BRAND.jade};
+    padding: 5px 7px; margin: 5px 0; border-radius: 3px; overflow-wrap: anywhere; }
+  .blank-line { border-bottom: 1px solid #aaa; height: 7mm; margin: 0; }
+  .filled-value { background: #fff; border: 1px solid ${BRAND.forest}; padding: 7px 9px;
+    white-space: pre-wrap; overflow-wrap: anywhere; orphans: 3; widows: 3; }
+  .filled-value.empty { color: #666; font-style: italic; }
+  .document-closing { break-inside: avoid; }
+  .document-note { break-inside: avoid; break-before: avoid; margin-top: 12px; padding-top: 7px;
+    border-top: 1px solid ${BRAND.forest}; font-size: 8pt; color: #555; }
+  .document-note strong { color: ${BRAND.forest}; }
+  .document-note p { margin: 3px 0; }
+  .document-note small { font-size: 7.5pt; }`;
 }
 
 export type RenderResourceOptions = {
@@ -171,30 +182,47 @@ export function renderResourceHtml(opts: RenderResourceOptions): string {
   const dir = isAr ? 'dir="rtl" lang="ar"' : 'lang="en"';
   const dateStr = new Date().toISOString().slice(0, 10);
   const modeLabel =
-    mode === "generated"
+    item.category === "guideline"
       ? isAr
-        ? "نسخة مُولَّدة من إجاباتك"
-        : "Generated from your answers"
-      : mode === "filled"
+        ? "مرجع تعليمي للمراجعة"
+        : "Educational reference for review"
+      : mode === "generated"
         ? isAr
-          ? "نسخة مُعبَّأة من بيانات الطلب"
-          : "Pre-filled from application data"
-        : isAr
-          ? "نموذج فارغ للتعبئة اليدوية"
-          : "Blank template for manual completion";
+          ? "نسخة مُولَّدة من إجاباتك"
+          : "Generated from your answers"
+        : mode === "filled"
+          ? isAr
+            ? "نسخة مُعبَّأة من بيانات الطلب"
+            : "Pre-filled from application data"
+          : isAr
+            ? "نموذج فارغ للتعبئة اليدوية"
+            : "Blank template for manual completion";
 
   const sections = getTemplateSections(item.slug);
   let mainContent: string;
 
   if (sections?.length) {
-    mainContent = sections.map(s => renderSectionHtml(s, lang, mode, prefill)).join("");
+    mainContent = sections
+      .map((section, index) =>
+        renderSectionHtml(
+          section,
+          lang,
+          mode,
+          prefill,
+          index === sections.length - 1 ? footerHtml(lang, dateStr) : undefined
+        )
+      )
+      .join("");
   } else {
     mainContent = item.sections
-      .map(s => {
+      .map((s, index) => {
         const heading = isAr ? s.headingAr : s.headingEn;
         const body = isAr ? s.bodyAr : s.bodyEn;
-        return `<section class="doc-section" ${dir}><h2>${escapeHtml(heading)}</h2>
+        const section = `<section class="doc-section" ${dir}><h2>${escapeHtml(heading)}</h2>
           <p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p></section>`;
+        return index === item.sections.length - 1
+          ? `<div class="document-closing">${section}${footerHtml(lang, dateStr)}</div>`
+          : section;
       })
       .join("");
   }
@@ -205,9 +233,9 @@ export function renderResourceHtml(opts: RenderResourceOptions): string {
 <div class="official-header">${STAMPED_TICK_SVG}
   <div class="titles"><h1>${escapeHtml(title)}</h1><div class="subtitle">${escapeHtml(desc)}</div></div>
   <div class="meta">${isAr ? "اللغة: العربية" : "Language: English"}<br/>${escapeHtml(modeLabel)}<br/>${dateStr}</div>
-</div><main>${mainContent}</main>
-${authorStampHtml(lang)}
-${footerHtml(lang, dateStr)}
+</div>
+<p class="preparation-notice">${escapeHtml(preparationNotice(lang, mode, item.category))}</p>
+<main>${mainContent}</main>
 </body></html>`;
 }
 
@@ -215,35 +243,60 @@ function fieldParagraphs(
   field: TemplateField,
   lang: ExportLang,
   mode: ExportMode,
-  prefill?: Record<string, string>,
+  prefill?: Record<string, string>
 ): Paragraph[] {
   const isAr = lang === "ar";
   const label = isAr ? field.labelAr : field.labelEn;
   const hint = isAr ? field.hintAr : field.hintEn;
   const example = isAr ? field.exampleAr : field.exampleEn;
   const filled = prefill?.[field.id]?.trim();
-  const font = isAr ? "Traditional Arabic" : "Times New Roman";
+  const font = isAr ? "DejaVu Sans" : "Times New Roman";
   const out: Paragraph[] = [];
 
   out.push(
     new Paragraph({
       bidirectional: isAr,
-      children: [new TextRun({ text: label, bold: true, color: "064e3b", font, size: isAr ? 28 : 24 })],
+      children: [
+        new TextRun({
+          text: label,
+          bold: true,
+          color: "064e3b",
+          font,
+          size: isAr ? 28 : 24,
+        }),
+      ],
     }),
     new Paragraph({
       bidirectional: isAr,
       children: [
-        new TextRun({ text: isAr ? "↳ أدخل: " : "↳ Enter: ", bold: true, font, size: 20 }),
+        new TextRun({
+          text: isAr ? "↳ أدخل: " : "↳ Enter: ",
+          bold: true,
+          font,
+          size: 20,
+        }),
         new TextRun({ text: hint, font, size: 20, color: "444444" }),
       ],
     }),
     new Paragraph({
       bidirectional: isAr,
       children: [
-        new TextRun({ text: isAr ? "★ مثال: " : "★ Example: ", bold: true, font, size: 20, color: "059669" }),
-        new TextRun({ text: example, font, size: 20, color: "065f46", italics: true }),
+        new TextRun({
+          text: isAr ? "مثال توضيحي: " : "Illustrative example: ",
+          bold: true,
+          font,
+          size: 20,
+          color: "059669",
+        }),
+        new TextRun({
+          text: example,
+          font,
+          size: 20,
+          color: "065f46",
+          italics: true,
+        }),
       ],
-    }),
+    })
   );
 
   if (mode === "filled" && filled) {
@@ -252,7 +305,7 @@ function fieldParagraphs(
         new Paragraph({
           bidirectional: isAr,
           children: [new TextRun({ text: line, font, size: isAr ? 28 : 24 })],
-        }),
+        })
       );
     }
   } else if (mode === "generated") {
@@ -262,7 +315,7 @@ function fieldParagraphs(
         new Paragraph({
           bidirectional: isAr,
           children: [new TextRun({ text: line, font, size: isAr ? 28 : 24 })],
-        }),
+        })
       );
     }
   } else {
@@ -270,15 +323,12 @@ function fieldParagraphs(
       out.push(
         new Paragraph({
           bidirectional: isAr,
-          children: [
-            new TextRun({
-              text: "_______________________________________________",
-              font,
-              size: 22,
-              color: "999999",
-            }),
-          ],
-        }),
+          children: [new TextRun({ text: "", font, size: 22 })],
+          spacing: { after: 100, line: 340 },
+          border: {
+            bottom: { color: "AAAAAA", size: 4, style: BorderStyle.SINGLE },
+          },
+        })
       );
     }
   }
@@ -286,23 +336,52 @@ function fieldParagraphs(
   return out;
 }
 
-export async function renderResourceDocx(opts: RenderResourceOptions): Promise<Buffer> {
+export async function renderResourceDocx(
+  opts: RenderResourceOptions
+): Promise<Buffer> {
   const { item, lang, mode = "blank", prefill } = opts;
   const isAr = lang === "ar";
   const title = isAr ? item.titleAr : item.titleEn;
   const desc = isAr ? item.descAr : item.descEn;
-  const font = isAr ? "Traditional Arabic" : "Times New Roman";
+  const font = isAr ? "DejaVu Sans" : "Times New Roman";
   const children: Paragraph[] = [
     new Paragraph({
       bidirectional: isAr,
       heading: HeadingLevel.TITLE,
-      children: [new TextRun({ text: title, bold: true, font, size: 36, color: "064e3b" })],
+      children: [
+        new TextRun({
+          text: title,
+          bold: true,
+          font,
+          size: 36,
+          color: "064e3b",
+        }),
+      ],
     }),
     new Paragraph({
       bidirectional: isAr,
-      children: [new TextRun({ text: desc, italics: true, font, size: 22, color: "555555" })],
+      children: [
+        new TextRun({
+          text: desc,
+          italics: true,
+          font,
+          size: 22,
+          color: "555555",
+        }),
+      ],
     }),
-    new Paragraph({ children: [new TextRun({ text: "" })] }),
+    new Paragraph({
+      bidirectional: isAr,
+      children: [
+        new TextRun({
+          text: preparationNotice(lang, mode, item.category),
+          font,
+          size: 19,
+          color: "444444",
+        }),
+      ],
+      spacing: { after: 180 },
+    }),
   ];
 
   const sections = getTemplateSections(item.slug);
@@ -313,28 +392,51 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
         new Paragraph({
           bidirectional: isAr,
           heading: HeadingLevel.HEADING_2,
-          children: [new TextRun({ text: heading, bold: true, font, color: "064e3b", size: 28 })],
-          border: { bottom: { color: "10b981", size: 6, style: BorderStyle.SINGLE } },
-        }),
+          children: [
+            new TextRun({
+              text: heading,
+              bold: true,
+              font,
+              color: "064e3b",
+              size: 28,
+            }),
+          ],
+          border: {
+            bottom: { color: "10b981", size: 6, style: BorderStyle.SINGLE },
+          },
+        })
       );
       for (const f of s.fields) {
         if (mode === "generated") {
           children.push(
             new Paragraph({
               bidirectional: isAr,
-              children: [new TextRun({ text: isAr ? f.labelAr : f.labelEn, bold: true, font, color: "064e3b" })],
-            }),
+              children: [
+                new TextRun({
+                  text: isAr ? f.labelAr : f.labelEn,
+                  bold: true,
+                  font,
+                  color: "064e3b",
+                }),
+              ],
+            })
           );
-          const val = prefill?.[f.id]?.trim() || (isAr ? "— لم يُذكر —" : "— not provided —");
+          const val =
+            prefill?.[f.id]?.trim() ||
+            (isAr ? "— لم يُذكر —" : "— not provided —");
           for (const line of val.split("\n")) {
             children.push(
               new Paragraph({
                 bidirectional: isAr,
-                children: [new TextRun({ text: line, font, size: isAr ? 28 : 24 })],
-              }),
+                children: [
+                  new TextRun({ text: line, font, size: isAr ? 28 : 24 }),
+                ],
+              })
             );
           }
-          children.push(new Paragraph({ children: [new TextRun({ text: "" })] }));
+          children.push(
+            new Paragraph({ children: [new TextRun({ text: "" })] })
+          );
         } else {
           children.push(...fieldParagraphs(f, lang, mode, prefill));
         }
@@ -348,56 +450,49 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
         new Paragraph({
           bidirectional: isAr,
           heading: HeadingLevel.HEADING_2,
-          children: [new TextRun({ text: heading, bold: true, font, color: "064e3b" })],
-        }),
+          children: [
+            new TextRun({ text: heading, bold: true, font, color: "064e3b" }),
+          ],
+        })
       );
       for (const line of body.split("\n")) {
         children.push(
           new Paragraph({
             bidirectional: isAr,
             children: [new TextRun({ text: line, font, size: isAr ? 28 : 24 })],
-          }),
+          })
         );
       }
     }
   }
 
-  // Issuance note, not a signature block — see authorStampHtml for rationale.
   children.push(
-    new Paragraph({ children: [new TextRun({ text: "" })] }),
     new Paragraph({
       bidirectional: isAr,
+      keepNext: true,
       children: [
         new TextRun({
-          text: isAr ? PLATFORM.nameAr : PLATFORM.nameEn,
+          text: `${isAr ? PLATFORM.nameAr : PLATFORM.nameEn} · AHSS`,
           bold: true,
           font,
+          size: 20,
           color: "064e3b",
         }),
       ],
+      border: { top: { color: "064e3b", size: 4, style: BorderStyle.SINGLE } },
+      spacing: { before: 180 },
     }),
     new Paragraph({
       bidirectional: isAr,
+      keepNext: true,
       children: [
         new TextRun({
           text: isAr
-            ? "قالب صادر عن المنصة للاستخدام البحثي · لا يُعدّ موافقة أخلاقية أو وثيقة معتمدة"
-            : "Template issued by the platform for research use · Not an ethics approval or certified document",
-          italics: true,
+            ? "مسودة تعليمية تحتاج إلى مراجعة المؤسسة واللجنة المختصة. لا تثبت موافقة أخلاقية أو امتثالاً تنظيمياً."
+            : "Draft educational material requiring institutional and committee review. It does not establish ethics approval or regulatory compliance.",
           font,
-          size: 20,
-        }),
-      ],
-    }),
-    new Paragraph({
-      bidirectional: isAr,
-      children: [
-        new TextRun({
-          text: `${PLATFORM.nameEn} — Independent AHSS · PDPL · NCBE guidelines · ${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
-          italics: true,
-          color: "888888",
           size: 18,
-          font,
+          color: "555555",
         }),
       ],
     }),
@@ -405,20 +500,26 @@ export async function renderResourceDocx(opts: RenderResourceOptions): Promise<B
       bidirectional: isAr,
       children: [
         new TextRun({
-          text: isAr ? PLATFORM_DISCLAIMER.ar : PLATFORM_DISCLAIMER.en,
-          italics: true,
-          color: "888888",
-          size: 16,
+          text: `${new Date().toISOString().slice(0, 10)} · © ${isAr ? AUTHOR.nameAr : AUTHOR.nameEn}`,
           font,
+          size: 16,
+          color: "666666",
         }),
       ],
-    }),
+    })
   );
 
   const doc = new Document({
     creator: PLATFORM.nameEn,
     title,
-    sections: [{ properties: { page: { size: { orientation: PageOrientation.PORTRAIT } } }, children }],
+    sections: [
+      {
+        properties: {
+          page: { size: { orientation: PageOrientation.PORTRAIT } },
+        },
+        children,
+      },
+    ],
   });
   return Buffer.from(await Packer.toBuffer(doc));
 }
@@ -431,21 +532,32 @@ async function getSharedBrowser() {
   const { chromium } = await import("playwright");
   if (!_browserPromise) {
     _browserPromise = chromium.launch({ headless: true }).then(browser => {
-      browser.once("disconnected", () => { _browserPromise = null; });
+      browser.once("disconnected", () => {
+        _browserPromise = null;
+      });
       return browser;
     });
-    _browserPromise.catch(() => { _browserPromise = null; });
+    _browserPromise.catch(() => {
+      _browserPromise = null;
+    });
   }
   return _browserPromise;
 }
 
-export async function renderResourcePdf(opts: RenderResourceOptions): Promise<Buffer> {
+export async function renderResourcePdf(
+  opts: RenderResourceOptions
+): Promise<Buffer> {
   const { pdfSemaphore } = await import("./concurrency");
   return pdfSemaphore.run(async () => {
     const html = renderResourceHtml(opts);
     const browser = await getSharedBrowser();
-    const ctx = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
-    const timeout = setTimeout(() => { void ctx.close().catch(() => undefined); }, 20000);
+    const ctx = await browser.newContext({
+      javaScriptEnabled: false,
+      serviceWorkers: "block",
+    });
+    const timeout = setTimeout(() => {
+      void ctx.close().catch(() => undefined);
+    }, 20000);
     try {
       const page = await ctx.newPage();
       await page.route("**/*", route => {
@@ -455,8 +567,8 @@ export async function renderResourcePdf(opts: RenderResourceOptions): Promise<Bu
       await page.setContent(html, { waitUntil: "load", timeout: 15000 });
       const pdf = await page.pdf({
         format: "A4",
+        preferCSSPageSize: true,
         printBackground: true,
-        margin: { top: "15mm", bottom: "15mm", left: "12mm", right: "12mm" },
       });
       return Buffer.from(pdf);
     } finally {
@@ -470,7 +582,13 @@ export function parseExportLang(raw: unknown): ExportLang {
   return raw === "ar" ? "ar" : "en";
 }
 
-export function resourceFilename(slug: string, fmt: string, lang: ExportLang, mode: ExportMode): string {
-  const suffix = mode === "filled" ? "-filled" : mode === "generated" ? "-generated" : "";
+export function resourceFilename(
+  slug: string,
+  fmt: string,
+  lang: ExportLang,
+  mode: ExportMode
+): string {
+  const suffix =
+    mode === "filled" ? "-filled" : mode === "generated" ? "-generated" : "";
   return `${slug}-${lang}${suffix}.${fmt}`;
 }

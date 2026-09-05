@@ -9,14 +9,16 @@ export const SLUG_META: Record<
   "irb-application-form": {
     titleEn: "IRB Application Form",
     titleAr: "نموذج طلب IRB",
-    descEn: "Principal investigator details, research classification, and ethics declaration.",
+    descEn:
+      "Principal investigator details, research classification, and ethics declaration.",
     descAr: "بيانات الباحث الرئيسي، تصنيف البحث، وإقرار الأخلاقيات.",
   },
   "informed-consent": {
     titleEn: "Informed Consent Form",
     titleAr: "نموذج الموافقة المستنيرة",
-    descEn: "Participant-facing consent aligned with NCBE and Declaration of Helsinki.",
-    descAr: "موافقة موجهة للمشاركين متوافقة مع NCBE وإعلان هلسنكي.",
+    descEn:
+      "Draft participant consent for review and adaptation by the responsible committee.",
+    descAr: "مسودة موافقة المشاركين لمراجعتها وتكييفها من اللجنة المختصة.",
   },
   "research-protocol": {
     titleEn: "Research Protocol",
@@ -27,8 +29,10 @@ export const SLUG_META: Record<
   "data-collection-instrument": {
     titleEn: "Data Collection Instrument",
     titleAr: "أداة جمع البيانات",
-    descEn: "Survey or case report form with validated items.",
-    descAr: "استبيان أو نموذج تسجيل حالات مع بنود معتمدة.",
+    descEn:
+      "Survey or case report worksheet; select and verify suitable instruments.",
+    descAr:
+      "ورقة عمل لاستبيان أو تسجيل حالات؛ اختر الأدوات المناسبة وتحقق من صلاحيتها.",
   },
 };
 
@@ -43,13 +47,20 @@ export function getRelevantFormatSlugs(ctx: FormatContext): FormattableSlug[] {
     case "stage1":
       return ["irb-application-form"];
     case "stage2":
-      return ["informed-consent", "research-protocol", "data-collection-instrument"];
+      return [
+        "informed-consent",
+        "research-protocol",
+        "data-collection-instrument",
+      ];
     case "slug":
       return [ctx.slug];
   }
 }
 
-export function formatWizardPath(slug: FormattableSlug, appId?: number): string {
+export function formatWizardPath(
+  slug: FormattableSlug,
+  appId?: number
+): string {
   const q = appId ? `?appId=${appId}` : "";
   return `/format/${slug}${q}`;
 }

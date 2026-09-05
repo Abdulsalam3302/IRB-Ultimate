@@ -1,0 +1,43 @@
+{
+  "checkedAt": "2026-09-05T02:28:15.693Z",
+  "scope": "One synthetic direct request from the local verification host using the exact Render-configured endpoint, model and key; does not prove Render-worker egress or authenticated application workflows",
+  "serviceId": "srv-d9bq5gd7vvec73c8rclg",
+  "providerRequestsAttempted": 1,
+  "retainedSecrets": false,
+  "realResearchDataSent": false,
+  "applicationWrites": false,
+  "automaticRetries": false,
+  "maximumOutputTokens": 16,
+  "timeoutMs": 30000,
+  "protocolReference": "https://platform.minimax.io/docs/api-reference/text-chat-openai",
+  "provider": "MiniMax",
+  "endpoint": "https://api.minimax.io/v1/chat/completions",
+  "configuredModel": "MiniMax-M3",
+  "request": {
+    "messageCount": 1,
+    "syntheticInstruction": "Return a fixed JSON object with ok=true",
+    "thinking": "disabled",
+    "externalTools": false,
+    "streaming": false
+  },
+  "httpStatus": 200,
+  "contentType": "application/json",
+  "latencyMs": 1259,
+  "responseBytes": 504,
+  "validJsonEnvelope": true,
+  "openAICompatibleChoices": true,
+  "responseModelMatches": true,
+  "responseModel": "MiniMax-M3",
+  "finishReason": "stop",
+  "providerStatusCode": 0,
+  "providerErrorPresent": false,
+  "syntheticJsonSchemaPassed": true,
+  "responseContentRetained": false,
+  "usage": {
+    "prompt_tokens": 179,
+    "completion_tokens": 6,
+    "total_tokens": 185
+  },
+  "result": "passed",
+  "observedBackendCommit": "6ad347831dffec16540293a6871d45c64abbf90f"
+}

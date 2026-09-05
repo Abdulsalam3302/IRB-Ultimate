@@ -21,6 +21,7 @@ Final integration results and deployment identifiers are recorded in `docs/valid
 - HTTP/browser tests use synthetic accounts and records on a disposable loopback MySQL database. They verify cross-account denials, private downloads, CSRF, rate limits, logout replay, public/mobile UI and API-outage handling.
 - The load receipt contains 510 synthetic read-only requests on one local instance. It is not a production throughput/SLA claim or a representative clinical workload test.
 - Document-generation receipts cover actual Chromium PDFs, DOCX ZIP integrity, extracted text and inspected English/Arabic pages with synthetic data.
+- The follow-up [public-resource receipt](validation/release-2.2.0/public-resource-templates.json) covers all five downloadable resources in English and Arabic: 10 PDFs, 10 DOCX files and 22 PDF pages. It corrects footer-only pages, duplicated writing rules, real-looking sample identities and unsupported universal compliance/retention/reporting claims; participant-rights contacts now appear in the actual consent worksheet. Desktop Word pagination remains a separate acceptance check.
 - Backup/restore receipts cover an isolated encrypted database drill and negative integrity checks. They do not prove production backup scheduling, object-storage recovery or a contractual RPO/RTO.
 - Browser WebMCP remains an experimental browser capability. Server MCP has a separately documented authenticated transport and protocol support; neither assertion grants agents independent ethical authority.
 

@@ -20,6 +20,10 @@ The release coordinator also inspected the Render configuration read-only on 5 S
 
 **Current infrastructure blockers:** production uploads will correctly reject with unavailable scanning/storage until private durable storage and ClamAV are provisioned. The explicit owner subject and institutional staff MFA setup must be completed. Issuance remains disabled pending institutional authority. These prerequisites must be resolved before real applicants or advertising traffic are invited; turning off the safeguards is not a remedy. The final deployment/build identity and workflow checks still need their own release receipt.
 
+Live follow-up on 5 September confirmed that the existing **IRB Saudi Arabia** Supabase project is `INACTIVE`. Its public authentication-provider discovery failed DNS resolution. Restoration was attempted and rejected because the account's two-active-free-project allowance was exhausted. Institutional OAuth and staff MFA are therefore unavailable on the current deployment. Staff MFA enforcement remains enabled. The operator must resolve project capacity, then restore and verify institutional identity and enrollment; no other project was paused or modified.
+
+Release deployment checks also found an invalid GitHub Actions `VERCEL_TOKEN`. Render deployment passed the verified-commit gate, and the authenticated local Vercel CLI deployed a clean archive of that same verified commit. The owner must replace the GitHub secret to restore unattended frontend deployment; successful manual deployment does not make that workflow green. The actual-host PDF failure was corrected by sharing the Chromium cache between build and runtime and requiring a real PDF startup check before the API starts.
+
 ## Evidence register
 
 | Evidence                                            | Current record and scope                                                                                                                                        |

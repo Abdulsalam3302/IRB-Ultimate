@@ -1,0 +1,164 @@
+{
+  "checkedAt": "2026-09-05",
+  "scope": "Local real Chromium PDF and DOCX generation of every public resource in English and Arabic with blank illustrative data; no institutional approvals or applicant data",
+  "result": "passed",
+  "focusedTests": {
+    "files": 2,
+    "passed": 10,
+    "failed": 0
+  },
+  "generated": {
+    "pdfs": 10,
+    "docx": 10,
+    "pdfPages": 22
+  },
+  "inspection": {
+    "reviewedAt": "2026-09-05T02:35:38.774089+00:00",
+    "generationScope": "Local current source, Node24.20.0, all five resources in English and Arabic, blank/manual mode",
+    "status": "PASS_LOCAL_ENGINEERING_QA",
+    "networkCalls": 0,
+    "databaseCalls": 0,
+    "modelCalls": 0,
+    "focusedTests": {
+      "passed": 10,
+      "files": 2,
+      "log": "targeted-tests.log"
+    },
+    "visualReview": [
+      "Arabic consent pages1-3",
+      "English consent pages1and3",
+      "Arabic research-protocol finalpage",
+      "Arabic ethics-summary page1"
+    ],
+    "visualFindings": "Arabic shaping/RTL readable; single handwriting rules; clear placeholder identities and educational limitations; final field stays with closing note; no observed clipping/overlap. Three-page consent preserves writing space and includes independent rights/complaints contacts.",
+    "artifacts": [
+      {
+        "file": "data-collection-instrument-ar.pdf",
+        "pages": 2,
+        "bytes": 169325,
+        "sha256": "108113ee0e3ae3790a40d748650c4179cc2910c6eef0ebe0f005f7c507839f55",
+        "lastPageTextChars": 382,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "data-collection-instrument-en.pdf",
+        "pages": 2,
+        "bytes": 239585,
+        "sha256": "d3ae9058dd12f340099ae15b64f3d4041ec94cbfca7bed50c27af57f9888ace8",
+        "lastPageTextChars": 438,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "informed-consent-ar.pdf",
+        "pages": 3,
+        "bytes": 246695,
+        "sha256": "e55885c50bb98b9cbf3d76b5f54fac67bf0cc8b91b89df188852bb4522df8fb6",
+        "lastPageTextChars": 350,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "informed-consent-en.pdf",
+        "pages": 3,
+        "bytes": 294758,
+        "sha256": "603a9263fa4ad217a8829b3186d1e4c0f2994727bc872d50e7e278b8e6548783",
+        "lastPageTextChars": 410,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "irb-application-form-ar.pdf",
+        "pages": 2,
+        "bytes": 222892,
+        "sha256": "900a2f5204cd245a2332ec281884f74f9cc6b6a325a9905b18e70d20afcfd7cb",
+        "lastPageTextChars": 806,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "irb-application-form-en.pdf",
+        "pages": 2,
+        "bytes": 260124,
+        "sha256": "cc90edcd38be9edb443b185d4c73b11ebf34ff393d9d2975b513a746fe18e44a",
+        "lastPageTextChars": 959,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "nbce-ethics-summary-ar.pdf",
+        "pages": 1,
+        "bytes": 114577,
+        "sha256": "57a05c93cc145575b057cce9eb26fbb7a0feee7f86761912967336bf10328e6e",
+        "lastPageTextChars": 1475,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "nbce-ethics-summary-en.pdf",
+        "pages": 1,
+        "bytes": 158980,
+        "sha256": "ca3397a1b732fd773e571636b39a9fe6b0cf32b557e344c7e46d4d1c1bc453f6",
+        "lastPageTextChars": 1866,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "research-protocol-ar.pdf",
+        "pages": 3,
+        "bytes": 229963,
+        "sha256": "e2a5c2986b19b84f56d50dce76a070264f25d6bdfb87124aadb0dac1729cb7db",
+        "lastPageTextChars": 318,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      },
+      {
+        "file": "research-protocol-en.pdf",
+        "pages": 3,
+        "bytes": 296617,
+        "sha256": "e037fe8544997480b5272fa1d15d0c5c46891ea9ec74e74455ad3627dbfc22c4",
+        "lastPageTextChars": 371,
+        "lastPageContainsSubstantiveContent": true,
+        "offPageTextCount": 0,
+        "replacementGlyphs": 0,
+        "docxZipValid": true
+      }
+    ],
+    "limitations": [
+      "This receipt verifies local source outputs, not final hosted binaries.",
+      "DOCX archive/content checked; Word application pagination was not independently rendered.",
+      "Templates require qualified institution/committee review for study-specific adequacy."
+    ]
+  },
+  "visualReview": [
+    "English informed consent all pages",
+    "Arabic informed consent all pages",
+    "Arabic ethics summary",
+    "Arabic research protocol final page",
+    "Arabic data collection final page",
+    "Arabic application first page"
+  ],
+  "limitations": [
+    "PDF rendering and DOCX ZIP/text integrity are separate checks; desktop Word pagination was not evaluated.",
+    "Templates require the responsible institution and bioethics lead to validate suitability for each real study."
+  ]
+}

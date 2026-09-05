@@ -1,0 +1,34 @@
+{
+  "checkedAt": "2026-09-05T02:27:53.398Z",
+  "base": "https://irb-saudi-arabia.vercel.app",
+  "scope": "Bounded anonymous live read-only smoke from one client; not a stress test, field measurement, sustained capacity validation or SLA",
+  "phases": [
+    {
+      "name": "public-page",
+      "path": "/",
+      "requests": 36,
+      "concurrency": 6,
+      "elapsedMs": 703,
+      "p50Ms": 75,
+      "p95Ms": 310,
+      "statuses": {
+        "200": 36
+      },
+      "errors": []
+    },
+    {
+      "name": "database-readiness",
+      "path": "/api/ready",
+      "requests": 24,
+      "concurrency": 3,
+      "elapsedMs": 2107,
+      "p50Ms": 214,
+      "p95Ms": 471,
+      "statuses": {
+        "200": 24
+      },
+      "errors": []
+    }
+  ],
+  "observedBackendCommit": "6ad347831dffec16540293a6871d45c64abbf90f"
+}

@@ -153,7 +153,11 @@ export async function deleteSupabaseIdentity(
       return { response, body: body as Record<string, unknown> };
     };
     const missing = (result: Awaited<ReturnType<typeof request>>) =>
-      result.response.status === 404 && result.body.code === "user_not_found";
+      result.response.status === 404 &&
+      (result.body.code === "user_not_found" ||
+        // Older Auth servers use a numeric status plus a separate error code.
+        (result.body.code === 404 &&
+          result.body.error_code === "user_not_found"));
     const before = await request("GET");
     if (missing(before)) return;
     if (!before.response.ok || before.body.id !== subject)

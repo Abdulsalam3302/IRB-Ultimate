@@ -28,6 +28,15 @@ const response = (body: unknown, status = 200) =>
   });
 const bucket = () => response({ id: "irb-private", public: false });
 const missing = () => response({ code: "user_not_found" }, 404);
+const legacyMissing = () =>
+  response(
+    { code: 404, error_code: "user_not_found", msg: "User not found" },
+    404
+  );
+const absenceFormats = [
+  { format: "modern", missing },
+  { format: "legacy", missing: legacyMissing },
+];
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -105,33 +114,110 @@ describe("bound private object removal", () => {
 });
 
 describe("project Auth user removal", () => {
-  it("verifies the captured UUID, deletes the project Auth user and confirms absence", async () => {
-    mocks.fetch
-      .mockResolvedValueOnce(response({ id: subject }))
-      .mockResolvedValueOnce(response({ id: subject }))
-      .mockResolvedValueOnce(missing());
-    await deleteSupabaseIdentity(origin, subject);
-    expect(
-      mocks.fetch.mock.calls.map(call => [call[0], call[1].method])
-    ).toEqual(
-      ["GET", "DELETE", "GET"].map(method => [
-        `${origin}/auth/v1/admin/users/${subject}`,
-        method,
-      ])
+  it.each(absenceFormats)(
+    "verifies the captured UUID, deletes the project Auth user and confirms $format absence",
+    async ({ missing }) => {
+      mocks.fetch
+        .mockResolvedValueOnce(response({ id: subject }))
+        .mockResolvedValueOnce(response({ id: subject }))
+        .mockResolvedValueOnce(missing());
+      await deleteSupabaseIdentity(origin, subject);
+      expect(
+        mocks.fetch.mock.calls.map(call => [call[0], call[1].method])
+      ).toEqual(
+        ["GET", "DELETE", "GET"].map(method => [
+          `${origin}/auth/v1/admin/users/${subject}`,
+          method,
+        ])
+      );
+      expect(JSON.parse(mocks.fetch.mock.calls[1][1].body)).toEqual({
+        should_soft_delete: false,
+      });
+      expect(
+        mocks.fetch.mock.calls.every(call => call[1].redirect === "error")
+      ).toBe(true);
+    }
+  );
+  it.each(absenceFormats)(
+    "treats authenticated $format absence as idempotent completion without another delete",
+    async ({ missing }) => {
+      mocks.fetch.mockResolvedValueOnce(missing());
+      await deleteSupabaseIdentity(origin, subject);
+      expect(mocks.fetch).toHaveBeenCalledOnce();
+      expect(mocks.fetch.mock.calls[0][1].method).toBe("GET");
+    }
+  );
+  it.each(absenceFormats)(
+    "verifies $format absence again if the identity disappears before DELETE",
+    async ({ missing }) => {
+      mocks.fetch
+        .mockResolvedValueOnce(response({ id: subject }))
+        .mockResolvedValueOnce(missing())
+        .mockResolvedValueOnce(missing());
+      await deleteSupabaseIdentity(origin, subject);
+      expect(mocks.fetch.mock.calls.map(call => call[1].method)).toEqual([
+        "GET",
+        "DELETE",
+        "GET",
+      ]);
+    }
+  );
+  it.each([
+    {
+      name: "wrong legacy error code",
+      status: 404,
+      body: { code: 404, error_code: "not_admin", msg: "User not found" },
+    },
+    {
+      name: "string legacy status",
+      status: 404,
+      body: { code: "404", error_code: "user_not_found" },
+    },
+    {
+      name: "missing legacy status",
+      status: 404,
+      body: { error_code: "user_not_found", msg: "User not found" },
+    },
+    {
+      name: "message-only legacy absence",
+      status: 404,
+      body: { code: 404, msg: "User not found" },
+    },
+    {
+      name: "modern code with wrong HTTP status",
+      status: 400,
+      body: { code: "user_not_found" },
+    },
+    {
+      name: "legacy code with wrong HTTP status",
+      status: 403,
+      body: { code: 404, error_code: "user_not_found" },
+    },
+  ])("rejects $name before issuing a delete", async ({ status, body }) => {
+    mocks.fetch.mockResolvedValueOnce(response(body, status));
+    await expect(deleteSupabaseIdentity(origin, subject)).rejects.toThrow(
+      "Identity cleanup could not be verified"
     );
-    expect(JSON.parse(mocks.fetch.mock.calls[1][1].body)).toEqual({
-      should_soft_delete: false,
-    });
-    expect(
-      mocks.fetch.mock.calls.every(call => call[1].redirect === "error")
-    ).toBe(true);
-  });
-  it("treats authenticated typed absence as idempotent completion without another delete", async () => {
-    mocks.fetch.mockResolvedValueOnce(missing());
-    await deleteSupabaseIdentity(origin, subject);
     expect(mocks.fetch).toHaveBeenCalledOnce();
-    expect(mocks.fetch.mock.calls[0][1].method).toBe("GET");
   });
+  it.each(["DELETE", "final GET"])(
+    "rejects ambiguous legacy absence from %s",
+    async stage => {
+      mocks.fetch.mockResolvedValueOnce(response({ id: subject }));
+      if (stage === "final GET")
+        mocks.fetch.mockResolvedValueOnce(response({ id: subject }));
+      mocks.fetch.mockResolvedValueOnce(
+        response(
+          { code: 404, error_code: "unknown_endpoint", msg: "User not found" },
+          404
+        )
+      );
+      await expect(deleteSupabaseIdentity(origin, subject)).rejects.toThrow(
+        "Identity cleanup could not be verified"
+      );
+      expect(mocks.fetch).toHaveBeenCalledTimes(stage === "DELETE" ? 2 : 3);
+    }
+  );
   it.each([null, "https://another-project.supabase.co"])(
     "never redirects an unknown or different issuer to current project",
     async issuer => {

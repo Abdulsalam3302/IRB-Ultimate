@@ -473,26 +473,19 @@ export default function Auth() {
               </button>
             </p>
           )}
-          {isSupabaseAuthEnabled && (
+          {connected && (
             <p className="mt-4 text-center text-sm text-ink-soft">
               <button
                 type="button"
                 className="underline underline-offset-2"
                 disabled={busy}
-                onClick={() =>
-                  selectMethod(connected ? "password" : "connected")
-                }
+                onClick={() => selectMethod("password")}
               >
-                {connected
-                  ? isAr
-                    ? "العودة لتسجيل الدخول بالبريد"
-                    : "Back to email sign-in"
-                  : isAr
-                    ? "خيارات أخرى لتسجيل الدخول"
-                    : "More sign-in options"}
+                {isAr ? "العودة لتسجيل الدخول بالبريد" : "Back to email sign-in"}
               </button>
             </p>
           )}
+
         </div>
       </main>
     </div>

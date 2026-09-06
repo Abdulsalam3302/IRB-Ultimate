@@ -113,6 +113,7 @@ try {
       check(`${lang} default login has no account-type radios`, await page.locator('input[type="radio"]').count() === 0);
       check(`${lang} default login has no institutional terminology`, !/institutional|مؤسس/.test(await page.locator("body").innerText()));
       check(`${lang} provider discovery deferred on ordinary login`, state.settings === 0);
+      check(`${lang} ordinary login hides unused sign-in options`, await page.getByRole("button", { name: more }).count() === 0);
       check(`${lang} mobile auth does not overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       const layout = await page.evaluate(() => {
         const header = document.querySelector("header").getBoundingClientRect();
@@ -130,10 +131,10 @@ try {
       check(`${lang} wrong native password never falls through to provider`, state.providerLogin === 0 && state.bridges === 0 && state.settings === 0);
       check(`${lang} failed native password cleared`, await page.locator("#password").inputValue() === "");
       await page.locator("#password").fill("Do-not-cross-identity-boundary");
-      await page.getByRole("button", { name: more }).click();
+      await f.navigate("/auth?method=connected");
       await page.locator("#email").waitFor();
-      check(`${lang} explicit connected option fetches capabilities`, state.settings === 1);
-      check(`${lang} changing identity flow clears credentials`, await page.locator("#email").inputValue() === "" && await page.locator("#password").inputValue() === "");
+      check(`${lang} staff connected deep link fetches capabilities`, state.settings === 1);
+      check(`${lang} navigating to staff sign-in does not carry credentials`, await page.locator("#email").inputValue() === "" && await page.locator("#password").inputValue() === "");
       await page.locator("#email").fill("synthetic@example.invalid"); await page.locator("#password").fill("Synthetic-provider-password!");
       await page.locator('form button[type="submit"]').click(); await page.getByRole("alert").waitFor();
       check(`${lang} connected credentials target only provider`, state.providerLogin === 1 && state.native === 1 && state.bridges === 0);

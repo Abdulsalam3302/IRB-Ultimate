@@ -47,6 +47,8 @@ const AUTH_ROUTES = [
   "/api/dev/login",
   "/api/auth/register",
   "/api/auth/login",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
   "/api/auth/supabase/session",
   "/api/oauth/callback",
   "/api/oauth/start",

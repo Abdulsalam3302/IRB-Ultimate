@@ -3,6 +3,10 @@ import { getDb } from "./db";
 import { notifications } from "../drizzle/schema";
 import { eq, desc, and, count } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
+import { queueApplicationEmail } from "./email/events";
+export { queueWelcomeEmail, queuePasswordResetEmail, queueApplicationEmail, enqueueAdministrativeEmail } from "./email/events";
+export { listEmailDeliveries, runEmailOutboxBatch, startEmailOutboxWorker, cancelAccountEmails, cancelPendingPasswordResetEmails } from "./email/outbox";
+export { registerEmailRoutes } from "./email/routes";
 
 // ─── In-App Notification Helpers ────────────────────────────────────────────
 
@@ -57,8 +61,8 @@ export async function markAllRead(userId: number) {
 
 // ─── Email-like Notification Triggers ───────────────────────────────────────
 
-// These functions create in-app notifications AND send owner notifications
-// for critical events. In production, these would also trigger actual emails.
+// In-app notices and durable mail are separate evidence. Queueing is never
+// represented as provider acceptance or confirmed recipient delivery.
 
 export async function notifyApplicationSubmitted(applicantId: number, applicationId: number, researchTitle: string) {
   await createNotification({
@@ -66,13 +70,14 @@ export async function notifyApplicationSubmitted(applicantId: number, applicatio
     applicationId,
     type: "application_submitted",
     title: "Application Submitted",
-    message: `Your application "${researchTitle}" has been submitted and is now under committee review. You will be notified when reviews are received.`,
+    message: `Your application "${researchTitle}" has been submitted. Check your dashboard for the current review stage and any required actions.`,
   });
+  await queueApplicationEmail({ applicationId, event: "submitted" });
 
   // Notify admin/owner
   await notifyOwner({
     title: "New IRB Application Submitted",
-    content: `Application #${applicationId}: "${researchTitle}" has been submitted and assigned to committee members for review.`,
+    content: `Application #${applicationId}: "${researchTitle}" has been submitted. Review its current routing and assignment state in the dashboard.`,
   });
 }
 
@@ -101,7 +106,7 @@ export async function notifyCommitteeAssigned(committeeMemberId: number, applica
     applicationId,
     type: "review_assignment",
     title: "New Review Assignment",
-    message: `You have been assigned to review application "${researchTitle}". Please submit your review within 24 hours.`,
+    message: `You have been assigned to review application "${researchTitle}". Check your reviewer dashboard for the assigned deadline and review requirements.`,
   });
 }
 
@@ -111,7 +116,7 @@ export async function notifyReviewReceived(applicantId: number, applicationId: n
     applicationId,
     type: "review_received",
     title: "Committee Review Received",
-    message: `A committee member has submitted their review (${decision}). Current progress: ${approvalCount} approvals out of ${totalReviews} reviews received. 3 approvals needed for admin review.`,
+    message: `A committee member has submitted their review (${decision}). Current progress: ${approvalCount} approvals out of ${totalReviews} reviews received. Progression depends on the applicable review category and qualified human quorum.`,
   });
 }
 
@@ -126,7 +131,7 @@ export async function notifyPendingAdmin(applicantId: number, applicationId: num
 
   await notifyOwner({
     title: "Application Ready for Final Approval",
-    content: `Application #${applicationId} has received 3+ committee approvals and is awaiting your final decision.`,
+    content: `Application #${applicationId} has met its applicable committee review requirements and is awaiting an authorized final decision.`,
   });
 }
 
@@ -138,6 +143,7 @@ export async function notifyAdminApproved(applicantId: number, applicationId: nu
     title: "IRB Application Approved!",
     message: `Congratulations! Your application has been approved. Your IRB number is ${irbNumber}. Check your dashboard for the recorded decision and current document availability.`,
   });
+  await queueApplicationEmail({ applicationId, event: "approved" });
 }
 
 export async function notifyAdminRejected(applicantId: number, applicationId: number, reason: string, canResubmit: boolean) {
@@ -150,6 +156,7 @@ export async function notifyAdminRejected(applicantId: number, applicationId: nu
       ? `Your application has been returned for revision. Reason: ${reason}. Please address the feedback and resubmit your application.`
       : `Your application has been permanently rejected after the second review. Reason: ${reason}. You may submit an entirely new application for a substantially different research protocol.`,
   });
+  await queueApplicationEmail({ applicationId, event: "rejected" });
 }
 
 export async function notifyCertificateIssued(applicantId: number, applicationId: number, irbNumber: string) {
@@ -170,6 +177,7 @@ export async function notifyApplicationRetracted(applicantId: number, applicatio
     title: "IRB Approval Retracted",
     message: `Your IRB approval (${irbNumber}) has been RETRACTED. Reason: ${reason}. Check your dashboard for the retraction notice and recorded instructions. All ongoing research activities under this IRB number must cease immediately. The retraction is publicly visible on the verification page.`,
   });
+  await queueApplicationEmail({ applicationId, event: "retracted" });
 
   await notifyOwner({
     title: "IRB Approval Retracted",

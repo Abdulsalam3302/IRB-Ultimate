@@ -7,6 +7,10 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerDevLoginRoutes } from "./devLogin";
 import { registerSupabaseAuthRoutes } from "./supabaseAuth";
+import { startSubmissionScreeningWorker } from "../services/submissionScreening";
+import { registerPasswordResetRoutes } from "./passwordReset";
+import { registerEmailRoutes } from "../email/routes";
+import { startEmailOutboxWorker } from "../email/outbox";
 import { registerNativeAuthRoutes } from "./nativeAuth";
 import { registerAuthRedirectRoutes } from "./authRedirects";
 import { registerSecurity, registerApiGuards, registerErrorHandler, createUploadAdmission } from "./security";
@@ -59,6 +63,9 @@ async function startServer() {
     }
   }
   const app = express();
+  registerEmailRoutes(app);
+  const stopEmailWorker = startEmailOutboxWorker();
+  const stopScreeningWorker = startSubmissionScreeningWorker();
   const server = createServer(app);
   const closeRemoteScanner = attachRemoteScanner(server);
   const stopStorageDeletionWorker = startStorageDeletionWorker();
@@ -223,6 +230,7 @@ async function startServer() {
   // session cookie as every other auth path, so the rest of the app is
   // provider-agnostic.
   registerNativeAuthRoutes(app);
+  registerPasswordResetRoutes(app);
   registerDevLoginRoutes(app);
   // Application export (HTML for printing, ZIP for inspectors). Streamed
   // binaries — kept off the tRPC adapter which expects JSON.
@@ -273,7 +281,7 @@ async function startServer() {
     process.once(signal, () => {
       closeRemoteScanner();
       const timer = setTimeout(() => process.exit(1), 15_000).unref();
-      server.close(() => { void stopStorageDeletionWorker().finally(() => db.closeDatabase()).finally(() => { clearTimeout(timer); process.exit(0); }); });
+      server.close(() => { void Promise.all([stopStorageDeletionWorker(), stopEmailWorker(), stopScreeningWorker()]).finally(() => db.closeDatabase()).finally(() => { clearTimeout(timer); process.exit(0); }); });
       server.closeIdleConnections();
     });
   }

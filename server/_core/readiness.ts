@@ -22,6 +22,10 @@ export async function verifyDatabaseReadiness(
   );
   await database.execute(sql`SELECT humanDecisionAt FROM applications LIMIT 1`);
   await database.execute(sql`SELECT identityIssuer FROM users LIMIT 1`);
+  await database.execute(sql`SELECT version FROM account_auth_state LIMIT 1`);
+  await database.execute(sql`SELECT tokenHash FROM password_reset_tokens LIMIT 1`);
+  await database.execute(sql`SELECT id FROM email_outbox LIMIT 1`);
+  await database.execute(sql`SELECT id FROM application_screening_jobs LIMIT 1`);
   await database.execute(
     sql`SELECT storageProvider, storageOrigin, storageBucket, fileSize FROM file_uploads LIMIT 1`
   );

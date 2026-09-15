@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, mediumtext, timestamp, varchar, json, boolean } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -326,7 +326,7 @@ export const applicationVersions = mysqlTable("application_versions", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("applicationId").notNull(),
   version: int("version").notNull(), // 1, 2, 3...
-  snapshot: text("snapshot").notNull(), // JSON snapshot of all application fields
+  snapshot: mediumtext("snapshot").notNull(), // Complete submitted protocol, including UTF-8 text beyond 64KiB
   submittedAt: timestamp("submittedAt").defaultNow().notNull(),
   stage1AiScore: int("stage1AiScore"),
   stage2AiScore: int("stage2AiScore"),
@@ -476,3 +476,54 @@ export const analyticsEvents = mysqlTable("analytics_events", {
 
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = typeof analyticsEvents.$inferInsert;
+
+// Recipient addresses, reset links, message bodies and PDFs are encrypted.
+// Metadata deliberately distinguishes provider acceptance from delivery.
+export const emailOutbox = mysqlTable("email_outbox", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  dedupeKey: varchar("dedupeKey", { length: 64 }).notNull().unique(),
+  userId: int("userId").notNull(),
+  recipientHash: varchar("recipientHash", { length: 64 }).notNull(),
+  category: mysqlEnum("emailCategory", ["transactional", "bulk"]).notNull(),
+  kind: varchar("kind", { length: 40 }).notNull(),
+  provider: mysqlEnum("emailProvider", ["resend", "smtp"]).notNull(),
+  transportHash: varchar("transportHash", { length: 64 }).notNull(),
+  status: mysqlEnum("emailStatus", ["queued", "sending", "accepted", "delivered", "bounced", "complained", "failed", "unknown", "suppressed", "cancelled"]).default("queued").notNull(),
+  payload: mediumtext("payload"),
+  attempts: int("attempts").default(0).notNull(),
+  providerId: varchar("providerId", { length: 255 }),
+  leaseToken: varchar("leaseToken", { length: 36 }),
+  nextAttemptAt: timestamp("nextAttemptAt").defaultNow().notNull(),
+  firstDispatchAt: timestamp("firstDispatchAt"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  deliveredAt: timestamp("deliveredAt"),
+  lastCode: varchar("lastCode", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export const emailSuppressions = mysqlTable("email_suppressions", {
+  recipientHash: varchar("recipientHash", { length: 64 }).primaryKey(),
+  allMail: boolean("allMail").default(false).notNull(),
+  reason: varchar("reason", { length: 40 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export const emailDeliveryEvents = mysqlTable("email_delivery_events", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  providerId: varchar("providerId", { length: 255 }).notNull(),
+  type: varchar("type", { length: 40 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type EmailOutboxRow = typeof emailOutbox.$inferSelect;
+
+export const emailCampaigns = mysqlTable("email_campaigns", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  createdByUserId: int("createdByUserId").notNull(),
+  status: mysqlEnum("emailCampaignStatus", ["preview", "queueing", "queued", "cancelled"]).default("preview").notNull(),
+  payload: mediumtext("payload"),
+  recipientCount: int("recipientCount").notNull(),
+  queuedCount: int("queuedCount").default(0).notNull(),
+  skippedCount: int("skippedCount").default(0).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});

@@ -428,10 +428,11 @@ export default function Auth() {
                         : "section-password current-password"
                   }
                   minLength={mode === "signup" ? 12 : 1}
-                  maxLength={128}
+                  maxLength={200}
                   required
                 />
               </div>
+              {mode === "signin" && !connected && <Button type="button" variant="link" className="h-auto p-0" disabled={busy} onClick={() => { setPassword(""); setEmail(""); setLocation("/forgot-password"); }}>{isAr ? "نسيت كلمة المرور؟" : "Forgot your password?"}</Button>}
               <Button
                 type="submit"
                 className="w-full h-11 bg-forest-900 hover:bg-forest-800"

@@ -32,6 +32,7 @@ const ApplyStage2 = lazy(() => import("./pages/ApplyStage2"));
 const SubmitApplication = lazy(() => import("./pages/SubmitApplication"));
 const ApplicationDetail = lazy(() => import("./pages/ApplicationDetail"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminEmail = lazy(() => import("./pages/AdminEmail"));
 const AdminObservability = lazy(() => import("./pages/AdminObservability"));
 const ReviewDashboard = lazy(() => import("./pages/ReviewDashboard"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -41,6 +42,7 @@ const Registry = lazy(() => import("./pages/Registry"));
 const GuidelineDoc = lazy(() => import("./pages/GuidelineDoc"));
 const FormatWizard = lazy(() => import("./pages/FormatWizard"));
 const Auth = lazy(() => import("./pages/Auth"));
+const PasswordRecovery = lazy(() => import("./pages/PasswordRecovery"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const ChatApplication = lazy(() => import("./pages/ChatApplication"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -75,6 +77,7 @@ function Router() {
           <Route path={"/apply/:id/submit"} component={SubmitApplication} />
           <Route path={"/application/:id"} component={ApplicationDetail} />
           <Route path={"/admin"} component={AdminDashboard} />
+          <Route path={"/admin/email"} component={AdminEmail} />
           <Route path={"/admin/observability"} component={AdminObservability} />
           <Route path={"/reviews"} component={ReviewDashboard} />
           <Route path={"/profile"} component={Profile} />
@@ -84,6 +87,8 @@ function Router() {
           <Route path={"/format/:slug"} component={FormatWizard} />
           <Route path={"/application/:id/versions"} component={VersionHistory} />
           <Route path={"/auth"} component={Auth} />
+          <Route path={"/forgot-password"} component={PasswordRecovery} />
+          <Route path={"/reset-password"} component={PasswordRecovery} />
           <Route path={"/auth/callback"} component={AuthCallback} />
           <Route path={"/sign-in"} component={Auth} />
           <Route path={"/login"} component={Auth} />

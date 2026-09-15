@@ -14,9 +14,10 @@ interface NavbarProps {
   showBack?: boolean;
   backTo?: string;
   backLabel?: string;
+  beforeLeave?: () => Promise<boolean>;
 }
 
-export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
+export function Navbar({ showBack, backTo = "/", backLabel, beforeLeave }: NavbarProps) {
   const { isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { t, isRtl } = useT();
@@ -86,7 +87,7 @@ export function Navbar({ showBack, backTo = "/", backLabel }: NavbarProps) {
               className="transition-apple"
               title={t("nav.logout")}
               aria-label={t("nav.logout")}
-              onClick={async () => { try { await logout(); window.location.href = "/"; } catch { toast.error(t("auth.networkError")); } }}
+              onClick={async () => { try { if (beforeLeave && !await beforeLeave()) return; await logout(); window.location.href = "/"; } catch { toast.error(t("auth.networkError")); } }}
             >
               <LogOut className="h-3.5 w-3.5" /><span className="hidden sm:inline">{t("nav.logout")}</span>
             </Button>

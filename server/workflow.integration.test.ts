@@ -4,7 +4,8 @@ import { inArray } from "drizzle-orm";
 import * as db from "./db";
 import { appRouter } from "./routers";
 import { normalizeStorageKey } from "./storage";
-import { listMissingRequirements } from "./services/irb.validation";
+import { listMissingRequirements, STAGE2_FIELDS } from "./services/irb.validation";
+import { applicationScreeningJobs } from "../drizzle/screeningSchema";
 import * as schema from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 
@@ -88,11 +89,62 @@ run("transactional workflow authority and privacy (isolated local database)", ()
 
   it("commits one submission, one snapshot, and five assignments under concurrent requests", async () => {
     const app = await application();
-    const results = await Promise.allSettled([db.submitApplicationForReview(app.id, applicant.id), db.submitApplicationForReview(app.id, applicant.id)]);
-    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => db.submitApplicationForReview(app.id, applicant.id)));
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(8);
+    expect(results.filter(r => r.status === "fulfilled" && r.value.alreadySubmitted)).toHaveLength(7);
     expect(await db.getReviewsByApplication(app.id)).toHaveLength(5);
     expect(await db.getApplicationVersions(app.id)).toHaveLength(1);
     expect((await db.getApplicationById(app.id))?.submissionCount).toBe(1);
+    expect(await (await db.getDb())!.select().from(applicationScreeningJobs).where(inArray(applicationScreeningJobs.applicationId, [app.id]))).toHaveLength(1);
+  });
+
+  it("accepts a complete short-answer protocol without a numeric AI gate and assigns by category", async () => {
+    const app = await application({ status: "stage2_pending", irbCategory: "expedited", sampleSize: "50", stage1Passed: false, stage2Passed: false, stage1AiScore: null, stage2AiScore: null });
+    const readiness = await caller(applicant).application.getSubmissionReadiness({ id: app.id });
+    expect(readiness).toMatchObject({ canSubmit: true, missingFields: [], ai: { stage1: "not_reviewed", stage2: "not_reviewed" } });
+    await expect(caller(outsider).application.getSubmissionReadiness({ id: app.id })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const result = await caller(applicant).application.submit({ id: app.id });
+    expect(result).toMatchObject({ success: true, assignedMembers: 1, reviewStatus: "queued" });
+    expect((await db.getApplicationById(app.id))?.humanDecisionAt).toBeNull();
+  });
+
+  it("edits a legacy passed draft and records its real submission only once under concurrent retries", async () => {
+    const app = await application({ status: "submitted", submittedAt: null, irbCategory: "expedited" });
+    const protocol = Object.fromEntries(STAGE2_FIELDS.map(field => [field, app[field] || ""])) as Record<(typeof STAGE2_FIELDS)[number], string>;
+    await caller(applicant).application.saveStage2({ id: app.id, ...protocol, methodology: "Verified revised synthetic methods" });
+    expect(await db.getApplicationById(app.id)).toMatchObject({ status: "stage2_pending", submittedAt: null, methodology: "Verified revised synthetic methods" });
+    const results = await Promise.all([caller(applicant).application.submit({ id: app.id }), caller(applicant).application.submit({ id: app.id })]);
+    expect(results.filter(result => result.alreadySubmitted)).toHaveLength(1);
+    expect(await db.getApplicationVersions(app.id)).toHaveLength(1);
+    expect((await db.getApplicationById(app.id))?.submissionCount).toBe(1);
+    expect((await db.getApplicationById(app.id))?.submittedAt).toBeInstanceOf(Date);
+  });
+
+  it("freezes timestamped legacy submissions consistently across edit, authors, uploads and re-submission", async () => {
+    const app = await application({ status: "submitted", submittedAt: new Date() });
+    const protocol = Object.fromEntries(STAGE2_FIELDS.map(field => [field, app[field] || ""])) as Record<(typeof STAGE2_FIELDS)[number], string>;
+    expect(await caller(applicant).application.getSubmissionReadiness({ id: app.id })).toMatchObject({ canSubmit: false, alreadySubmitted: true, blockers: [{ code: "ALREADY_SUBMITTED" }] });
+    await expect(caller(applicant).application.saveStage2({ id: app.id, ...protocol })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(db.updateEditableApplication(app.id, applicant.id, { methodology: "Cannot replace submitted text" }, app)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(db.addResearchAuthor({ applicationId: app.id, name: "Synthetic late author", email: "late@example.test" })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(db.removeAuthor(1, app.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(db.addFileUpload({ applicationId: app.id, userId: applicant.id, fileName: "synthetic.pdf", fileKey: `${applicant.id}/legacy-submitted.pdf`, fileUrl: "", fileSize: 4 })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(caller(applicant).application.submit({ id: app.id })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await db.getApplicationById(app.id)).toEqual(app); expect(await db.getApplicationVersions(app.id)).toHaveLength(0);
+  });
+
+  it.each(["A", "س"])("preserves a complete >64KiB %s protocol in the immutable submission and screening job", async letter => {
+    const protocol = Object.fromEntries(STAGE2_FIELDS.map(field => [field, letter.repeat(8000)]));
+    const app = await application({ ...protocol, status: "stage2_pending", irbCategory: "expedited", stage1Passed: false, stage2Passed: false, stage1AiScore: null, stage2AiScore: null });
+    expect(Buffer.byteLength(JSON.stringify(protocol))).toBeGreaterThan(65_535);
+    expect(await caller(applicant).application.getSubmissionReadiness({ id: app.id })).toMatchObject({ canSubmit: true, missingFields: [] });
+    expect(await caller(applicant).application.submit({ id: app.id })).toMatchObject({ success: true, reviewStatus: "queued" });
+    const [version] = await db.getApplicationVersions(app.id);
+    const [job] = await (await db.getDb())!.select().from(applicationScreeningJobs).where(inArray(applicationScreeningJobs.applicationId, [app.id]));
+    expect(JSON.parse(version.snapshot)).toMatchObject(protocol);
+    expect(JSON.parse(job.snapshotJson)).toMatchObject(protocol);
+    expect(job.status).toBe("pending");
+    expect((await db.getApplicationById(app.id))?.humanDecisionAt).toBeNull();
   });
 
   it("rejects another account and removes stale passes after an edit", async () => {
@@ -101,6 +153,16 @@ run("transactional workflow authority and privacy (isolated local database)", ()
     const changed = await db.updateEditableApplication(app.id, applicant.id, { researchTitle: "Revised title" }, app);
     expect(changed).toMatchObject({ stage1Passed: false, stage2Passed: false, stage1AiScore: null, stage2AiScore: null, status: "stage1_pending" });
     await expect(db.updateEditableApplication(app.id, applicant.id, { stage1Passed: true }, app)).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("does not recreate submissions or screening data from a session authenticated before account erasure", async () => {
+    const erased = await user("erased-submitter");
+    const app = await application({ applicantId: erased.id, status: "resubmission_required", submittedAt: new Date() });
+    await db.eraseUserAccount(erased.id);
+    await expect(caller(erased).application.submit({ id: app.id })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(await db.getApplicationVersions(app.id)).toHaveLength(0);
+    expect(await db.getReviewsByApplication(app.id)).toHaveLength(0);
+    expect(await (await db.getDb())!.select().from(applicationScreeningJobs).where(inArray(applicationScreeningJobs.applicationId, [app.id]))).toHaveLength(0);
   });
 
   it("cannot change authors or append uploads after final submission", async () => {

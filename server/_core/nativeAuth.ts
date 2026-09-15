@@ -1,5 +1,6 @@
 import { COOKIE_NAME, SESSION_TTL_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
+import { queueWelcomeEmail } from "../email/events";
 import { nanoid } from "nanoid";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
@@ -56,8 +57,8 @@ async function hit(scope: string, key: string, windowMs: number, max: number): P
 const DUMMY_HASH =
   "scrypt$32768$8$1$00000000000000000000000000000000$" + "0".repeat(128);
 
-async function issueSession(req: Request, res: Response, openId: string, name: string) {
-  const sessionToken = await sdk.createSessionToken(openId, { name, expiresInMs: SESSION_TTL_MS });
+async function issueSession(req: Request, res: Response, openId: string, name: string, authVersion?: number) {
+  const sessionToken = await sdk.createSessionToken(openId, { name, expiresInMs: SESSION_TTL_MS, authVersion });
   const cookieOptions = getSessionCookieOptions(req);
   res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_TTL_MS });
 }
@@ -116,6 +117,7 @@ export function registerNativeAuthRoutes(app: Express) {
         return;
       }
 
+      await queueWelcomeEmail({ userId: user.id, eventId: `welcome:${user.id}` }).catch(() => console.warn("[NativeAuth] Welcome email could not be queued"));
       await issueSession(req, res, user.openId, name);
       res.json({ ok: true, openId: user.openId, role: user.role });
     } catch (error) {
@@ -162,7 +164,7 @@ export function registerNativeAuthRoutes(app: Express) {
       }
 
       await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
-      await issueSession(req, res, user.openId, user.name ?? email.split("@")[0]!);
+      await issueSession(req, res, user.openId, user.name ?? email.split("@")[0]!, user.authVersion);
       res.json({ ok: true, openId: user.openId, role: user.role });
     } catch (error) {
       console.error("[NativeAuth] login failed");

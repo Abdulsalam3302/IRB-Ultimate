@@ -30,6 +30,7 @@ export default defineConfig({
       JWT_SECRET: "isolated-vitest-session-secret-not-production",
       VITE_APP_ID: "irb-test",
       LLM_API_KEY: "", BUILT_IN_FORGE_API_KEY: "", BUILT_IN_FORGE_API_URL: "",
+      MAIL_PROVIDER: "disabled", RESEND_API_KEY: "", RESEND_WEBHOOK_SECRET: "", MAIL_ENCRYPTION_KEY: "", SMTP_USER: "", SMTP_PASSWORD: "",
       SMTP_HOST: "", SENTRY_DSN: "", S3_BUCKET: "", OAUTH_SERVER_URL: "",
       SUPABASE_URL: "", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "",
       SUPABASE_SECRET_KEY: "", SUPABASE_STORAGE_BUCKET: "", STORAGE_PROVIDER: "auto",

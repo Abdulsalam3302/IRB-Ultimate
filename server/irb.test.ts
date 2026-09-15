@@ -500,13 +500,16 @@ describe("AI Review module", () => {
     expect(typeof runStage2AiReview).toBe("function");
   });
 
-  it("describeAiOutage maps quota, key, timeout, and config failures", async () => {
+  it("describes outages without exposing provider credentials or scoring unavailable work", async () => {
     const { describeAiOutage } = await import("./aiReview");
-    expect(describeAiOutage(new Error("LLM_API_KEY is not configured"))).toMatch(/not configured/i);
-    expect(describeAiOutage(new Error("request timed out after 60s"))).toMatch(/timed out/i);
-    expect(describeAiOutage(new Error("429 Token Plan usage limit reached"))).toMatch(/quota|credits/i);
-    expect(describeAiOutage(new Error("401 invalid api key"))).toMatch(/API key/i);
-    expect(describeAiOutage(new Error("ECONNRESET"))).toMatch(/temporarily unavailable/i);
+    for (const internal of ["LLM_API_KEY is not configured", "429 Token Plan usage limit reached", "401 invalid api key", "ECONNRESET"]) {
+      const message = describeAiOutage(new Error(internal));
+      expect(message).toMatch(/temporarily unavailable/i);
+      expect(message).toMatch(/saved draft and previous completed assessment are unchanged/i);
+      expect(message).toMatch(/continue to human review/i);
+      expect(message).not.toMatch(/LLM_API_KEY|Token Plan|401|429|ECONNRESET|invalid api key|score.*0|major revision/i);
+    }
+    expect(describeAiOutage(new Error("request timed out after 60s"))).toMatch(/took too long/i);
   });
 });
 

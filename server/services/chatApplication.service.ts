@@ -1,3 +1,4 @@
+import { canEditApplication } from "../../shared/applicationWorkflow";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { invokeLLM } from "../_core/llm";
@@ -24,10 +25,7 @@ When sufficient applicant facts support a draft update, include one JSON block a
 \`\`\`
 Use ONLY plain string values. Never update status, scores, declarations, ownership, IRB numbers, certificates, or approvals. Preserve valid facts. Allowed researchType values: clinical_trial, observational, retrospective, survey_questionnaire, case_study, laboratory, educational, social_behavioral, other. irbCategory is a provisional applicant selection (full_board, expedited, exempt) subject to committee determination. Be professional and concise.`;
 
-export const CHAT_EDITABLE_STATUSES = new Set([
-  "draft", "declaration_pending", "stage1_pending", "stage1_failed",
-  "stage2_pending", "stage2_failed", "resubmission_required",
-]);
+
 
 const ALLOWED_STRING_KEYS = [
   "researchTitle",
@@ -285,7 +283,7 @@ export async function chatApplicationTurn(input: {
     const result = await invokeLLM({
       messages: [
         { role: "system", content: CHAT_SYSTEM_PROMPT },
-        { role: "system", content: `Reply language: ${lang === "ar" ? "Arabic" : "English"}. Draft updates permitted: ${CHAT_EDITABLE_STATUSES.has(app.status)}.` },
+        { role: "system", content: `Reply language: ${lang === "ar" ? "Arabic" : "English"}. Draft updates permitted: ${canEditApplication(app)}.` },
         { role: "user", content: context },
         // Historical assistant replies can repeat untrusted data; fence the
         // whole transcript instead of granting any turn instruction authority.
@@ -326,7 +324,7 @@ export async function chatApplicationTurn(input: {
   // A response generated for a draft must not modify a concurrently submitted
   // or approved application. Recheck immediately before the write.
   const latest = await db.getApplicationById(input.applicationId);
-  if (!latest || !CHAT_EDITABLE_STATUSES.has(latest.status)) {
+  if (!latest || !canEditApplication(latest)) {
     for (const key of Object.keys(patch)) delete (patch as Record<string, unknown>)[key];
   }
   if (Object.keys(patch).length > 0) {

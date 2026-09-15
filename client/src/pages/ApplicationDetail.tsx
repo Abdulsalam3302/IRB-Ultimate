@@ -1,3 +1,14 @@
+import { canEditApplication } from "@shared/applicationWorkflow";
+import {
+  applicationStatusLabel,
+  researchTypeLabel,
+  reviewCategoryLabel,
+} from "@shared/applicationLabels";
+import {
+  SubmissionScreeningPanel,
+  screeningView,
+} from "@/components/SubmissionScreeningPanel";
+import { storedReview } from "@/lib/aiReviewPresentation";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,9 +17,20 @@ import { trpc } from "@/lib/trpc";
 import { useLocation, useParams } from "wouter";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
-import { Loader2, Download, Clock, CheckCircle, XCircle, History } from "lucide-react";
-import { STATUS_LABELS, STATUS_COLORS, RESEARCH_TYPE_LABELS, IRB_CATEGORY_LABELS } from "@shared/types";
-import type { ApplicationStatus, ResearchType, IrbCategory } from "@shared/types";
+import {
+  Loader2,
+  Download,
+  Clock,
+  CheckCircle,
+  XCircle,
+  History,
+} from "lucide-react";
+import { STATUS_COLORS } from "@shared/types";
+import type {
+  ApplicationStatus,
+  ResearchType,
+  IrbCategory,
+} from "@shared/types";
 import RelatedLiterature from "@/components/RelatedLiterature";
 import { StudyLifecycle } from "@/components/StudyLifecycle";
 
@@ -22,37 +44,94 @@ export default function ApplicationDetail() {
   // Smart back target — admins came from /admin, regular users from /dashboard.
   // Reviewers landing here came from /reviews. Pick by role.
   const backTo = user?.role === "admin" ? "/admin" : "/dashboard";
-  const backLabel = user?.role === "admin"
-    ? (isAr ? "لوحة الإدارة" : "Admin Panel")
-    : (isAr ? "لوحة التحكم" : "Dashboard");
+  const backLabel =
+    user?.role === "admin"
+      ? isAr
+        ? "لوحة الإدارة"
+        : "Admin Panel"
+      : isAr
+        ? "لوحة التحكم"
+        : "Dashboard";
 
-  const { data: app, isLoading } = trpc.application.getById.useQuery(
-    { id: appId }, { enabled: isAuthenticated && appId > 0 }
+  const {
+    data: app,
+    isLoading,
+    refetch,
+    isFetching,
+  } = trpc.application.getById.useQuery(
+    { id: appId },
+    {
+      enabled: isAuthenticated && appId > 0,
+      refetchInterval: query => {
+        const data = query.state.data;
+        const screening = screeningView(
+          data && "screening" in data ? data.screening : null
+        );
+        return screening && ["pending", "running"].includes(screening.status)
+          ? 15_000
+          : false;
+      },
+      refetchIntervalInBackground: false,
+    }
   );
   const { data: reviews } = trpc.review.getByApplication.useQuery(
-    { applicationId: appId }, { enabled: isAuthenticated && appId > 0 }
+    { applicationId: appId },
+    { enabled: isAuthenticated && appId > 0 }
   );
   const authors = app?.authors;
 
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   if (!app) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md"><CardContent className="py-8 text-center">
-          <p className="text-muted-foreground">{isAr ? "الطلب غير موجود." : "Application not found."}</p>
-          <Button className="mt-4" onClick={() => setLocation("/dashboard")}>{isAr ? "العودة" : "Back"}</Button>
-        </CardContent></Card>
+        <Card className="max-w-md">
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">
+              {isAr ? "الطلب غير موجود." : "Application not found."}
+            </p>
+            <Button className="mt-4" onClick={() => setLocation("/dashboard")}>
+              {isAr ? "العودة" : "Back"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
+  const screening = screeningView("screening" in app ? app.screening : null);
+  const stage1Review = storedReview(
+    app.stage1AiFeedback,
+    app.stage1AiScore,
+    app.stage1Passed
+  );
+  const stage2Review = storedReview(
+    app.stage2AiFeedback,
+    app.stage2AiScore,
+    app.stage2Passed
+  );
+  const reviewLabel = (review: typeof stage1Review) =>
+    review?.status === "completed"
+      ? `${review.score}/100`
+      : review?.status === "unavailable"
+        ? isAr
+          ? "غير متاحة"
+          : "Unavailable"
+        : isAr
+          ? "لا توجد درجة"
+          : "No score";
   const infoRow = (label: string, value: string | null | undefined) => (
     <div className="flex justify-between py-2 border-b last:border-0">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium text-end max-w-[60%]">{value || "—"}</span>
+      <span className="text-sm font-medium text-end max-w-[60%]">
+        {value || "—"}
+      </span>
     </div>
   );
 
@@ -60,78 +139,182 @@ export default function ApplicationDetail() {
     <div className="min-h-screen bg-background">
       <Navbar showBack backTo={backTo} backLabel={backLabel} />
       <div className="container py-8 max-w-4xl mx-auto">
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex flex-wrap gap-4 items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">{app.researchTitle || `${isAr ? "طلب" : "Application"} #${app.id}`}</h1>
+            <h1 className="text-2xl font-bold">
+              {app.researchTitle ||
+                `${isAr ? "طلب" : "Application"} #${app.id}`}
+            </h1>
             <div className="flex items-center gap-3 mt-2">
-              <Badge className={STATUS_COLORS[app.status as ApplicationStatus] || "bg-gray-100 text-gray-700"}>
-                {STATUS_LABELS[app.status as ApplicationStatus] || app.status}
+              <Badge
+                className={
+                  STATUS_COLORS[app.status as ApplicationStatus] ||
+                  "bg-gray-100 text-gray-700"
+                }
+              >
+                {applicationStatusLabel(app.status as ApplicationStatus, isAr)}
               </Badge>
-              {app.irbNumber && <Badge variant="outline" className="font-mono">{app.irbNumber}</Badge>}
+              {app.irbNumber && (
+                <Badge variant="outline" className="font-mono">
+                  {app.irbNumber}
+                </Badge>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setLocation(`/application/${app.id}/versions`)}>
-              <History className="h-4 w-4 me-1" /> {isAr ? "سجل الإصدارات" : "Version History"}
+          <div className="flex flex-wrap items-center gap-2">
+            {app.applicantId === user?.id && canEditApplication(app) && (
+              <Button variant="outline" size="sm" onClick={() => setLocation(`/apply/${app.id}/stage2`)}>
+                {isAr ? "متابعة تحرير الطلب" : "Continue editing"}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation(`/application/${app.id}/versions`)}
+            >
+              <History className="h-4 w-4 me-1" />{" "}
+              {isAr ? "سجل الإصدارات" : "Version History"}
             </Button>
             {/* Always-fresh PDF, regenerated on demand by the server.
                 Hits /api/export/certificate/:id which renders via headless
                 Chromium against the redesigned formal certificate template.
                 Available for any approved app — even if certificateUrl
                 wasn't persisted at approval time. */}
-            {app.status === "approved" && app.humanDecisionByUserId && app.humanDecisionAt && (
-              <Button onClick={() => window.open(`/api/export/certificate/${app.id}`, "_blank", "noopener,noreferrer")}>
-                <Download className="h-4 w-4 me-2" /> {isAr ? "تحميل الشهادة (PDF)" : "Download Certificate (PDF)"}
-              </Button>
-            )}
-
+            {app.status === "approved" &&
+              app.humanDecisionByUserId &&
+              app.humanDecisionAt && (
+                <Button
+                  onClick={() =>
+                    window.open(
+                      `/api/export/certificate/${app.id}`,
+                      "_blank",
+                      "noopener,noreferrer"
+                    )
+                  }
+                >
+                  <Download className="h-4 w-4 me-2" />{" "}
+                  {isAr ? "تحميل الشهادة (PDF)" : "Download Certificate (PDF)"}
+                </Button>
+              )}
           </div>
         </div>
 
-        {["approved", "rejected", "permanently_rejected", "retracted"].includes(app.status) && (!app.humanDecisionByUserId || !app.humanDecisionAt) && <div role="status" className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">{isAr ? "هذا سجل قرار سابق دون توثيق للقرار البشري المخول. يتطلب إعادة تحقق من المؤسسة قبل إصدار أو تنزيل شهادة أو الاعتماد عليه للموافقة الأخلاقية." : "This historical decision has no recorded authorized human decision provenance. Institutional revalidation is required before a certificate can be issued or downloaded, or the record relied on as ethics approval."}</div>}
+        {["approved", "rejected", "permanently_rejected", "retracted"].includes(
+          app.status
+        ) &&
+          (!app.humanDecisionByUserId || !app.humanDecisionAt) && (
+            <div
+              role="status"
+              className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+            >
+              {isAr
+                ? "هذا سجل قرار سابق دون توثيق للقرار البشري المخول. يتطلب إعادة تحقق من المؤسسة قبل إصدار أو تنزيل شهادة أو الاعتماد عليه للموافقة الأخلاقية."
+                : "This historical decision has no recorded authorized human decision provenance. Institutional revalidation is required before a certificate can be issued or downloaded, or the record relied on as ethics approval."}
+            </div>
+          )}
+        {screening && (
+          <SubmissionScreeningPanel
+            screening={screening}
+            isAr={isAr}
+            refresh={() => void refetch()}
+            refreshing={isFetching}
+          />
+        )}
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <Card>
-              <CardHeader><CardTitle className="text-lg">{isAr ? "المعلومات الأساسية" : "Basic Information"}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {isAr ? "المعلومات الأساسية" : "Basic Information"}
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                {infoRow(isAr ? "نوع البحث" : "Research Type", RESEARCH_TYPE_LABELS[app.researchType as ResearchType] || app.researchType)}
-                {infoRow(isAr ? "فئة IRB" : "IRB Category", IRB_CATEGORY_LABELS[app.irbCategory as IrbCategory] || app.irbCategory)}
-                {infoRow(isAr ? "الباحث الرئيسي" : "Principal Investigator", app.principalInvestigator)}
+                {infoRow(
+                  isAr ? "نوع البحث" : "Research Type",
+                  researchTypeLabel(app.researchType as ResearchType, isAr)
+                )}
+                {infoRow(
+                  isAr ? "فئة IRB" : "IRB Category",
+                  reviewCategoryLabel(app.irbCategory as IrbCategory, isAr)
+                )}
+                {infoRow(
+                  isAr ? "الباحث الرئيسي" : "Principal Investigator",
+                  app.principalInvestigator
+                )}
                 {infoRow(isAr ? "البريد الإلكتروني" : "Email", app.piEmail)}
                 {infoRow(isAr ? "المؤسسة" : "Institution", app.piInstitution)}
                 {infoRow(isAr ? "القسم" : "Department", app.piDepartment)}
-                {infoRow(isAr ? "مصدر التمويل" : "Funding Source", app.fundingSource)}
-                {infoRow(isAr ? "المدة المتوقعة" : "Duration", app.estimatedDuration)}
+                {infoRow(
+                  isAr ? "مصدر التمويل" : "Funding Source",
+                  app.fundingSource
+                )}
+                {infoRow(
+                  isAr ? "المدة المتوقعة" : "Duration",
+                  app.estimatedDuration
+                )}
               </CardContent>
             </Card>
 
             {/* Research-type-specific info */}
-            {(app.questionnaireFileUrl || app.retrospectiveDataSource || app.clinicalTrialDetails || app.labHeadName) && (
+            {(app.questionnaireFileUrl ||
+              app.retrospectiveDataSource ||
+              app.clinicalTrialDetails ||
+              app.labHeadName) && (
               <Card>
-                <CardHeader><CardTitle className="text-lg">{isAr ? "معلومات خاصة بنوع البحث" : "Research-Type Specific Information"}</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {isAr
+                      ? "معلومات خاصة بنوع البحث"
+                      : "Research-Type Specific Information"}
+                  </CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-3">
                   {app.questionnaireFileUrl && (
                     <div>
-                      <p className="text-sm font-medium mb-1">{isAr ? "ملف الاستبيان" : "Questionnaire File"}</p>
-                      <a href={app.questionnaireFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">{isAr ? "تحميل الملف" : "Download File"}</a>
+                      <p className="text-sm font-medium mb-1">
+                        {isAr ? "ملف الاستبيان" : "Questionnaire File"}
+                      </p>
+                      <a
+                        href={app.questionnaireFileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        {isAr ? "تحميل الملف" : "Download File"}
+                      </a>
                     </div>
                   )}
                   {app.retrospectiveDataSource && (
                     <div>
-                      <p className="text-sm font-medium mb-1">{isAr ? "مصدر البيانات" : "Data Source"}</p>
-                      <p className="text-sm text-muted-foreground">{app.retrospectiveDataSource}</p>
+                      <p className="text-sm font-medium mb-1">
+                        {isAr ? "مصدر البيانات" : "Data Source"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {app.retrospectiveDataSource}
+                      </p>
                     </div>
                   )}
                   {app.clinicalTrialDetails && (
                     <div>
-                      <p className="text-sm font-medium mb-1">{isAr ? "تفاصيل التجربة السريرية" : "Clinical Trial Details"}</p>
-                      <p className="text-sm text-muted-foreground">{app.clinicalTrialDetails}</p>
+                      <p className="text-sm font-medium mb-1">
+                        {isAr
+                          ? "تفاصيل التجربة السريرية"
+                          : "Clinical Trial Details"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {app.clinicalTrialDetails}
+                      </p>
                     </div>
                   )}
                   {app.labHeadName && (
                     <div>
-                      <p className="text-sm font-medium mb-1">{isAr ? "رئيس المختبر" : "Lab Head"}</p>
-                      <p className="text-sm text-muted-foreground">{app.labHeadName} — {app.labHeadEmail} — {app.labHeadPhone}</p>
+                      <p className="text-sm font-medium mb-1">
+                        {isAr ? "رئيس المختبر" : "Lab Head"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {app.labHeadName} — {app.labHeadEmail} —{" "}
+                        {app.labHeadPhone}
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -141,16 +324,29 @@ export default function ApplicationDetail() {
             {/* Authors */}
             {authors && authors.length > 0 && (
               <Card>
-                <CardHeader><CardTitle className="text-lg">{isAr ? "المؤلفون" : "Research Authors"}</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {isAr ? "المؤلفون" : "Research Authors"}
+                  </CardTitle>
+                </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     {authors.map((a: any, i: number) => (
-                      <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">{i + 1}</div>
+                      <div
+                        key={a.id}
+                        className="flex items-start gap-3 p-3 rounded-lg bg-muted/50"
+                      >
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                          {i + 1}
+                        </div>
                         <div>
                           <p className="text-sm font-medium">{a.name}</p>
-                          <p className="text-xs text-muted-foreground">{a.email} • {a.institution} • {a.department}</p>
-                          <p className="text-xs text-muted-foreground">{a.country} {a.phone ? `• ${a.phone}` : ""}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.email} • {a.institution} • {a.department}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.country} {a.phone ? `• ${a.phone}` : ""}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -161,27 +357,71 @@ export default function ApplicationDetail() {
 
             {app.researchObjectives && (
               <Card>
-                <CardHeader><CardTitle className="text-lg">{isAr ? "تفاصيل البحث" : "Research Details"}</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {isAr ? "تفاصيل البحث" : "Research Details"}
+                  </CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-4">
                   {[
-                    { label: isAr ? "الأهداف" : "Objectives", value: app.researchObjectives },
-                    { label: isAr ? "المنهجية" : "Methodology", value: app.methodology },
-                    { label: isAr ? "حجم العينة" : "Sample Size", value: app.sampleSize },
-                    { label: isAr ? "السكان المستهدفون" : "Target Population", value: app.targetPopulation },
-                    { label: isAr ? "معايير الإدراج" : "Inclusion Criteria", value: app.inclusionCriteria },
-                    { label: isAr ? "معايير الاستبعاد" : "Exclusion Criteria", value: app.exclusionCriteria },
-                    { label: isAr ? "جمع البيانات" : "Data Collection", value: app.dataCollectionMethods },
-                    { label: isAr ? "الموافقة المستنيرة" : "Informed Consent", value: app.informedConsentProcess },
-                    { label: isAr ? "تقييم المخاطر" : "Risk Assessment", value: app.riskAssessment },
-                    { label: isAr ? "تقييم الفوائد" : "Benefit Assessment", value: app.benefitAssessment },
-                    { label: isAr ? "السرية" : "Confidentiality", value: app.confidentialityMeasures },
-                    { label: isAr ? "تضارب المصالح" : "Conflict of Interest", value: app.conflictOfInterest },
-                  ].filter(f => f.value).map((f, i) => (
-                    <div key={i}>
-                      <p className="text-sm font-medium mb-1">{f.label}</p>
-                      <p className="text-sm text-muted-foreground">{f.value}</p>
-                    </div>
-                  ))}
+                    {
+                      label: isAr ? "الأهداف" : "Objectives",
+                      value: app.researchObjectives,
+                    },
+                    {
+                      label: isAr ? "المنهجية" : "Methodology",
+                      value: app.methodology,
+                    },
+                    {
+                      label: isAr ? "حجم العينة" : "Sample Size",
+                      value: app.sampleSize,
+                    },
+                    {
+                      label: isAr ? "السكان المستهدفون" : "Target Population",
+                      value: app.targetPopulation,
+                    },
+                    {
+                      label: isAr ? "معايير الإدراج" : "Inclusion Criteria",
+                      value: app.inclusionCriteria,
+                    },
+                    {
+                      label: isAr ? "معايير الاستبعاد" : "Exclusion Criteria",
+                      value: app.exclusionCriteria,
+                    },
+                    {
+                      label: isAr ? "جمع البيانات" : "Data Collection",
+                      value: app.dataCollectionMethods,
+                    },
+                    {
+                      label: isAr ? "الموافقة المستنيرة" : "Informed Consent",
+                      value: app.informedConsentProcess,
+                    },
+                    {
+                      label: isAr ? "تقييم المخاطر" : "Risk Assessment",
+                      value: app.riskAssessment,
+                    },
+                    {
+                      label: isAr ? "تقييم الفوائد" : "Benefit Assessment",
+                      value: app.benefitAssessment,
+                    },
+                    {
+                      label: isAr ? "السرية" : "Confidentiality",
+                      value: app.confidentialityMeasures,
+                    },
+                    {
+                      label: isAr ? "تضارب المصالح" : "Conflict of Interest",
+                      value: app.conflictOfInterest,
+                    },
+                  ]
+                    .filter(f => f.value)
+                    .map((f, i) => (
+                      <div key={i}>
+                        <p className="text-sm font-medium mb-1">{f.label}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {f.value}
+                        </p>
+                      </div>
+                    ))}
                 </CardContent>
               </Card>
             )}
@@ -189,51 +429,87 @@ export default function ApplicationDetail() {
             {/* NCBE post-submission lifecycle: adverse events + amendments.
                 Applicant and admins only — the byApplication queries are
                 FORBIDDEN for assigned reviewers, so don't render for them. */}
-            {!["draft", "declaration_pending", "stage1_pending", "stage1_failed", "stage2_pending", "stage2_failed"].includes(app.status) &&
+            {app.submittedAt &&
               (user?.role === "admin" || app.applicantId === user?.id) && (
-              <StudyLifecycle
-                applicationId={app.id}
-                canReport={app.status === "approved" || user?.role === "admin"}
-              />
-            )}
+                <StudyLifecycle
+                  applicationId={app.id}
+                  canReport={
+                    app.status === "approved" || user?.role === "admin"
+                  }
+                />
+              )}
           </div>
 
           <div className="space-y-6">
             <Card>
-              <CardHeader><CardTitle className="text-lg">{isAr ? "درجات المراجعة" : "AI Review Scores"}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {isAr
+                    ? "المراجعات الآلية الاسترشادية"
+                    : "Advisory AI reviews"}
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">{isAr ? "المرحلة 1 (التصنيف)" : "Stage 1 (Classification)"}</span>
-                  <Badge variant={app.stage1Passed ? "default" : "destructive"}>{app.stage1AiScore ?? "—"}/100</Badge>
+                  <span className="text-sm">
+                    {isAr ? "المرحلة 1 (التصنيف)" : "Stage 1 (Classification)"}
+                  </span>
+                  <Badge variant="outline">{reviewLabel(stage1Review)}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">{isAr ? "المرحلة 2 (الأخلاقيات)" : "Stage 2 (Ethics)"}</span>
-                  <Badge variant={app.stage2Passed ? "default" : "destructive"}>{app.stage2AiScore ?? "—"}/100</Badge>
+                  <span className="text-sm">
+                    {isAr ? "المرحلة 2 (الأخلاقيات)" : "Stage 2 (Ethics)"}
+                  </span>
+                  <Badge variant="outline">{reviewLabel(stage2Review)}</Badge>
                 </div>
               </CardContent>
             </Card>
 
             {reviews && reviews.length > 0 && (
               <Card>
-                <CardHeader><CardTitle className="text-lg">{isAr ? "مراجعات اللجنة" : "Committee Reviews"}</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {isAr ? "مراجعات اللجنة" : "Committee Reviews"}
+                  </CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-3">
                   {reviews.map((r: any) => (
-                    <div key={r.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                    <div
+                      key={r.id}
+                      className="flex items-start gap-3 p-3 rounded-lg bg-muted/50"
+                    >
                       <div className="mt-0.5">
-                        {r.status === "approved" ? <CheckCircle className="h-4 w-4 text-emerald-600" /> :
-                         r.status === "rejected" ? <XCircle className="h-4 w-4 text-red-600" /> :
-                         r.status === "expired" ? <Clock className="h-4 w-4 text-gray-400" /> :
-                         <Clock className="h-4 w-4 text-yellow-600" />}
+                        {r.status === "approved" ? (
+                          <CheckCircle className="h-4 w-4 text-emerald-600" />
+                        ) : r.status === "rejected" ? (
+                          <XCircle className="h-4 w-4 text-red-600" />
+                        ) : r.status === "expired" ? (
+                          <Clock className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <Clock className="h-4 w-4 text-yellow-600" />
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{r.memberName}</span>
-                          <Badge variant="outline" className="text-xs capitalize">{r.status}</Badge>
+                          <span className="text-sm font-medium">
+                            {r.memberName}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="text-xs capitalize"
+                          >
+                            {r.status}
+                          </Badge>
                         </div>
-                        {r.comments && <p className="text-xs text-muted-foreground mt-1">{r.comments}</p>}
+                        {r.comments && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {r.comments}
+                          </p>
+                        )}
                         {r.respondedAt && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            {isAr ? "الرد:" : "Responded:"} {new Date(r.respondedAt).toLocaleString()}
+                            {isAr ? "الرد:" : "Responded:"}{" "}
+                            {new Date(r.respondedAt).toLocaleString()}
                           </p>
                         )}
                       </div>
@@ -245,20 +521,44 @@ export default function ApplicationDetail() {
 
             {app.rejectionReason && (
               <Card className="border-red-200">
-                <CardHeader><CardTitle className="text-lg text-red-700">{isAr ? "سبب الرفض" : "Rejection Reason"}</CardTitle></CardHeader>
-                <CardContent><p className="text-sm text-red-600">{app.rejectionReason}</p></CardContent>
+                <CardHeader>
+                  <CardTitle className="text-lg text-red-700">
+                    {isAr ? "سبب الرفض" : "Rejection Reason"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-red-600">{app.rejectionReason}</p>
+                </CardContent>
               </Card>
             )}
 
             <RelatedLiterature applicationId={app.id} />
 
             <Card>
-              <CardHeader><CardTitle className="text-lg">{isAr ? "الجدول الزمني" : "Timeline"}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {isAr ? "الجدول الزمني" : "Timeline"}
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                {infoRow(isAr ? "تاريخ الإنشاء" : "Created", new Date(app.createdAt).toLocaleString())}
-                {app.submittedAt && infoRow(isAr ? "تاريخ التقديم" : "Submitted", new Date(app.submittedAt).toLocaleString())}
-                {app.approvedAt && infoRow(isAr ? "تاريخ الموافقة" : "Approved", new Date(app.approvedAt).toLocaleString())}
-                {infoRow(isAr ? "رقم التقديم" : "Submission #", String(app.submissionCount))}
+                {infoRow(
+                  isAr ? "تاريخ الإنشاء" : "Created",
+                  new Date(app.createdAt).toLocaleString()
+                )}
+                {app.submittedAt &&
+                  infoRow(
+                    isAr ? "تاريخ التقديم" : "Submitted",
+                    new Date(app.submittedAt).toLocaleString()
+                  )}
+                {app.approvedAt &&
+                  infoRow(
+                    isAr ? "تاريخ الموافقة" : "Approved",
+                    new Date(app.approvedAt).toLocaleString()
+                  )}
+                {infoRow(
+                  isAr ? "رقم التقديم" : "Submission #",
+                  String(app.submissionCount)
+                )}
               </CardContent>
             </Card>
           </div>

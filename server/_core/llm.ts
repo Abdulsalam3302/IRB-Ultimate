@@ -78,6 +78,8 @@ export type InvokeParams = {
    * `deep`: allow thinking / larger budgets (swarm, long proposals).
    */
   profile?: LlmProfile;
+  /** A shorter deadline for interactive calls; aborts the provider request. */
+  timeoutMs?: number;
   /** MiniMax-M3 only. Overrides ENV.llmThinking when set. */
   thinking?: "disabled" | "adaptive";
   outputSchema?: OutputSchema;
@@ -399,10 +401,13 @@ async function invokeBoundedLLM(params: InvokeParams): Promise<InvokeResult> {
     }
   }
 
-  const timeoutMs =
+  const configuredTimeoutMs =
     profile === "fast"
       ? Math.min(ENV.llmTimeoutMs || 90_000, 90_000)
       : Math.min(Math.max(ENV.llmTimeoutMs, 90_000), 120_000);
+  const timeoutMs = Number.isFinite(params.timeoutMs)
+    ? Math.min(configuredTimeoutMs, Math.max(1_000, Math.min(params.timeoutMs!, 40_000)))
+    : configuredTimeoutMs;
 
   const apiUrl = resolveApiUrl();
   await assertSafeEgress(apiUrl);

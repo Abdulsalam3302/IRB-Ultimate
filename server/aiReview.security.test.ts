@@ -19,6 +19,7 @@ describe("AI review trust boundary", () => {
   });
   it("cannot average away a critical field even when the model claims no red flags", () => {
     const result = review(); result.fieldScores[0].score = 10;
+    result.score = Math.round(result.fieldScores.reduce((sum, field) => sum + field.score, 0) / result.fieldScores.length);
     const normalized = normalizeReviewJson(result, fields);
     expect(normalized.hasRedFlags).toBe(true);
     expect(normalized.score).toBeLessThan(95);
@@ -28,7 +29,8 @@ describe("AI review trust boundary", () => {
     const data = Object.fromEntries(fields.map(field => [field, "provided fact"])) as never;
     const result = await runStage1AiReview({ ...data as object, researchTitle: "[MISSING — applicant must provide]", skipLiterature: true } as never);
     expect(result.passed).toBe(false);
-    expect(result.hasRedFlags).toBe(true);
+    expect(result).toMatchObject({ status: "needs_information", score: null, issues: [{ field: "researchTitle", reason: "unresolved_placeholder" }] });
+    expect(invokeLLM).not.toHaveBeenCalled();
   });
   it("allows only bounded known draft fields and never status or approval data", () => {
     expect(validatedDraftFields({ methodology: "Text", status: "approved", stage2Passed: true, irbNumber: "FORGED" }, ["methodology", "status", "stage2Passed", "irbNumber"])).toEqual({ methodology: "Text" });

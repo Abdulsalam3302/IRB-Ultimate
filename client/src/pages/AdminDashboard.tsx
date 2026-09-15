@@ -84,6 +84,7 @@ export default function AdminDashboard() {
                 <Activity className="h-4 w-4 me-1" /> {isAr ? "المراقبة" : "Observability"}
               </Button>
             )}
+            <Button variant="outline" size="sm" onClick={() => setLocation("/admin/email")}>{isAr ? "البريد" : "Email"}</Button>
             <Button variant="ghost" size="sm" onClick={() => setLocation("/dashboard")}>
               <ArrowLeft className="h-4 w-4 me-1" /> {isAr ? "لوحة المستخدم" : "User Dashboard"}
             </Button>

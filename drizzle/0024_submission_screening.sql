@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `application_screening_jobs` (
+  `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `applicationId` int NOT NULL,
+  `applicationVersion` int NOT NULL,
+  `applicantId` int NOT NULL,
+  `snapshotJson` mediumtext NOT NULL,
+  `screeningStatus` enum('pending','running','completed','escalated') NOT NULL DEFAULT 'pending',
+  `attempts` int NOT NULL DEFAULT 0,
+  `nextAttemptAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `leaseUntil` timestamp NULL,
+  `leaseToken` varchar(36),
+  `resultJson` mediumtext,
+  `lastErrorCode` varchar(64),
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `screening_application_version_unique` (`applicationId`,`applicationVersion`),
+  KEY `screening_pending_idx` (`screeningStatus`,`nextAttemptAt`),
+  KEY `screening_applicant_idx` (`applicantId`),
+  CONSTRAINT `screening_application_fk` FOREIGN KEY (`applicationId`) REFERENCES `applications`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `screening_applicant_fk` FOREIGN KEY (`applicantId`) REFERENCES `users`(`id`) ON DELETE CASCADE
+);

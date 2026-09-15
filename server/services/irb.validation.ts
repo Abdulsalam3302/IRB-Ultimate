@@ -1,19 +1,8 @@
+import { canEditApplication } from "../../shared/applicationWorkflow";
 import type { Application } from "../../drizzle/schema";
 
-export const STAGE2_FIELDS = [
-  "researchObjectives",
-  "methodology",
-  "sampleSize",
-  "targetPopulation",
-  "inclusionCriteria",
-  "exclusionCriteria",
-  "dataCollectionMethods",
-  "informedConsentProcess",
-  "riskAssessment",
-  "benefitAssessment",
-  "confidentialityMeasures",
-  "conflictOfInterest",
-] as const;
+export { STAGE2_KEYS as STAGE2_FIELDS } from "../../shared/stage2Keys";
+import { STAGE2_KEYS as STAGE2_FIELDS } from "../../shared/stage2Keys";
 
 export const STAGE1_FIELDS = [
   "researchType",
@@ -25,8 +14,23 @@ export const STAGE1_FIELDS = [
   "piDepartment",
 ] as const;
 
+export type RequiredFieldIssue = "empty" | "unresolved_placeholder";
+/** Content presence is independent of scientific quality; short answers are not empty. */
+export function getRequiredFieldIssue(value: unknown): RequiredFieldIssue | null {
+  if (typeof value !== "string" || !value.replace(/[\u200B-\u200D\uFEFF]/g, "").trim()) return "empty";
+  return /\[(?:STILL\s+MISSING|MISSING|NEEDS\s+APPLICANT|ASSUMPTION|TEMPLATE|BLOCKED)\b[^\]]*\]/i.test(value)
+    ? "unresolved_placeholder" : null;
+}
+
+export function validateStageFieldIssues(data: Record<string, unknown>, fields: readonly string[]) {
+  return fields.flatMap(field => {
+    const reason = getRequiredFieldIssue(data[field]);
+    return reason ? [{ field, reason }] : [];
+  });
+}
+
 function isBlank(value: string | null | undefined): boolean {
-  return !value || value.trim().length === 0 || /\[(?:STILL\s+MISSING|MISSING|NEEDS\s+APPLICANT|ASSUMPTION|TEMPLATE|BLOCKED)\b[^\]]*\]/i.test(value);
+  return getRequiredFieldIssue(value) !== null;
 }
 
 export function listMissingRequirements(app: Application): string[] {
@@ -55,8 +59,8 @@ export function listMissingRequirements(app: Application): string[] {
     if (isBlank(app[field])) missing.push(field);
   }
 
-  if (!app.stage1Passed && !(app.proceedDespiteStage1 && !isBlank(app.proceedDespiteStage1Reason))) missing.push("stage1_ai_review_pass");
-  if (!app.stage2Passed && !(app.proceedDespiteStage2 && !isBlank(app.proceedDespiteStage2Reason))) missing.push("stage2_ai_review_pass");
+  // Screening findings accompany the application; an outage or advisory score
+  // must never prevent a complete protocol from reaching a human committee.
 
   return missing;
 }
@@ -68,7 +72,7 @@ export function validateApplicationReadiness(app: Application): {
 } {
   const missing = listMissingRequirements(app);
   const readyToSubmit =
-    app.status === "submitted" &&
+    canEditApplication(app) &&
     missing.length === 0;
   return { readyToSubmit, missing, status: app.status };
 }

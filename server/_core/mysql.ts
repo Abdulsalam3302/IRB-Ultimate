@@ -17,7 +17,8 @@ export function resolveMysqlSsl(databaseUrl: string): mysql.ConnectionOptions["s
 }
 
 export function createMysqlPool(databaseUrl: string) {
-  return mysql.createPool({
+  const pool = mysql.createPool({
+    timezone: "Z",
     uri: databaseUrl,
     ssl: resolveMysqlSsl(databaseUrl),
     connectionLimit: boundedInt(process.env.DATABASE_POOL_MAX, 10, 1, 100),
@@ -27,4 +28,12 @@ export function createMysqlPool(databaseUrl: string) {
     enableKeepAlive: true,
     keepAliveInitialDelay: 10_000,
   });
+  // MySQL defaults may inherit the host zone. Keep TIMESTAMP defaults, leases,
+  // and driver-bound Date values in the same UTC frame on every connection.
+  pool.on("connection", connection => {
+    connection.query("SET time_zone = '+00:00'", error => {
+      if (error) connection.destroy();
+    });
+  });
+  return pool;
 }

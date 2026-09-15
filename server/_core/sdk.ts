@@ -25,6 +25,7 @@ export type SessionPayload = {
   appId: string;
   name: string;
   authLevel?: "aal1" | "aal2";
+  authVersion?: number;
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -172,14 +173,16 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string; authLevel?: "aal1" | "aal2" } = {}
+    options: { expiresInMs?: number; name?: string; authLevel?: "aal1" | "aal2"; authVersion?: number } = {}
   ): Promise<string> {
+    const user = await db.getUserByOpenId(openId);
     return this.signSession(
       {
         openId,
         appId: ENV.appId,
         name: options.name || "",
         authLevel: options.authLevel ?? "aal1",
+        authVersion: options.authVersion ?? user?.authVersion ?? 0,
       },
       options
     );
@@ -199,6 +202,7 @@ class SDKServer {
       appId: payload.appId,
       name: payload.name,
       authLevel: payload.authLevel ?? "aal1",
+      authVersion: payload.authVersion ?? 0,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setIssuer("irb-platform")
@@ -211,7 +215,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string; jti: string; exp: number; authLevel: "aal1" | "aal2" } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; jti: string; exp: number; authLevel: "aal1" | "aal2"; authVersion: number } | null> {
     if (!cookieValue) {
       return null;
     }
@@ -250,7 +254,9 @@ class SDKServer {
       }
 
       if (await isSessionRevoked(jti)) return null;
-      return { openId, appId, name, jti, exp, authLevel: payload.authLevel === "aal2" ? "aal2" : "aal1" };
+      const authVersion = payload.authVersion ?? 0;
+      if (!Number.isSafeInteger(authVersion) || Number(authVersion) < 0) return null;
+      return { openId, appId, name, jti, exp, authLevel: payload.authLevel === "aal2" ? "aal2" : "aal1", authVersion: Number(authVersion) };
     } catch (error) {
       // Invalid or revoked credentials fail closed without noisy token-bearing logs.
       return null;
@@ -300,6 +306,7 @@ class SDKServer {
     const sessionUserId = session.openId;
     const user = await db.getUserByOpenId(sessionUserId);
     if (!user) throw ForbiddenError("User not found");
+    if ((user.authVersion ?? 0) !== session.authVersion) throw ForbiddenError("Session expired. Please sign in again.");
     // Login updates lastSignedIn. Ordinary reads must not generate database writes.
 
     return { ...user, authLevel: session.authLevel };

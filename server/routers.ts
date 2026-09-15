@@ -1,3 +1,4 @@
+import { canEditApplication, type ApplicationEditState } from "../shared/applicationWorkflow";
 import { safeLogError } from "./_core/safeLog";
 import { randomBytes } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
@@ -16,8 +17,11 @@ import { runSwarmPanel, SWARM_LLM_CALLS_PER_RUN } from "./aiSwarmReview";
 import { generateAndStoreCertificatePdf } from "./certificateV2";
 import { generateRetractionCertificatePdf } from "./retractionCertificate";
 import { notifyOwner } from "./_core/notification";
-import { runAcceleratedPipeline } from "./services/acceleratedReview.pipeline";
+import { runApplicationStageReview } from "./services/applicationStageReview";
+import { mailAdminRouter } from "./email/adminRouter";
 import { chatApplicationTurn } from "./services/chatApplication.service";
+import { getSubmissionScreeningStatus } from "./services/submissionScreening";
+import { getSubmissionReadiness } from "./services/submissionReadiness";
 import { IRB_REQUIREMENTS } from "./services/irb.validation";
 import { assertStorageBinding, storagePut } from "./storage";
 import { reserveStorageUpload, expediteStorageCleanup } from "./services/storageDeletion";
@@ -104,22 +108,8 @@ function supplementaryUploadUrls(raw: string | undefined): string[] {
   }
 }
 
-// Statuses where the applicant must not be able to silently re-write
-// answers (would otherwise corrupt the submission already in the
-// reviewer / admin pipeline, or undo a terminal decision).
-const APPLICANT_EDIT_LOCKED_STATUSES = new Set([
-  "submitted",
-  "under_review",
-  "pending_admin",
-  "approved",
-  "rejected",
-  "permanently_rejected",
-  "retracted",
-  "hidden",
-]);
-
-function assertApplicantCanEdit(app: { status: string }): void {
-  if (APPLICANT_EDIT_LOCKED_STATUSES.has(app.status)) {
+function assertApplicantCanEdit(app: ApplicationEditState): void {
+  if (!canEditApplication(app)) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "This application can no longer be edited at this stage.",
@@ -245,7 +235,7 @@ const applicationRouter = router({
       const app = await loadApplicationForViewer(ctx, input.id);
       const applicant = await db.getUserById(app.applicantId);
       const authors = await db.getAuthorsByApplication(input.id);
-      return { ...app, applicantName: applicant?.name, applicantEmail: applicant?.email, authors };
+      return { ...app, applicantName: applicant?.name, applicantEmail: applicant?.email, authors, screening: await getSubmissionScreeningStatus(input.id) };
     }),
 
   myApplications: protectedProcedure.query(async ({ ctx }) => {
@@ -381,67 +371,10 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // Run AI review for Stage 1 — SA-03: reserved against per-user daily budget.
-  runStage1Review: aiProcedure
+  // Ownership, incomplete-input checks and cached reviews do not consume AI quota.
+  runStage1Review: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
-    .mutation(async ({ ctx, input }) => {
-      const app = await db.getApplicationById(input.id);
-      if (!app) throw new TRPCError({ code: "NOT_FOUND" });
-      if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      assertApplicantCanEdit(app);
-
-      const result = await runStage1AiReview({
-        researchType: app.researchType || "",
-        irbCategory: app.irbCategory || "",
-        researchTitle: app.researchTitle || "",
-        principalInvestigator: app.principalInvestigator || "",
-        piInstitution: app.piInstitution || "",
-        piDepartment: app.piDepartment || "",
-        fundingSource: app.fundingSource || "",
-        estimatedDuration: app.estimatedDuration || "",
-      });
-
-      // When the AI provider is unreachable the helper returns a sentinel
-      // score of 0 with a "[AI_UNAVAILABLE]" feedback line. We must NOT
-      // overwrite the applicant's prior valid score with that — surface
-      // the outage in-memory only and leave the DB alone.
-      const isAiUnavailable = typeof result.feedback === "string"
-        && result.feedback.startsWith("[AI_UNAVAILABLE]");
-
-      if (!isAiUnavailable) {
-        await db.updateEditableApplication(input.id, ctx.user.id, {
-          stage1AiScore: result.score,
-          stage1AiFeedback: JSON.stringify({
-            feedback: result.feedback,
-            recommendations: result.recommendations,
-            fieldScores: result.fieldScores,
-            hasRedFlags: result.hasRedFlags,
-          }),
-          stage1Passed: result.passed,
-          status: result.passed ? "stage2_pending" : "stage1_failed",
-        }, app);
-
-        await db.addAuditLog({
-          applicationId: input.id,
-          userId: ctx.user.id,
-          action: "stage1_ai_review",
-          details: `Score: ${result.score}/100 - ${result.passed ? "PASSED" : "FAILED"}${result.hasRedFlags ? " (RED FLAGS)" : ""}`,
-        });
-
-        try {
-          await emailService.notifyAiReviewResult(ctx.user.id, input.id, 1, result.passed, result.score);
-        } catch (e) { /* best-effort */ }
-      } else {
-        await db.addAuditLog({
-          applicationId: input.id,
-          userId: ctx.user.id,
-          action: "stage1_ai_review_unavailable",
-          details: "AI provider unreachable — prior review preserved.",
-        });
-      }
-
-      return result;
-    }),
+    .mutation(({ ctx, input }) => runApplicationStageReview(1, input.id, ctx.user.id)),
 
   // Save draft (auto-save)
   saveDraft: protectedProcedure
@@ -610,12 +543,12 @@ const applicationRouter = router({
       });
 
       // 4) Persist the new review (skip if AI was unavailable).
-      const isAiEnhanceUnavailable = typeof review.feedback === "string"
-        && review.feedback.startsWith("[AI_UNAVAILABLE]");
-      if (!isAiEnhanceUnavailable) {
+      if (review.status === "completed") {
         await db.updateEditableApplication(input.id, ctx.user.id, {
           stage1AiScore: review.score,
           stage1AiFeedback: JSON.stringify({
+            status: review.status,
+            issues: review.issues,
             feedback: review.feedback,
             recommendations: review.recommendations,
             fieldScores: review.fieldScores,
@@ -636,7 +569,7 @@ const applicationRouter = router({
           applicationId: input.id,
           userId: ctx.user.id,
           action: "stage1_ai_enhance_unavailable",
-          details: "AI provider unreachable during enhance — prior review preserved.",
+          details: "Edited draft saved; no validated new AI score was recorded. Previous scores are invalidated when study details change.",
         });
       }
 
@@ -770,133 +703,26 @@ const applicationRouter = router({
       return { success: true };
     }),
 
-  // Run AI review for Stage 2 (with color-coded field scores) — SA-03 budget-bound.
-  runStage2Review: aiProcedure
+  runStage2Review: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(({ ctx, input }) => runApplicationStageReview(2, input.id, ctx.user.id)),
+
+  getSubmissionReadiness: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
       const app = await db.getApplicationById(input.id);
       if (!app) throw new TRPCError({ code: "NOT_FOUND" });
       if (app.applicantId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      assertApplicantCanEdit(app);
-
-      const result = await runStage2AiReview({
-        researchType: app.researchType || "",
-        irbCategory: app.irbCategory || "",
-        researchTitle: app.researchTitle || "",
-        researchObjectives: app.researchObjectives || "",
-        methodology: app.methodology || "",
-        sampleSize: app.sampleSize || "",
-        targetPopulation: app.targetPopulation || "",
-        inclusionCriteria: app.inclusionCriteria || "",
-        exclusionCriteria: app.exclusionCriteria || "",
-        dataCollectionMethods: app.dataCollectionMethods || "",
-        informedConsentProcess: app.informedConsentProcess || "",
-        riskAssessment: app.riskAssessment || "",
-        benefitAssessment: app.benefitAssessment || "",
-        confidentialityMeasures: app.confidentialityMeasures || "",
-        conflictOfInterest: app.conflictOfInterest || "",
-      });
-
-      const isAiUnavailable2 = typeof result.feedback === "string"
-        && result.feedback.startsWith("[AI_UNAVAILABLE]");
-
-      if (!isAiUnavailable2) {
-        await db.updateEditableApplication(input.id, ctx.user.id, {
-          stage2AiScore: result.score,
-          stage2AiFeedback: JSON.stringify({
-            feedback: result.feedback,
-            recommendations: result.recommendations,
-            fieldSuggestions: result.fieldSuggestions,
-            fieldScores: result.fieldScores,
-            hasRedFlags: result.hasRedFlags,
-          }),
-          stage2AiFieldScores: JSON.stringify(result.fieldScores || []),
-          stage2Passed: result.passed,
-          status: result.passed ? "submitted" : "stage2_failed",
-        }, app);
-
-        await db.addAuditLog({
-          applicationId: input.id,
-          userId: ctx.user.id,
-          action: "stage2_ai_review",
-          details: `Score: ${result.score}/100 - ${result.passed ? "PASSED" : "FAILED"}${result.hasRedFlags ? " (RED FLAGS)" : ""}`,
-        });
-
-        try {
-          await emailService.notifyAiReviewResult(ctx.user.id, input.id, 2, result.passed, result.score);
-        } catch (e) { /* best-effort */ }
-      } else {
-        await db.addAuditLog({
-          applicationId: input.id,
-          userId: ctx.user.id,
-          action: "stage2_ai_review_unavailable",
-          details: "AI provider unreachable — prior review preserved.",
-        });
-      }
-
-      return result;
+      return getSubmissionReadiness(app);
     }),
 
-  // Final submission - triggers committee assignment
+  // Atomically acknowledge once; the durable worker performs screening and email.
   submit: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
-      const { app, selected, activeMemberCount } = await db.submitApplicationForReview(input.id, ctx.user.id);
-      // Tell the admin if we couldn't fully assign. Best-effort —
-      // don't fail submission on notification failure.
-      if (selected.length < 5) {
-        const needed = 5 - selected.length;
-        try {
-          await db.addAuditLog({
-            applicationId: input.id,
-            userId: ctx.user.id,
-            action: "queued_for_committee_assignment",
-            details: `Submitted with only ${activeMemberCount} active committee members; awaiting admin to invite more (need ${needed} more).`,
-          });
-        } catch { /* best-effort */ }
-        // In-app notification for the applicant — they shouldn't be in
-        // the dark about why the app is parked.
-        try {
-          await emailService.createNotification({
-            userId: ctx.user.id,
-            applicationId: input.id,
-            type: "general",
-            title: "Application queued — awaiting committee",
-            message: `Your application "${(app.researchTitle || "Untitled").slice(0, 80)}" has been submitted successfully. The platform currently has ${activeMemberCount} active reviewer${activeMemberCount === 1 ? "" : "s"}; ${needed} more are needed before review begins. The admin team has been alerted; you'll be notified the moment your reviewers are assigned.`,
-          });
-        } catch { /* best-effort */ }
-        // Wake the platform owner so they can invite reviewers.
-        try {
-          await notifyOwner({
-            title: "IRB application queued for committee assignment",
-            content: `Application #${input.id} ("${(app.researchTitle || "Untitled").slice(0, 80)}") was submitted with only ${activeMemberCount}/5 active committee members. Invite ${needed} more reviewer${needed === 1 ? "" : "s"} from the admin dashboard to start the review.`,
-          });
-        } catch { /* best-effort */ }
-      }
-
-      try {
-        await emailService.notifyApplicationSubmitted(ctx.user.id, input.id, app.researchTitle || "Untitled");
-        for (const member of selected) {
-          await emailService.notifyCommitteeAssigned(member.id, input.id, app.researchTitle || "Untitled");
-        }
-      } catch (e) { /* notification is best-effort */ }
-
-      // AI findings support the appointed human committee; they never issue approval.
-      // Failures must not block the applicant's successful submit.
-      let accelerated: Awaited<ReturnType<typeof runAcceleratedPipeline>> | null = null;
-      try {
-        accelerated = await runAcceleratedPipeline(input.id, ctx.user.id);
-      } catch (e) {
-        console.error("[Accelerated] pipeline failed after submit", safeLogError(e));
-        try {
-          await notifyOwner({
-            title: "IRB accelerated review pipeline failed",
-            content: `Application #${input.id} submitted but the digital swarm pipeline threw. Manual owner action is required.`,
-          });
-        } catch { /* best-effort */ }
-      }
-
-      return { success: true, assignedMembers: selected.length, accelerated };
+      const result = await db.submitApplicationForReview(input.id, ctx.user.id);
+      return { success: true, assignedMembers: result.selected.length, accelerated: null,
+        alreadySubmitted: result.alreadySubmitted, reviewStatus: "queued" as const };
     }),
 
   // Proceed despite Stage 1 AI score (red flag)
@@ -948,7 +774,7 @@ const applicationRouter = router({
         proceedDespiteStage2: true,
         proceedDespiteStage2Reason: input.reason,
         stage2Passed: false,
-        status: "submitted",
+        status: "stage2_pending",
       }, app);
 
       await db.addAuditLog({
@@ -2365,6 +2191,7 @@ const chatApplicationRouter = router({
 // ─── Main Router ────────────────────────────────────────────────────────────
 
 export const appRouter = router({
+  mailAdmin: mailAdminRouter,
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => {

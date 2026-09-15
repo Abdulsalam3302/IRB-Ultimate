@@ -155,6 +155,34 @@
       "when": 1788575000000,
       "tag": "0021_identity_erasure",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1789460000000,
+      "tag": "0022_email_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1789470000023,
+      "tag": "0023_password_reset",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1789470000024,
+      "tag": "0024_submission_screening",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1789470000025,
+      "tag": "0025_submission_snapshot_capacity",
+      "breakpoints": true
     }
   ]
 }

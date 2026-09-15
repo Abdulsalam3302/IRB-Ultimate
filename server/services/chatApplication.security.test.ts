@@ -26,13 +26,18 @@ describe("chat draft integrity", () => {
     expect(write[2].stage1Passed).toBe(false); expect(write[2].stage2Passed).toBe(false);
     expect(write[3]).toMatchObject({ status: "draft", methodology: "Original" });
   });
-  it("cannot edit an approved or submitted application", async () => {
+  it("cannot edit an approved or genuinely submitted application", async () => {
     for (const status of ["approved", "submitted", "under_review", "retracted"]) {
-      vi.mocked(db.getApplicationById).mockResolvedValue(app(status));
+      vi.mocked(db.getApplicationById).mockResolvedValue({ ...app(status) as object, submittedAt: new Date() } as never);
       const result = await chatApplicationTurn(input());
       expect(result.updatesApplied).toEqual([]);
     }
     expect(db.updateEditableApplication).not.toHaveBeenCalled();
+  });
+  it("can update a never-submitted legacy passed draft while preserving the expected snapshot", async () => {
+    vi.mocked(db.getApplicationById).mockResolvedValue({ ...app("submitted") as object, submittedAt: null } as never);
+    expect((await chatApplicationTurn(input())).updatesApplied).toEqual(["methodology"]);
+    expect(vi.mocked(db.updateEditableApplication).mock.calls[0][3]).toMatchObject({ status: "submitted", submittedAt: null });
   });
   it("does not send applicant fields in a privileged system prompt", async () => {
     await chatApplicationTurn(input());

@@ -1,5 +1,9 @@
+import { canEditApplication } from "../shared/applicationWorkflow";
 import { safeLogError } from "./_core/safeLog";
 import { randomBytes } from "node:crypto";
+import { applicationScreeningJobs } from "../drizzle/screeningSchema";
+import { cancelAccountEmails } from "./email/outbox";
+import { accountAuthState, passwordResetTokens } from "../drizzle/authSchema";
 import { TRPCError } from "@trpc/server";
 import { listMissingRequirements, STAGE1_FIELDS, STAGE2_FIELDS } from "./services/irb.validation";
 import { and, eq, desc, sql, ne, count, avg, inArray, isNull, or, lte, gt } from "drizzle-orm";
@@ -113,8 +117,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? withoutPassword(result[0]!) : undefined;
+  const result = await db.select({ user: users, authVersion: accountAuthState.version }).from(users)
+    .leftJoin(accountAuthState, eq(accountAuthState.userId, users.id)).where(eq(users.openId, openId)).limit(1);
+  return result.length > 0 ? { ...withoutPassword(result[0]!.user), authVersion: result[0]!.authVersion ?? 0 } : undefined;
 }
 
 export async function getUserById(id: number) {
@@ -151,11 +156,12 @@ export async function getLocalUserByEmail(email: string) {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return undefined;
   const result = await db
-    .select()
+    .select({ user: users, authVersion: accountAuthState.version })
     .from(users)
+    .leftJoin(accountAuthState, eq(accountAuthState.userId, users.id))
     .where(and(sql`lower(${users.email}) = ${normalized}`, sql`${users.passwordHash} IS NOT NULL`))
     .limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  return result.length > 0 ? { ...result[0].user, authVersion: result[0].authVersion ?? 0 } : undefined;
 }
 
 /** True if at least one admin account already exists. Used to gate the
@@ -364,6 +370,11 @@ export async function eraseUserAccount(userId: number): Promise<{
   await db.delete(committeeMembers).where(eq(committeeMembers.userId, userId));
   await db.delete(notifications).where(eq(notifications.userId, userId));
 
+  await tx.delete(applicationScreeningJobs).where(eq(applicationScreeningJobs.applicantId, userId));
+  await cancelAccountEmails(tx, userId);
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
+  await db.delete(accountAuthState).where(eq(accountAuthState.userId, userId));
+
   const tombstone = `deleted:${userId}:${Date.now().toString(36)}`.slice(0, 64);
   await db.update(users).set({
     openId: tombstone,
@@ -460,10 +471,7 @@ export async function attachDecisionCertificate(expected: Application, certifica
   return result[0].affectedRows === 1;
 }
 
-const EDITABLE_STATUSES = new Set([
-  "draft", "declaration_pending", "stage1_pending", "stage1_failed",
-  "stage2_pending", "stage2_failed", "resubmission_required",
-]);
+
 const GATEWAY_FIELDS = [...STAGE1_FIELDS, "fundingSource", "estimatedDuration", "questionnaireFileUrl", "retrospectiveDataSource", "clinicalTrialDetails", "supplementaryFilesJson", "labHeadApproval", "labHeadName", "labHeadEmail", "labHeadPhone"] as const;
 
 /** Serialize edits with submission/decision and reject stale AI results. */
@@ -478,7 +486,7 @@ export async function updateEditableApplication(
     const [current] = await tx.select().from(applications).where(eq(applications.id, id)).for("update");
     if (!current) throw new TRPCError({ code: "NOT_FOUND" });
     if (current.applicantId !== userId) throw new TRPCError({ code: "FORBIDDEN" });
-    if (!EDITABLE_STATUSES.has(current.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable. Refresh to view its current status." });
+    if (!canEditApplication(current)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable. Refresh to view its current status." });
     if (expected && Object.keys(expected).some(k => JSON.stringify(current[k as keyof Application]) !== JSON.stringify(expected[k as keyof Application]))) {
       throw new TRPCError({ code: "CONFLICT", message: "Application changed during this request. Refresh and try again." });
     }
@@ -507,17 +515,26 @@ export async function submitApplicationForReview(applicationId: number, applican
   const dbi = await getDb();
   if (!dbi) throw new Error("Database not available");
   return dbi.transaction(async tx => {
+    const [account] = await tx.select({ loginMethod: users.loginMethod }).from(users).where(eq(users.id, applicantId)).for("update");
+    if (!account || account.loginMethod === "deleted") throw new TRPCError({ code: "UNAUTHORIZED", message: "Sign in with an active account before submitting." });
     const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
     if (!app) throw new TRPCError({ code: "NOT_FOUND" });
     if (app.applicantId !== applicantId) throw new TRPCError({ code: "FORBIDDEN" });
-    if (app.status !== "submitted") throw new TRPCError({ code: "CONFLICT", message: "Application is not ready or has already been submitted." });
+    if (app.submittedAt && ["under_review", "pending_admin"].includes(app.status)) {
+      const existing = await tx.select({ member: committeeMembers }).from(reviewAssignments)
+        .innerJoin(committeeMembers, eq(committeeMembers.id, reviewAssignments.committeeMemberId))
+        .where(and(eq(reviewAssignments.applicationId, applicationId), ne(reviewAssignments.status, "expired")));
+      return { app, selected: existing.map(row => row.member), nextStatus: app.status, activeMemberCount: existing.length, alreadySubmitted: true };
+    }
+    if (!canEditApplication(app)) throw new TRPCError({ code: "CONFLICT", message: "This application cannot be submitted in its current state." });
     const missing = listMissingRequirements(app);
     if (missing.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Complete the application before submission: ${missing.join(", ")}` });
     const rows = await tx.select({ member: committeeMembers }).from(committeeMembers)
       .innerJoin(users, eq(users.id, committeeMembers.userId))
       .where(and(eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`, ne(committeeMembers.userId, applicantId), sql`COALESCE(${users.loginMethod}, '') NOT IN ('digital_reviewer', 'deleted')`, sql`${users.openId} NOT LIKE 'digital-reviewer:%'`))
       .orderBy(committeeMembers.totalAssignments, committeeMembers.id);
-    const selected = Array.from(new Map(rows.map(r => [r.member.userId, r.member])).values()).slice(0, 5);
+    const requiredMembers = app.irbCategory === "full_board" ? 5 : 1;
+    const selected = Array.from(new Map(rows.map(r => [r.member.userId, r.member])).values()).slice(0, requiredMembers);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     // Previous-round votes must never count towards a revised protocol.
@@ -526,13 +543,16 @@ export async function submitApplicationForReview(applicationId: number, applican
       await tx.insert(reviewAssignments).values({ applicationId, committeeMemberId: member.id, assignedBy: "system", status: "pending", expiresAt });
       await tx.update(committeeMembers).set({ totalAssignments: sql`${committeeMembers.totalAssignments} + 1` }).where(eq(committeeMembers.id, member.id));
     }
-    const nextStatus = selected.length >= 5 ? "under_review" : "pending_admin";
+    const nextStatus = selected.length >= requiredMembers ? "under_review" : "pending_admin";
     await tx.update(applications).set({ status: nextStatus, submittedAt: now, ...(app.submittedAt ? { submissionCount: sql`${applications.submissionCount} + 1` } : {}) }).where(eq(applications.id, applicationId));
     const [version] = await tx.select({ max: sql<number>`COALESCE(MAX(${applicationVersions.version}), 0)` }).from(applicationVersions).where(eq(applicationVersions.applicationId, applicationId));
     const snapshot = Object.fromEntries([...GATEWAY_FIELDS, ...STAGE2_FIELDS].map(k => [k, app[k]]));
     await tx.insert(applicationVersions).values({ applicationId, version: Number(version.max) + 1, snapshot: JSON.stringify(snapshot), status: nextStatus, stage1AiScore: app.stage1AiScore, stage2AiScore: app.stage2AiScore });
+    await tx.insert(applicationScreeningJobs).values({ applicationId, applicantId, applicationVersion: Number(version.max) + 1,
+      snapshotJson: JSON.stringify({ ...app, status: nextStatus, submittedAt: now.toISOString(),
+        submissionCount: app.submittedAt ? app.submissionCount + 1 : app.submissionCount }) });
     await tx.insert(auditLog).values({ applicationId, userId: applicantId, action: "application_submitted", details: `Assigned to ${selected.length} human committee members; qualified human decision required.` });
-    return { app, selected, nextStatus, activeMemberCount: rows.length };
+    return { app, selected, nextStatus, activeMemberCount: rows.length, alreadySubmitted: false };
   });
 }
 
@@ -630,7 +650,7 @@ export async function addResearchAuthor(data: InsertResearchAuthor) {
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
     const [app] = await tx.select().from(applications).where(eq(applications.id, data.applicationId)).for("update");
-    if (!app || !EDITABLE_STATUSES.has(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable." });
+    if (!app || !canEditApplication(app)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable." });
     const [total] = await tx.select({ count: count() }).from(researchAuthors).where(eq(researchAuthors.applicationId, data.applicationId));
     if (total.count >= 25) throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum number of co-investigators reached." });
     const result = await tx.insert(researchAuthors).values(data);
@@ -652,7 +672,7 @@ export async function removeAuthor(id: number, applicationId: number) {
   // by passing a foreign author id (cross-tenant IDOR).
   await db.transaction(async tx => {
     const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
-    if (!app || !EDITABLE_STATUSES.has(app.status)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable." });
+    if (!app || !canEditApplication(app)) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer editable." });
     await tx.delete(researchAuthors).where(and(eq(researchAuthors.id, id), eq(researchAuthors.applicationId, applicationId)));
   });
 }
@@ -882,7 +902,7 @@ export async function addFileUpload(data: InsertFileUpload, cleanupReservationId
     await assertStorageAllowance(tx, data.userId, data.fileSize || 0);
     if (data.applicationId) {
       const [app] = await tx.select().from(applications).where(eq(applications.id, data.applicationId)).for("update");
-      if (!app || !EDITABLE_STATUSES.has(app.status) || (app.applicantId !== data.userId && user.role !== "admin")) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer accepting uploads." });
+      if (!app || !canEditApplication(app) || (app.applicantId !== data.userId && user.role !== "admin")) throw new TRPCError({ code: "CONFLICT", message: "Application is no longer accepting uploads." });
     }
     const result = await tx.insert(fileUploads).values(data);
     const id = result[0].insertId;

@@ -4,39 +4,66 @@ export type BrowserTool = {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: { readOnlyHint: boolean; untrustedContentHint?: boolean };
-  execute: (input: Record<string, unknown>, options?: { signal?: AbortSignal }) => Promise<unknown>;
+  /** Each parameterized tool must supply a strict validator. */
+  validateInput?: (input: Record<string, unknown>) => Record<string, unknown>;
+  execute: (
+    input: Record<string, unknown>,
+    options?: { signal?: AbortSignal }
+  ) => Promise<unknown>;
 };
 export type BrowserModelContext = {
-  registerTool: (tool: BrowserTool, options?: { signal: AbortSignal }) => Promise<void> | void;
+  registerTool: (
+    tool: BrowserTool,
+    options?: { signal: AbortSignal }
+  ) => Promise<void> | void;
   unregisterTool?: (name: string) => void;
 };
 
 /** Registration cancellation removes current-draft tools; preview cleanup is scoped by name. */
-export function registerBrowserTools(context: BrowserModelContext, tools: BrowserTool[]): () => void {
+export function registerBrowserTools(
+  context: BrowserModelContext,
+  tools: BrowserTool[]
+): () => void {
   const controller = new AbortController();
   const registered: string[] = [];
   for (const tool of tools) {
     const guarded: BrowserTool = {
       ...tool,
       execute: async (input, options) => {
-        if (controller.signal.aborted || options?.signal?.aborted) throw new Error("Tool is no longer available");
-        if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length) throw new Error("This tool does not accept arguments");
-        const result = await tool.execute(input, options);
-        if (controller.signal.aborted || options?.signal?.aborted) throw new Error("Tool execution cancelled");
+        if (controller.signal.aborted || options?.signal?.aborted)
+          throw new Error("Tool is no longer available");
+        if (!input || typeof input !== "object" || Array.isArray(input))
+          throw new Error("Invalid tool arguments");
+        const validated = tool.validateInput
+          ? tool.validateInput(input)
+          : input;
+        if (!tool.validateInput && Object.keys(input).length)
+          throw new Error("This tool does not accept arguments");
+        const result = await tool.execute(validated, options);
+        if (controller.signal.aborted || options?.signal?.aborted)
+          throw new Error("Tool execution cancelled");
         return result;
       },
     };
     try {
-      const registration = context.registerTool(guarded, { signal: controller.signal });
+      const registration = context.registerTool(guarded, {
+        signal: controller.signal,
+      });
       registered.push(tool.name);
       // Rejected registration must not become an unhandled promise rejection.
       void Promise.resolve(registration).catch(() => {});
-    } catch { /* Unsupported preview version: ordinary UI remains functional. */ }
+    } catch {
+      /* Unsupported preview version: ordinary UI remains functional. */
+    }
   }
   return () => {
     controller.abort();
     for (const name of registered) {
-      try { context.unregisterTool?.(name); } catch { /* preview compatibility */ }
+      try {
+        context.unregisterTool?.(name);
+      } catch {
+        /* preview compatibility */
+      }
     }
   };
 }

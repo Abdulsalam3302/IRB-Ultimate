@@ -1,0 +1,135 @@
+{
+  "checkedAt": "2026-09-15T10:47:05.477Z",
+  "expectedSha": "1ea63adcf0dbd4a64b96d0e04ec8e67d65386fee",
+  "scope": "Read-only production HTTP and delivered asset checks; no credentials, protocol payloads, decisions or emails submitted",
+  "passed": 30,
+  "total": 30,
+  "checks": [
+    {
+      "name": "backend: health",
+      "pass": true
+    },
+    {
+      "name": "backend: release version",
+      "pass": true,
+      "detail": "2.5.0"
+    },
+    {
+      "name": "backend: exact commit",
+      "pass": true,
+      "detail": "1ea63adcf0dbd4a64b96d0e04ec8e67d65386fee"
+    },
+    {
+      "name": "backend: database/migrations ready",
+      "pass": true
+    },
+    {
+      "name": "backend: recovery availability honest",
+      "pass": true
+    },
+    {
+      "name": "backend: recovery no-store",
+      "pass": true
+    },
+    {
+      "name": "backend: email admin requires authentication",
+      "pass": true,
+      "detail": 403
+    },
+    {
+      "name": "backend: application readiness requires authentication",
+      "pass": true
+    },
+    {
+      "name": "frontend: health",
+      "pass": true
+    },
+    {
+      "name": "frontend: release version",
+      "pass": true,
+      "detail": "2.5.0"
+    },
+    {
+      "name": "frontend: exact commit",
+      "pass": true,
+      "detail": "1ea63adcf0dbd4a64b96d0e04ec8e67d65386fee"
+    },
+    {
+      "name": "frontend: database/migrations ready",
+      "pass": true
+    },
+    {
+      "name": "frontend: recovery availability honest",
+      "pass": true
+    },
+    {
+      "name": "frontend: recovery no-store",
+      "pass": true
+    },
+    {
+      "name": "frontend: email admin requires authentication",
+      "pass": true,
+      "detail": 403
+    },
+    {
+      "name": "frontend: application readiness requires authentication",
+      "pass": true
+    },
+    {
+      "name": "frontend: public page",
+      "pass": true
+    },
+    {
+      "name": "frontend: canonical remains working origin",
+      "pass": true
+    },
+    {
+      "name": "frontend: built entry present",
+      "pass": true
+    },
+    {
+      "name": "frontend: new readiness WebMCP tool",
+      "pass": true
+    },
+    {
+      "name": "frontend: new owned draft WebMCP tool",
+      "pass": true
+    },
+    {
+      "name": "frontend: explicit submission WebMCP tool",
+      "pass": true
+    },
+    {
+      "name": "frontend: password recovery chunk",
+      "pass": true
+    },
+    {
+      "name": "frontend: email administration chunk",
+      "pass": true
+    },
+    {
+      "name": "frontend: /forgot-password",
+      "pass": true
+    },
+    {
+      "name": "frontend: /admin/email",
+      "pass": true
+    },
+    {
+      "name": "frontend: /email-logo.png",
+      "pass": true
+    },
+    {
+      "name": "frontend: /sitemap.xml",
+      "pass": true
+    },
+    {
+      "name": "frontend: /robots.txt",
+      "pass": true
+    },
+    {
+      "name": "frontend: /.well-known/mcp.json",
+      "pass": true
+    }
+  ]
+}

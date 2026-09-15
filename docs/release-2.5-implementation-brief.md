@@ -35,6 +35,7 @@ Verify migrations, session invalidation, private-data deletion, retry/concurrenc
 ## Operator decisions still required
 
 - Confirm ownership and registrar access for irb-sa.org. Public DNS currently points to Squarespace nameservers; that fact does not prove ownership.
-- Confirm which Gmail inbox receives committee@irb-sa.org and complete Resend account sign-in/terms where required.
+- Preserve the existing Google Workspace inbox for committee@irb-sa.org. Complete its Squarespace domain-contact verification and the required Resend account sign-in/terms before activating application-generated email. A separate forwarding inbox is no longer needed for the current setup.
+- Approve the prepared permanent Render deployment API key. The refreshed CLI credential restored deployment but expires on 2026-09-22; it is not a permanent automation credential.
 - Supply the responsible committee's registration/appointment and decision policy before activating official certificate issuance. The platform has not established that an AI-only decision meets the institution's obligations.
 - Confirm the controller/contact details, jurisdiction and data-hosting arrangements before real confidential research intake and paid acquisition, as previously reserved by the owner.

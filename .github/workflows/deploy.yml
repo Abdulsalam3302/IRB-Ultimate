@@ -43,9 +43,14 @@ jobs:
           set -euo pipefail
           test -n "$RENDER_API_KEY" && test -n "$RENDER_SERVICE_ID"
           jq -n --arg sha "$VERIFIED_SHA" '{commitId:$sha,clearCache:"do_not_clear"}' > /tmp/render-deploy.json
-          curl -fsS --max-time 60 -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+          CODE=$(curl -sS --max-time 60 -o /tmp/render-receipt.json -w '%{http_code}' -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Content-Type: application/json' \
-            --data-binary @/tmp/render-deploy.json > /tmp/render-receipt.json
+            --data-binary @/tmp/render-deploy.json) || CODE=000
+          case "$CODE" in
+            2??) ;;
+            401|403) echo "::error title=Render API key rejected::The RENDER_API_KEY secret was rejected (HTTP $CODE). Create a new key in Render → Account Settings → API Keys, then run: gh secret set RENDER_API_KEY -R ${{ github.repository }}"; exit 1 ;;
+            *) echo "::error title=Render deploy request failed::HTTP $CODE"; head -c 500 /tmp/render-receipt.json; exit 1 ;;
+          esac
           DEPLOY_ID=$(jq -er .id /tmp/render-receipt.json)
           for i in {1..90}; do
             curl -fsS --max-time 30 "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \

@@ -17,9 +17,12 @@ services:
     repo: https://github.com/Abdulsalam3302/IRB-Ultimate
     branch: main
     autoDeploy: false
-    healthCheckPath: /api/ready
-    # Avoid `corepack enable` on Render free images (EROFS on /usr/bin/pnpm).
-    buildCommand: npm install -g pnpm@10.34.5 && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm run build
+    # Liveness: the process stays up in maintenance mode while the database is
+    # unreachable and recovers on its own. Readiness (/api/ready) is watched by
+    # the GitHub readiness monitor and the deploy workflow.
+    healthCheckPath: /api/health
+    # Render images have a read-only global npm prefix; the script runs the pinned pnpm via npx.
+    buildCommand: bash scripts/render-build.sh
     startCommand: node scripts/check-pdf-runtime.mjs && node dist/index.js
     envVars:
       - key: PLAYWRIGHT_BROWSERS_PATH

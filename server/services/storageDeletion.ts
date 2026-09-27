@@ -18,6 +18,7 @@ import {
   type StorageBinding,
 } from "../storage";
 import { deleteSupabaseIdentity } from "./storageDeletionIdentity";
+import { startAdaptivePoller } from "../_core/adaptivePoller";
 
 export type StorageTransaction = Pick<
   NonNullable<Awaited<ReturnType<typeof getDb>>>,
@@ -468,30 +469,15 @@ export async function runStorageDeletionBatch(
 
 /** Call only after migrations; shutdown waits for the one bounded active batch. */
 export function startStorageDeletionWorker(): () => Promise<void> {
-  let running: Promise<void> | null = null;
-  const tick = () => {
-    if (running) return;
-    running = runStorageDeletionBatch(2)
-      .then(result => {
-        if (result.blocked)
-          console.warn("[storage-deletion] Jobs require operator review", {
-            count: result.blocked,
-          });
-      })
-      .catch(() => {
-        console.warn(
-          "[storage-deletion] Batch unavailable; durable jobs retained"
-        );
-      })
-      .finally(() => {
-        running = null;
-      });
-  };
-  const interval = setInterval(tick, 60_000);
-  interval.unref();
-  tick();
-  return async () => {
-    clearInterval(interval);
-    await running;
-  };
+  // Deletions are rare: poll each minute while jobs remain, back off to 5 minutes when idle.
+  const poller = startAdaptivePoller({ minMs: 60_000, maxMs: 300_000,
+    run: async () => {
+      const result = await runStorageDeletionBatch(2);
+      if (result.blocked)
+        console.warn("[storage-deletion] Jobs require operator review", { count: result.blocked });
+      return result.completed + result.pending > 0;
+    },
+    onError: () => console.warn("[storage-deletion] Batch unavailable; durable jobs retained"),
+  });
+  return () => poller.stop();
 }

@@ -1,4 +1,4 @@
-# Operations runbook — 2.2.0
+# Operations runbook
 
 Use this runbook with the environment's authorized operator, privacy lead and committee lead. Store credentials in a secret manager, keep research data out of tickets/logs, and record actions with time, environment and source/build identity. The procedures below are acceptance criteria, not evidence that they have already run on production.
 
@@ -17,6 +17,24 @@ Current automated entry points include `pnpm check`, `pnpm test`, `pnpm build`, 
 ## Health and monitoring
 
 `GET /api/health` reports process liveness and build/version metadata. `GET /api/ready` checks database access and required security schema. Alert on repeated readiness failure, elevated 5xx/429, pool saturation, storage errors, scan failures/stale signatures, PDF timeouts, AI provider/quota failures and backup failure. Monitor host memory, restarts and storage capacity externally.
+
+### Database outage triage
+
+When the database cannot be reached at boot (network, TLS, credentials, connection limits or a managed-provider quota), the API stays up in maintenance mode: `/api/health` returns 200, `/api/ready` returns 503 with `state: "database_unavailable"`, other `/api/*` and `/uploads/*` requests get a bilingual 503 with `Retry-After`, and migrations retry with backoff (15 s → 5 min). Background workers start only after recovery. SQL/schema failures during migration still stop the process.
+
+Logs carry a fixed driver code and never provider text, for example `[migrate] Failed: Error code=ECONNREFUSED`, `code=ER_ACCESS_DENIED_ERROR errno=1045 sqlState=28000`, or `errno=1105 sqlState=HY000 hint=database_quota_exhausted`.
+
+| Log signal | Likely cause | Operator action |
+|---|---|---|
+| `hint=database_quota_exhausted` | TiDB Cloud monthly Request Unit quota spent | Raise the cluster spending limit or wait for the monthly reset; review idle load |
+| `ER_ACCESS_DENIED_ERROR` / `28000` | Rotated or wrong `DATABASE_URL` credentials | Update the Render secret and redeploy |
+| `ENOTFOUND` / `EAI_AGAIN` | Cluster endpoint changed or deleted | Confirm the cluster exists; update `DATABASE_URL` |
+| `ETIMEDOUT` / `ECONNREFUSED` | Provider outage, paused cluster or network allowlist | Check provider status and IP access list |
+| `CERT_*` / `UNABLE_TO_*` | TLS chain change | Confirm the provider CA; never disable verification |
+
+The GitHub **Runtime readiness monitor** opens one issue titled "Production readiness failing" while readiness fails and closes it on recovery.
+
+Idle database load is deliberately small: readiness answers are cached for 30 s with a full schema check at most every 10 minutes, and the screening, email and storage-deletion workers back off to 60 s / 60 s / 5 min when idle (submissions and queued mail wake them immediately).
 
 The owner observability interface is restricted; staff MFA applies. Optional error reporting must be privacy-filtered and covered by a processor agreement. In-app notifications are not external email delivery. Assign a monitored on-call/security channel and committee escalation owner outside the application.
 

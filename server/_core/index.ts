@@ -1,4 +1,5 @@
-import { safeLogError } from "./safeLog";
+import { safeErrorCode, safeLogError } from "./safeLog";
+import { isDatabaseAvailabilityError } from "./dbAvailability";
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
@@ -27,7 +28,7 @@ import { startCertificateBackupScheduler } from "../services/certificateBackup";
 import { ensureDefaultCommittee } from "../services/committeeAutoEnroll";
 import * as db from "../db";
 import * as fsSync from "node:fs";
-import { verifyDatabaseReadiness } from "./readiness";
+import { pingDatabase, verifyDatabaseReadiness } from "./readiness";
 import { assertStaffMfa } from "./staffAuth";
 import { attachRemoteScanner } from "../services/remoteScanner";
 import { startStorageDeletionWorker } from "../services/storageDeletion";
@@ -53,29 +54,93 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 
 import { runMigrations } from "../migrate";
 
+/**
+ * The database gate keeps the process up while the database is unreachable
+ * (network, TLS, credentials, provider quota). /api/health stays live, /api/ready
+ * reports 503 without spending database requests, every other API call gets a
+ * friendly 503, and migrations retry with backoff. Schema/SQL migration errors
+ * still stop the process so a broken release never serves traffic.
+ */
+const databaseGate = { ready: false, lastCode: undefined as string | undefined, since: Date.now() };
+const MIGRATION_RETRY_MS = [15_000, 30_000, 60_000, 120_000, 300_000];
+
 async function startServer() {
-  if (process.env.NODE_ENV === "production" && process.env.DATABASE_URL) {
+  const needsMigration = process.env.NODE_ENV === "production" && Boolean(process.env.DATABASE_URL);
+  let retryMigrations = false;
+  if (!needsMigration) {
+    databaseGate.ready = true;
+  } else {
     try {
       await runMigrations();
+      databaseGate.ready = true;
     } catch (err) {
       console.error("[migrate] Failed:", safeLogError(err));
-      throw err;
+      if (!isDatabaseAvailabilityError(err)) throw err;
+      databaseGate.lastCode = safeErrorCode(err);
+      retryMigrations = true;
+      console.warn("[migrate] Database unavailable at boot; serving maintenance responses and retrying in the background.");
     }
   }
   const app = express();
   registerEmailRoutes(app);
-  const stopEmailWorker = startEmailOutboxWorker();
-  const stopScreeningWorker = startSubmissionScreeningWorker();
   const server = createServer(app);
   const closeRemoteScanner = attachRemoteScanner(server);
-  const stopStorageDeletionWorker = startStorageDeletionWorker();
+  const stops: Array<() => unknown> = [];
+  let workersStarted = false;
+  // Background workers only run against a migrated, reachable database.
+  const startWorkers = () => {
+    if (workersStarted) return;
+    workersStarted = true;
+    stops.push(startEmailOutboxWorker(), startSubmissionScreeningWorker(), startStorageDeletionWorker());
+    startCertificateBackupScheduler();
+    void ensureDefaultCommittee()
+      .then(r => console.log("[committee] auto-enroll", r))
+      .catch(err => console.warn("[committee] auto-enroll failed", safeLogError(err)));
+  };
+  if (retryMigrations) {
+    let attempt = 0;
+    const retry = () => {
+      const delay = MIGRATION_RETRY_MS[Math.min(attempt, MIGRATION_RETRY_MS.length - 1)];
+      attempt++;
+      setTimeout(() => {
+        runMigrations().then(() => {
+          databaseGate.ready = true;
+          databaseGate.lastCode = undefined;
+          databaseGate.since = Date.now();
+          console.log(`[migrate] Database recovered after ${attempt} retr${attempt === 1 ? "y" : "ies"}; starting background workers.`);
+          startWorkers();
+        }).catch(err => {
+          console.warn(`[migrate] Retry ${attempt} failed:`, safeLogError(err));
+          if (!isDatabaseAvailabilityError(err)) {
+            console.error("[migrate] Non-recoverable migration failure; stopping so the platform can roll back.");
+            process.exit(1);
+          }
+          databaseGate.lastCode = safeErrorCode(err);
+          retry();
+        });
+      }, delay).unref();
+    };
+    retry();
+  }
   server.headersTimeout = 15_000;
   server.requestTimeout = 120_000;
   server.keepAliveTimeout = 5000;
   server.maxRequestsPerSocket = 1000;
   server.maxConnections = 200;
   // Shared rate limiting runs before upload authentication and body allocation.
-  registerSecurity(app);
+  // While the database is unavailable, answer API and private-file requests with a
+  // clear, retryable message instead of hanging on connection timeouts.
+  registerSecurity(app, { beforeRateLimit: (req, res, next) => {
+    if (databaseGate.ready || req.path === "/api/health" || req.path === "/api/ready") return next();
+    if (!(req.path.startsWith("/api/") || req.path.startsWith("/uploads/"))) return next();
+    res.setHeader("Retry-After", "60");
+    res.setHeader("Cache-Control", "no-store");
+    res.status(503).json({
+      error: "temporarily_unavailable",
+      message: "The service is briefly unavailable for maintenance. Your saved work is safe — please try again in a few minutes.",
+      messageAr: "الخدمة غير متاحة مؤقتاً للصيانة. أعمالك المحفوظة آمنة — يرجى المحاولة بعد دقائق.",
+    });
+  } });
   app.use(createUploadAdmission(req => sdk.authenticateRequest(req)));
   // Body parser sizing — the 21 MB cap covers a 15 MB upload + base64 +
   // wrapping JSON, but only for the upload route. Everything else is
@@ -118,15 +183,43 @@ async function startServer() {
       },
     });
   });
+  // Platform health checks poll this often. A full schema verification runs at
+  // most every 10 minutes; in between a single round trip proves connectivity,
+  // and a healthy answer is reused for 30 seconds to protect the database quota.
   let readiness: { ok: boolean; until: number } | null = null;
-  app.get("/api/ready", async (_req, res) => {
-    if (!readiness || readiness.until < Date.now()) {
-      try {
-        await verifyDatabaseReadiness(await db.getDb());
-        readiness = { ok: true, until: Date.now() + 5000 };
-      } catch { readiness = { ok: false, until: Date.now() + 5000 }; }
+  let lastSchemaCheck = 0;
+  let readinessInflight: Promise<void> | null = null;
+  const refreshReadiness = async () => {
+    const now = Date.now();
+    try {
+      const database = await db.getDb();
+      if (now - lastSchemaCheck > 10 * 60_000) {
+        await verifyDatabaseReadiness(database);
+        lastSchemaCheck = now;
+      } else {
+        await pingDatabase(database);
+      }
+      if (readiness && !readiness.ok) console.log("[ready] Database readiness restored");
+      readiness = { ok: true, until: Date.now() + 30_000 };
+    } catch (err) {
+      if (!readiness || readiness.ok) console.warn("[ready] Database readiness check failed:", safeLogError(err));
+      lastSchemaCheck = 0;
+      readiness = { ok: false, until: Date.now() + 5000 };
     }
-    res.status(readiness.ok ? 200 : 503).json({ ok: readiness.ok, appVersion: APP_VERSION });
+  };
+  app.get("/api/ready", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!databaseGate.ready) {
+      res.status(503).setHeader("Retry-After", "60");
+      res.json({ ok: false, appVersion: APP_VERSION, state: "database_unavailable" });
+      return;
+    }
+    if (!readiness || readiness.until < Date.now()) {
+      readinessInflight ??= refreshReadiness().finally(() => { readinessInflight = null; });
+      await readinessInflight;
+    }
+    const ok = readiness?.ok === true;
+    res.status(ok ? 200 : 503).json({ ok, appVersion: APP_VERSION });
   });
   // CORS + Origin allowlist for state-changing /api/* calls (SA-01, SA-20).
   // Must come AFTER body parsers (so preflight short-circuit reads no body)
@@ -281,17 +374,14 @@ async function startServer() {
     process.once(signal, () => {
       closeRemoteScanner();
       const timer = setTimeout(() => process.exit(1), 15_000).unref();
-      server.close(() => { void Promise.all([stopStorageDeletionWorker(), stopEmailWorker(), stopScreeningWorker()]).finally(() => db.closeDatabase()).finally(() => { clearTimeout(timer); process.exit(0); }); });
+      server.close(() => { void Promise.all(stops.map(stop => stop())).finally(() => db.closeDatabase()).finally(() => { clearTimeout(timer); process.exit(0); }); });
       server.closeIdleConnections();
     });
   }
   server.listen(port, process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1", () => {
     console.log(`Server running on http://localhost:${port}/`);
-    startCertificateBackupScheduler();
-    void ensureDefaultCommittee()
-      .then(r => console.log("[committee] auto-enroll", r))
-      .catch(err => console.warn("[committee] auto-enroll failed", safeLogError(err)));
+    if (databaseGate.ready) startWorkers();
   });
 }
 
-startServer().catch(() => { console.error("[Startup] Failed to initialize service; inspect configuration and migration state."); process.exitCode = 1; });
+startServer().catch(err => { console.error("[Startup] Failed to initialize service; inspect configuration and migration state.", safeLogError(err)); process.exitCode = 1; });

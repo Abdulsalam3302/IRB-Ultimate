@@ -21,6 +21,7 @@ import {
   type MailPayload,
 } from "./templates";
 import { sendMail, transportHash, type DeliveryResult } from "./transport";
+import { startAdaptivePoller, type AdaptivePoller } from "../_core/adaptivePoller";
 
 export type QueueResult = {
   id: string | null;
@@ -69,7 +70,7 @@ export async function enqueueMail(input: {
   )
     throw new Error("Invalid email expiry");
   const db = await database();
-  return db.transaction(async tx => {
+  const result: QueueResult = await db.transaction(async tx => {
     const [user] = await tx
       .select()
       .from(users)
@@ -114,6 +115,9 @@ export async function enqueueMail(input: {
       status: suppressed ? ("suppressed" as const) : ("queued" as const),
     };
   });
+  // Run after commit so the worker can see the row; a no-op when no worker runs in this process.
+  if (result.status === "queued") wakeEmailOutboxWorker();
+  return result;
 }
 
 /** Caller holds the account lock: same account→outbox order as admission. */
@@ -647,16 +651,23 @@ export async function listEmailDeliveries(
     .orderBy(desc(emailOutbox.createdAt))
     .limit(Math.max(1, Math.min(100, input.limit ?? 50)));
 }
+let outboxPoller: AdaptivePoller | null = null;
+
+/** Deliver newly queued mail promptly instead of waiting for the idle poll. */
+export function wakeEmailOutboxWorker(): void {
+  outboxPoller?.wake();
+}
+
 export function startEmailOutboxWorker() {
-  let running = false,
-    stopped = false;
   let nextCleanup = 0;
-  const tick = async () => {
-    if (running || stopped) return;
-    running = true;
-    try {
-      await runEmailOutboxBatch(3);
-      if (mailConfig() && Date.now() >= nextCleanup) {
+  // 10s while mail is flowing; back off to 60s when idle or when the provider/database is unavailable.
+  const poller = startAdaptivePoller({
+    minMs: 10_000,
+    maxMs: 60_000,
+    run: async () => {
+      if (!mailConfig()) return false;
+      const { processed } = await runEmailOutboxBatch(3);
+      if (Date.now() >= nextCleanup) {
         const db = await database();
         await db
           .update(emailCampaigns)
@@ -670,19 +681,13 @@ export function startEmailOutboxWorker() {
           .limit(100);
         nextCleanup = Date.now() + 3600_000;
       }
-    } catch {
-      console.warn("[Email] Queue processing unavailable");
-    } finally {
-      running = false;
-    }
-  };
-  const interval = setInterval(() => {
-    void tick();
-  }, 10_000);
-  interval.unref?.();
-  void tick();
+      return processed > 0;
+    },
+    onError: () => console.warn("[Email] Queue processing unavailable"),
+  });
+  outboxPoller = poller;
   return () => {
-    stopped = true;
-    clearInterval(interval);
+    if (outboxPoller === poller) outboxPoller = null;
+    void poller.stop();
   };
 }

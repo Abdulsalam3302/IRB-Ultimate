@@ -1,5 +1,5 @@
 import { safeLogError } from "./safeLog";
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { ENV } from "./env";
 import { consumeRateLimit } from "./requestLimits";
 import { boundedInt } from "./limits";
@@ -357,11 +357,13 @@ function errorHandler(
   res.status(status).json({ error: message });
 }
 
-export function registerSecurity(app: Express) {
+export function registerSecurity(app: Express, options: { beforeRateLimit?: RequestHandler } = {}) {
   // Configure only the verified proxy topology; never blindly trust arbitrary XFF.
   app.set("trust proxy", boundedInt(process.env.TRUST_PROXY_HOPS, ENV.isProduction ? 1 : 0, 0, 5));
   app.disable("x-powered-by");
   app.use(securityHeaders);
+  // Maintenance gate runs before the database-backed limiter so an outage answers fast.
+  if (options.beforeRateLimit) app.use(options.beforeRateLimit);
   app.use(rateLimit);
 }
 

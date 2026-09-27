@@ -8,6 +8,7 @@ import { enqueueAdministrativeEmail, queueApplicationEmail } from "../emailServi
 import { getColorFromScore, normalizeReviewJson, STAGE1_REVIEW_FIELDS, type AiReviewResult } from "../aiReview";
 import { evaluateStageSnapshot, stageReviewFingerprint, stageReviewInput, STAGE_REVIEW_VERSION } from "./applicationStageReview";
 import { STAGE1_FIELDS, STAGE2_FIELDS } from "./irb.validation";
+import { startAdaptivePoller, type AdaptivePoller } from "../_core/adaptivePoller";
 
 const LEASE_MS = 120_000;
 const MAX_ATTEMPTS = 3;
@@ -234,14 +235,18 @@ export async function getSubmissionScreeningStatus(applicationId: number) {
   };
 }
 
-/** Single bounded job per tick; process crashes are recovered by the durable lease. */
+let screeningPoller: AdaptivePoller | null = null;
+
+/** Start work on a fresh submission now instead of waiting for the idle poll. */
+export function wakeSubmissionScreeningWorker(): void { screeningPoller?.wake(); }
+
+/** Single bounded job per tick; process crashes are recovered by the durable lease.
+ * Polls every 5s while jobs exist and backs off to 60s when idle or when storage is unavailable. */
 export function startSubmissionScreeningWorker(): () => Promise<void> {
-  let stopped = false; let running: Promise<unknown> | null = null;
-  const tick = () => {
-    if (stopped || running) return;
-    running = runSubmissionScreeningBatch().catch(() => console.warn("[submission-screening] Processing unavailable; durable jobs retained"))
-      .finally(() => { running = null; });
-  };
-  const interval = setInterval(tick, 5000); interval.unref(); tick();
-  return async () => { stopped = true; clearInterval(interval); await running; };
+  const poller = startAdaptivePoller({ minMs: 5000, maxMs: 60_000,
+    run: async () => (await runSubmissionScreeningBatch()).processed > 0,
+    onError: () => console.warn("[submission-screening] Processing unavailable; durable jobs retained"),
+  });
+  screeningPoller = poller;
+  return async () => { if (screeningPoller === poller) screeningPoller = null; await poller.stop(); };
 }

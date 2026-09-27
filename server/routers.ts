@@ -20,7 +20,7 @@ import { notifyOwner } from "./_core/notification";
 import { runApplicationStageReview } from "./services/applicationStageReview";
 import { mailAdminRouter } from "./email/adminRouter";
 import { chatApplicationTurn } from "./services/chatApplication.service";
-import { getSubmissionScreeningStatus } from "./services/submissionScreening";
+import { getSubmissionScreeningStatus, wakeSubmissionScreeningWorker } from "./services/submissionScreening";
 import { getSubmissionReadiness } from "./services/submissionReadiness";
 import { IRB_REQUIREMENTS } from "./services/irb.validation";
 import { assertStorageBinding, storagePut } from "./storage";
@@ -721,6 +721,8 @@ const applicationRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const result = await db.submitApplicationForReview(input.id, ctx.user.id);
+      // Screening starts now; the durable job still guarantees completion after a restart.
+      if (!result.alreadySubmitted) wakeSubmissionScreeningWorker();
       return { success: true, assignedMembers: result.selected.length, accelerated: null,
         alreadySubmitted: result.alreadySubmitted, reviewStatus: "queued" as const };
     }),

@@ -43,3 +43,9 @@ export async function verifyDatabaseReadiness(
     throw new Error("Storage quota lock is unavailable");
   }
 }
+
+/** One cheap round trip; used between full schema verifications. */
+export async function pingDatabase(database: DatabaseProbe | null | undefined): Promise<void> {
+  if (!database) throw new Error("Database unavailable");
+  await database.execute(sql`SELECT 1`);
+}

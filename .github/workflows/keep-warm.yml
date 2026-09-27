@@ -1,4 +1,7 @@
 # Readiness monitoring. A successful ping is not a capacity or restore guarantee.
+# Every run records liveness (/api/health) and readiness (/api/ready) for the
+# backend and the public proxy, writes a job summary, and keeps one GitHub issue
+# open while production is not ready (closed automatically on recovery).
 name: Runtime readiness monitor
 on:
   schedule:
@@ -6,22 +9,66 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write
 concurrency:
   group: irb-readiness-monitor
   cancel-in-progress: false
 jobs:
   readiness:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
     steps:
-      - name: Verify backend and public proxy readiness
+      - name: Probe backend and public proxy
+        id: probe
         env:
           RENDER_URL: ${{ vars.RENDER_URL }}
           PUBLIC_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: |
+          set -uo pipefail
+          test -n "$RENDER_URL" && test -n "$PUBLIC_URL" || { echo "::error::Set RENDER_URL and PUBLIC_SITE_URL repository variables."; exit 1; }
+          failures=0
+          report="| Endpoint | HTTP | Seconds | Result |\n|---|---|---|---|\n"
+          probe() {
+            local url="$1" expect="$2" out code time body ok
+            out=$(curl -sS --retry 2 --retry-delay 5 --retry-all-errors --max-time 75 -o /tmp/body.json -w '%{http_code} %{time_total}' "$url" 2>/tmp/curl.err) || true
+            code=${out%% *}; time=${out##* }; [ -n "$code" ] || code=000
+            body=$(head -c 300 /tmp/body.json 2>/dev/null | tr -d '\n|' || true)
+            if [ "$expect" = ready ]; then
+              jq -e '.ok == true and (.appVersion | type == "string")' /tmp/body.json >/dev/null 2>&1 && ok=pass || ok=fail
+            else
+              jq -e '.ok == true' /tmp/body.json >/dev/null 2>&1 && ok=pass || ok=fail
+            fi
+            [ "$code" = 000 ] && body="no response ($(head -c 120 /tmp/curl.err | tr -d '\n|'))"
+            echo "$url -> HTTP $code in ${time}s: $ok ${body}"
+            report+="| \`$url\` | $code | $time | $ok ${body:+— $body} |\n"
+            [ "$ok" = pass ] || failures=$((failures + 1))
+          }
+          probe "$RENDER_URL/api/health" health
+          probe "$RENDER_URL/api/ready" ready
+          probe "$PUBLIC_URL/api/ready" ready
+          printf '### Readiness %s\n\n%b' "$( [ $failures -eq 0 ] && echo ✅ || echo ❌ )" "$report" >> "$GITHUB_STEP_SUMMARY"
+          printf '%b' "$report" > /tmp/report.md
+          echo "failures=$failures" >> "$GITHUB_OUTPUT"
+          [ $failures -eq 0 ]
+      - name: Open or update the outage issue
+        if: failure() && steps.probe.outputs.failures != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
           set -euo pipefail
-          test -n "$RENDER_URL" && test -n "$PUBLIC_URL"
-          for url in "$RENDER_URL/api/ready" "$PUBLIC_URL/api/ready"; do
-            curl -fsS --retry 2 --retry-delay 3 --max-time 60 "$url" > /tmp/irb-readiness.json
-            jq -e '.ok == true and (.appVersion | type == "string")' /tmp/irb-readiness.json
-          done
+          title="Production readiness failing"
+          body="$(printf 'Automated monitor run: %s\n\n' "$RUN_URL"; cat /tmp/report.md; printf '\n\nTriage: Render logs show `[migrate]`/`[ready]` lines with a safe driver code (e.g. `code=ECONNREFUSED`, `hint=database_quota_exhausted`). See docs/operations-runbook.md.\n')"
+          number=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          # One issue per outage; later runs refresh its body instead of adding noisy comments.
+          if [ -n "$number" ]; then gh issue edit "$number" -R "$GITHUB_REPOSITORY" --body "$body"
+          else gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$body"; fi
+      - name: Close the outage issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          number=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"Production readiness failing\" in:title" --json number --jq '.[0].number // empty')
+          [ -z "$number" ] || gh issue close "$number" -R "$GITHUB_REPOSITORY" --comment "Recovered: $RUN_URL"

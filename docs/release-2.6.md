@@ -44,10 +44,20 @@ Production readiness had failed since 24 September 2026. The TiDB Cloud free clu
 - GitHub Actions moved to Node 24 majors (`checkout@v6`, `setup-node@v6`, `pnpm/action-setup@v6`, `upload-artifact@v6`) and pinned `ubuntu-24.04` ahead of the Ubuntu 26 label change.
 - Removed retired Railway workflows/config and stale templates; unified the product name as IRB Saudi Arabia.
 
+## Completed after release (28 Sep 2026)
+
+- New Render API key stored as the `RENDER_API_KEY` repository secret; the gated Deploy workflow now runs end to end (Render → readiness gate → Vercel → IndexNow).
+- GitHub: Dependabot alerts and security updates, secret scanning with push protection, and CodeQL default setup enabled; weekly grouped Dependabot check-ups (`.github/dependabot.yml`); retired Railway variables and secret removed; repository homepage set to https://irb-sa.org with topics; release `v2.6.0` published.
+- Render environment confirmed: `ALLOWED_ORIGINS`, `PUBLIC_APP_URL` and `VITE_PUBLIC_SITE_URL` include `https://irb-sa.org`.
+- `irb-sa.org` verified in Google Search Console (HTML file and tag) and the sitemap submitted; IndexNow key published and all public URLs submitted (Bing, Yandex and other IndexNow engines), repeated after every deploy.
+- Private scanner containers restarted on the operator Mac (Docker Desktop was stopped); both workers reconnected and report `ready`.
+- Scheduled follow-ups: a one-time recovery check after the TiDB monthly reset (1 Oct) and a weekly Sunday check-up.
+
 ## Operator actions
 
 1. Restore the database now by raising the TiDB Cloud spending limit, or wait for the monthly reset on 1 October; the service recovers automatically.
-2. Create a new Render API key and update the `RENDER_API_KEY` repository secret so automatic deploys resume.
-3. Verify `irb-sa.org` in Google Search Console and Bing Webmaster Tools and submit the sitemap.
+2. Restore the paused Supabase project `yimtuqerflrqminsujfn` (dashboard → project → Restore, signed in as the project owner). Staff MFA sign-in and private document storage depend on it.
+3. Keep Docker Desktop running on the scanner Mac (enable "Start Docker Desktop when you sign in") so uploads can be scanned.
+4. Optional: add Bing Webmaster Tools by importing the verified Google Search Console property.
 4. Domain cut-over checks: Render `PUBLIC_APP_URL` (or `ALLOWED_ORIGINS`) must include `https://irb-sa.org`, otherwise form submissions from the new domain get "origin not allowed"; Supabase Auth site URL and redirect URLs must include `https://irb-sa.org`; keep Vercel's domain settings free of an apex→www redirect (the app redirects www→apex).
 5. Deploys now wait for `/api/ready` after Render reports live. While the database is intentionally unavailable, run the Deploy workflow manually with **allow_unready** to ship the frontend anyway.

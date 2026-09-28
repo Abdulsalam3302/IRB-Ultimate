@@ -77,7 +77,8 @@ jobs:
           # Render's liveness check keeps the process up during database outages; a release is
           # only complete once /api/ready confirms the database and schema.
           for i in {1..20}; do
-            if curl -fsS --max-time 30 "$RENDER_URL/api/ready" -o /tmp/ready.json && jq -e '.ok == true' /tmp/ready.json >/dev/null; then
+            # No -f: keep the 503 body so the failure message names the state.
+            if curl -sS --max-time 30 "$RENDER_URL/api/ready" -o /tmp/ready.json && jq -e '.ok == true' /tmp/ready.json >/dev/null 2>&1; then
               echo "Backend ready: $(cat /tmp/ready.json)"; exit 0
             fi
             sleep 15

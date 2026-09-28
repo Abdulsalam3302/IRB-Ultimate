@@ -346,11 +346,26 @@
       ]
     },
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": ".*\\.vercel\\.app"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
       "source": "/:path*",
       "has": [
         {
           "type": "host",
-          "value": "irb-saudi-arabia.vercel.app"
+          "value": ".*\\.vercel\\.app"
         }
       ],
       "headers": [

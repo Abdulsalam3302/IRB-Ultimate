@@ -56,14 +56,22 @@ jobs:
             401|403) echo "::error title=Render API key rejected::The RENDER_API_KEY secret was rejected (HTTP $CODE). Create a new key in Render → Account Settings → API Keys, then run: gh secret set RENDER_API_KEY -R ${{ github.repository }}"; exit 1 ;;
             *) echo "::error title=Render deploy request failed::HTTP $CODE"; head -c 500 /tmp/render-receipt.json; exit 1 ;;
           esac
-          DEPLOY_ID=$(jq -er .id /tmp/render-receipt.json)
+          # Render answers 201 with the deploy, or 202 with no body when it queues behind a running
+          # deploy, so track the revision by commit: done once any deploy of this SHA is live.
+          find_deploy() {
+            curl -fsS --max-time 30 "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys?limit=20" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            | jq -r --arg sha "$VERIFIED_SHA" '[.[].deploy | select(.commit.id == $sha)] as $d
+                | if ($d | length) == 0 then "- pending"
+                  elif any($d[]; .status == "live") then "\($d | map(select(.status == "live")) | .[0].id) live"
+                  else ($d | sort_by(.createdAt) | last | "\(.id) \(.status)") end'
+          }
+          DEPLOY_ID=""; STATUS=""
           for i in {1..90}; do
-            curl -fsS --max-time 30 "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \
-              -H "Authorization: Bearer ${RENDER_API_KEY}" > /tmp/render-status.json
-            STATUS=$(jq -er .status /tmp/render-status.json)
+            read -r DEPLOY_ID STATUS < <(find_deploy || true) || true
             case "$STATUS" in
-              live) jq -e --arg sha "$VERIFIED_SHA" '.commit.id == $sha' /tmp/render-status.json; break ;;
-              build_failed|update_failed|pre_deploy_failed|canceled|deactivated) echo "Backend deployment failed: $STATUS"; exit 1 ;;
+              live) echo "Backend ${VERIFIED_SHA} is live (deploy ${DEPLOY_ID})."; break ;;
+              build_failed|update_failed|pre_deploy_failed) echo "Backend deployment failed: $STATUS"; exit 1 ;;
             esac
             sleep 15
           done

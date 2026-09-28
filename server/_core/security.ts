@@ -82,9 +82,11 @@ export function normalizeApiPath(path: string): string {
 
 async function rateLimit(req: Request, res: Response, next: NextFunction) {
   const apiPath = normalizeApiPath(req.path);
-  if (!apiPath.startsWith("/api/") || ["/api/health", "/api/ready"].includes(apiPath)) return next();
+  // Authenticated local-disk downloads (/uploads, dev and single-host installs) share the general budget.
+  const isUpload = /^\/uploads\//i.test(req.path);
+  if ((!apiPath.startsWith("/api/") && !isUpload) || ["/api/health", "/api/ready"].includes(apiPath)) return next();
   if (req.method === "OPTIONS") return next();
-  const scope = rateScope(apiPath);
+  const scope = isUpload ? "general" : rateScope(apiPath);
   const limit = scope === "auth" ? AUTH_RATE_LIMIT : scope === "strict" ? STRICT_RATE_LIMIT : RATE_LIMIT;
   try {
     // Reject an exhausted caller before charging shared capacity. Otherwise one
@@ -334,10 +336,18 @@ function originGuard(req: Request, res: Response, next: NextFunction) {
  * credentials:true so the session cookie is sent. Origins not on the list
  * get no CORS headers at all — the browser then refuses the call.
  */
+/**
+ * Credentialed CORS is only granted to explicit http(s) origins on the
+ * allowlist — never the opaque "null" origin (sandboxed iframes, file://).
+ */
+export function isAllowedCorsOrigin(origin: string | undefined, allowlist: readonly string[] = ENV.allowedOrigins): origin is string {
+  if (!origin || origin === "null" || !/^https?:\/\/[^/\s]+$/.test(origin)) return false;
+  return allowlist.some(entry => originMatches(entry, origin));
+}
+
 function corsForApi(req: Request, res: Response, next: NextFunction) {
   const origin = req.headers.origin as string | undefined;
-  // Credentialed CORS is only reflected for explicit HTTPS/HTTP allowlisted origins, never "null".
-  if (origin && origin !== "null" && /^https?:\/\//.test(origin) && ENV.allowedOrigins.some(entry => originMatches(entry, origin))) {
+  if (isAllowedCorsOrigin(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.vary("Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");

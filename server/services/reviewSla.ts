@@ -22,7 +22,8 @@ const ASSIGNMENT_MS = 24 * 3600_000;
 const AWAITING = ["under_review", "pending_admin"] as const;
 const SWEEP_LIMIT = 200;
 
-export type SweepScope = { applicationIds?: number[] };
+/** Limits a sweep to given applications and, optionally, to a reviewer pool (tests share one database). */
+export type SweepScope = { applicationIds?: number[]; committeeMemberIds?: number[] };
 
 type Notice = { userId: number; applicationId: number; type: "review_reminder" | "review_assignment"; title: string; message: string; since: Date };
 
@@ -57,7 +58,7 @@ const awaitingDecision = () => and(
 type Assigned = { applicationId: number; assignmentId: number; memberUserId: number; renewed: boolean };
 
 /** Top up one application to its required reviewer count under the application row lock. */
-async function topUpApplication(applicationId: number, now: Date): Promise<Assigned[]> {
+async function topUpApplication(applicationId: number, now: Date, scope: SweepScope = {}): Promise<Assigned[]> {
   const db = await getDb(); if (!db) return [];
   return db.transaction(async tx => {
     const [app] = await tx.select({ id: applications.id, status: applications.status, applicantId: applications.applicantId, irbCategory: applications.irbCategory })
@@ -80,7 +81,8 @@ async function topUpApplication(applicationId: number, now: Date): Promise<Assig
       .innerJoin(users, eq(users.id, committeeMembers.userId))
       .where(and(eq(committeeMembers.isActive, true), sql`${committeeMembers.appointedAt} IS NOT NULL`, sql`CHAR_LENGTH(TRIM(COALESCE(${committeeMembers.qualificationReference}, ''))) >= 10`,
         ne(committeeMembers.userId, app.applicantId), sql`COALESCE(${users.loginMethod}, '') NOT IN ('digital_reviewer', 'deleted')`, sql`${users.openId} NOT LIKE 'digital-reviewer:%'`,
-        busy.size ? notInArray(committeeMembers.id, [...busy]) : undefined))
+        busy.size ? notInArray(committeeMembers.id, [...busy]) : undefined,
+        scope.committeeMemberIds ? inArray(committeeMembers.id, scope.committeeMemberIds.length ? scope.committeeMemberIds : [-1]) : undefined))
       .orderBy(committeeMembers.totalAssignments, committeeMembers.id);
     // Fresh reviewers first (least loaded); renew a lapsed reviewer only when nobody else is available.
     const ordered = [...candidates.filter(row => !lapsed.has(row.member.id)), ...candidates.filter(row => lapsed.has(row.member.id))].slice(0, needed);
@@ -112,7 +114,7 @@ export async function reassignExpiredReviews(actorUserId: number | null = null, 
   let reassigned = 0, renewed = 0;
   for (const { id } of short) {
     let assigned: Assigned[];
-    try { assigned = await topUpApplication(id, now); }
+    try { assigned = await topUpApplication(id, now, scope); }
     catch (error) { console.warn("[review-sla] Could not top up an application; will retry next sweep", safeLogError(error)); continue; }
     for (const row of assigned) {
       if (row.renewed) renewed++; else reassigned++;

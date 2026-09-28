@@ -12,8 +12,8 @@ const isolated = url && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostnam
 let db: NonNullable<Awaited<ReturnType<typeof database.getDb>>>;
 const userIds: number[] = [], appIds: number[] = [], memberIds: number[] = [];
 const HOUR = 3600_000;
-// Sweeps are scoped to this suite's fixtures: suites share one database and run in parallel.
-const sweep = (ids: number[]) => runReviewSlaSweep(new Date(), { applicationIds: ids });
+// Sweeps are scoped to this suite's applications and reviewers: suites share one database and run in parallel.
+const sweep = (ids: number[]) => runReviewSlaSweep(new Date(), { applicationIds: ids, committeeMemberIds: memberIds });
 
 async function user(role: "user" | "admin" = "user") {
   const id = (await db.insert(users).values({ openId: `sla-${randomUUID()}`, loginMethod: "test", role, email: `${randomUUID()}@example.test` }))[0].insertId;
@@ -84,7 +84,7 @@ describe.skipIf(!isolated)("24-hour review service standard with isolated SQL", 
     const lapsed = await reviewer(0);
     const app = await application(applicant, 2);
     await lapse(app, lapsed.id);
-    await Promise.all([1, 2, 3, 4].map(() => reassignExpiredReviews(null, { applicationIds: [app] })));
+    await Promise.all([1, 2, 3, 4].map(() => reassignExpiredReviews(null, { applicationIds: [app], committeeMemberIds: memberIds })));
     expect(await live(app)).toHaveLength(1);
   });
 

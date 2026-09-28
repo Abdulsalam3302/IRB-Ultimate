@@ -167,7 +167,11 @@ describe.skipIf(!isolated)("durable submission screening with isolated SQL and s
     expect(mocks.reserve).toHaveBeenCalledTimes(2); expect(mocks.model).not.toHaveBeenCalled();
     expect(await jobRow(f.job)).toMatchObject({ attempts: 3, status: "escalated" });
     await due(f.job); expect(await runSubmissionScreeningBatch({ applicationId: f.app })).toEqual({ processed: 0 });
-    expect((await db.select().from(notifications).where(eq(notifications.applicationId, f.app)))).toHaveLength(2);
+    // Admin escalations depend on how many admins parallel suites have created; each admin is told at most once.
+    const rows = await db.select().from(notifications).where(eq(notifications.applicationId, f.app));
+    const escalations = rows.filter(row => row.title.startsWith("Screening flagged items"));
+    expect(rows.length - escalations.length).toBe(2);
+    expect(new Set(escalations.map(row => row.userId)).size).toBe(escalations.length);
   });
   it("rejects malformed snapshots and duplicate version jobs", async () => {
     const f = await fixture({ snapshot: "{broken" });

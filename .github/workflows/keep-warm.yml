@@ -30,8 +30,15 @@ jobs:
           report="| Endpoint | HTTP | Seconds | Result |\n|---|---|---|---|\n"
           probe() {
             local url="$1" expect="$2" out code time body ok
-            out=$(curl -sS --retry 2 --retry-delay 5 --retry-all-errors --max-time 75 -o /tmp/body.json -w '%{http_code} %{time_total}' "$url" 2>/tmp/curl.err) || true
-            code=${out%% *}; time=${out##* }; [ -n "$code" ] || code=000
+            # Retry only when there is no HTTP answer (cold start, network). A 503 from the
+            # maintenance gate is a real answer; curl would otherwise honour its Retry-After: 60.
+            for attempt in 1 2 3; do
+              rm -f /tmp/body.json
+              out=$(curl -sS --max-time 75 -o /tmp/body.json -w '%{http_code} %{time_total}' "$url" 2>/tmp/curl.err) || true
+              code=${out%% *}; time=${out##* }; [ -n "$code" ] || code=000
+              [ "$code" = 000 ] || break
+              sleep 5
+            done
             body=$(head -c 300 /tmp/body.json 2>/dev/null | tr -d '\n|' || true)
             if [ "$expect" = ready ]; then
               jq -e '.ok == true and (.appVersion | type == "string")' /tmp/body.json >/dev/null 2>&1 && ok=pass || ok=fail

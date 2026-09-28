@@ -51,3 +51,16 @@ describe("adaptive background polling", () => {
     await poller.stop();
   });
 });
+
+describe("adaptive poller hardening", () => {
+  it("keeps running after a synchronous throw and a throwing error reporter", async () => {
+    vi.useFakeTimers();
+    let runs = 0;
+    const poller = startAdaptivePoller({ minMs: 1000, maxMs: 1000, onError: () => { throw new Error("reporter"); }, run: () => { runs++; throw new Error("sync"); } });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(runs).toBe(3);
+    await poller.stop();
+  });
+});

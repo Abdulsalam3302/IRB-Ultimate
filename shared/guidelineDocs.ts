@@ -16,6 +16,193 @@ export type GuidelineDoc = {
 
 export const GUIDELINE_DOCS: GuidelineDoc[] = [
   {
+    slug: "how-to-get-irb-approval-saudi-arabia",
+    titleEn: "How to Get IRB Approval in Saudi Arabia: Step by Step",
+    titleAr: "كيف تحصل على موافقة لجنة أخلاقيات البحث (IRB) في السعودية: خطوة بخطوة",
+    descEn: "A practical, step-by-step guide to preparing and submitting a research ethics application in Saudi Arabia, from protocol to decision.",
+    descAr: "دليل عملي خطوة بخطوة لإعداد طلب أخلاقيات البحث وتقديمه في السعودية، من البروتوكول حتى القرار.",
+    sections: [
+      {
+        titleEn: "Short answer",
+        titleAr: "الإجابة المختصرة",
+        bodyEn: [
+          "Research involving people, their identifiable data or their biological samples in Saudi Arabia needs review by an institutional research ethics committee (IRB) registered under the National Committee of BioEthics (NCBE) before it starts, as required by the Law of Ethics of Research on Living Creatures and its Implementing Regulations.",
+          "On this platform you prepare the application in guided steps, check its quality instantly, and submit it for review by qualified human reviewers. Screening starts the moment you submit, and the service target is a first review within 24 hours for complete applications.",
+        ],
+        bodyAr: [
+          "تحتاج البحوث التي تشمل أشخاصاً أو بياناتهم القابلة للتعريف أو عيناتهم الحيوية في السعودية إلى مراجعة لجنة أخلاقيات بحث مؤسسية (IRB) مسجلة لدى اللجنة الوطنية للأخلاقيات الحيوية قبل البدء، وفق نظام أخلاقيات البحث على المخلوقات الحية ولائحته التنفيذية.",
+          "تُعدّ طلبك في المنصة عبر خطوات موجّهة، وتتحقق من جودته فوراً، ثم تقدّمه لمراجعين بشريين مؤهلين. يبدأ الفحص فور التقديم، وهدف الخدمة إتمام المراجعة الأولى خلال 24 ساعة للطلبات المكتملة.",
+        ],
+      },
+      {
+        titleEn: "Step 1 — Prepare before you start",
+        titleAr: "الخطوة 1 — استعد قبل البدء",
+        bodyEn: [
+          "Have your research question, study design, target population, sample size justification, consent approach and data protection plan ready.",
+          "Complete research ethics (bioethics) training accepted by your institution and keep the certificate for the declaration step.",
+          "Confirm who the principal investigator is, their institution and department, the funding source and the expected duration.",
+        ],
+        bodyAr: [
+          "جهّز سؤال البحث وتصميم الدراسة والفئة المستهدفة ومبررات حجم العينة وطريقة الحصول على الموافقة وخطة حماية البيانات.",
+          "أكمل تدريباً في أخلاقيات البحث تقبله مؤسستك واحتفظ بالشهادة لخطوة الإقرارات.",
+          "حدّد الباحث الرئيس ومؤسسته وقسمه ومصدر التمويل والمدة المتوقعة.",
+        ],
+      },
+      {
+        titleEn: "Step 2 — Declarations and study classification",
+        titleAr: "الخطوة 2 — الإقرارات وتصنيف الدراسة",
+        bodyEn: [
+          "Confirm the accuracy, training, consent and policy declarations.",
+          "Choose the study type (for example observational, retrospective, survey, clinical trial) and the review category you are requesting. The committee confirms the final category.",
+        ],
+        bodyAr: [
+          "أكّد إقرارات صحة المعلومات والتدريب والموافقة والسياسة.",
+          "اختر نوع الدراسة (مثل رصدية أو بأثر رجعي أو استبانة أو تجربة سريرية) وفئة المراجعة المطلوبة، وتؤكد اللجنة الفئة النهائية.",
+        ],
+      },
+      {
+        titleEn: "Step 3 — Write the protocol (or use the chat assistant)",
+        titleAr: "الخطوة 3 — اكتب البروتوكول (أو استخدم المساعد بالمحادثة)",
+        bodyEn: [
+          "Complete twelve protocol sections: objectives, methodology, sample size, target population, inclusion and exclusion criteria, data collection, informed consent, risks, benefits, confidentiality and conflict of interest.",
+          "Prefer a conversation? The chat application asks one question at a time and fills the same sections for you to review. Optional AI feedback suggests improvements; it never invents facts or approvals.",
+        ],
+        bodyAr: [
+          "أكمل اثني عشر قسماً في البروتوكول: الأهداف والمنهجية وحجم العينة والفئة المستهدفة ومعايير الإدراج والاستبعاد وجمع البيانات والموافقة المستنيرة والمخاطر والفوائد والسرية وتعارض المصالح.",
+          "تفضّل المحادثة؟ يطرح التقديم بالمحادثة سؤالاً واحداً في كل مرة ويملأ الأقسام نفسها لتراجعها. تقترح ملاحظات الذكاء الاصطناعي الاختيارية تحسينات دون اختلاق حقائق أو موافقات.",
+        ],
+      },
+      {
+        titleEn: "Step 4 — Check quality, then submit",
+        titleAr: "الخطوة 4 — تحقّق من الجودة ثم قدّم",
+        bodyEn: [
+          "Before submitting, the platform shows which required items are missing and gives instant quality tips on the points committees most often return applications for: a clear primary objective, a justified sample size, complete consent, safeguards for vulnerable groups, a PDPL-aligned data protection plan and risks with mitigation.",
+          "Tips never block submission. Addressing them usually means fewer questions and a faster decision.",
+        ],
+        bodyAr: [
+          "قبل التقديم تعرض المنصة العناصر المطلوبة الناقصة، وتقدّم نصائح جودة فورية في أكثر النقاط التي تعيد اللجان الطلبات بسببها: هدف رئيس واضح، وحجم عينة مبرر، وموافقة مكتملة، وضمانات للفئات المستضعفة، وخطة حماية بيانات متوافقة مع نظام حماية البيانات الشخصية، ومخاطر مع إجراءات تخفيفها.",
+          "لا تمنع النصائح التقديم، لكن معالجتها تعني عادة أسئلة أقل وقراراً أسرع.",
+        ],
+      },
+      {
+        titleEn: "Step 5 — Review and decision",
+        titleAr: "الخطوة 5 — المراجعة والقرار",
+        bodyEn: [
+          "After submission the application is screened and assigned to independent, appointed reviewers with a 24-hour review window. Lapsed assignments are renewed or reassigned automatically, and administrators are alerted if the 24-hour target is missed.",
+          "You are notified in the platform and by email if reviewers ask questions and when a decision is recorded. Every decision is made by authorized people; automated checks never approve research. Issued records can be checked on the Verify page.",
+        ],
+        bodyAr: [
+          "بعد التقديم يُفحص الطلب ويُحال إلى مراجعين مستقلين معيّنين بمهلة مراجعة 24 ساعة. تُجدَّد التكليفات المنتهية أو يُعاد إسنادها تلقائياً، ويُنبَّه المسؤولون إذا تجاوز الطلب هدف 24 ساعة.",
+          "يصلك إشعار في المنصة وبالبريد الإلكتروني إذا طرح المراجعون أسئلة وعند تسجيل القرار. تصدر جميع القرارات عن أشخاص مخولين، ولا يعتمد الفحص الآلي أي بحث. يمكن التحقق من السجلات الصادرة عبر صفحة التحقق.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "irb-application-checklist",
+    titleEn: "IRB Application Checklist for Researchers in Saudi Arabia",
+    titleAr: "قائمة التحقق لطلب أخلاقيات البحث للباحثين في السعودية",
+    descEn: "What a complete, high-quality research ethics application contains — the items committees check first.",
+    descAr: "ما يتضمنه طلب أخلاقيات بحث مكتمل وعالي الجودة — العناصر التي تتحقق منها اللجان أولاً.",
+    sections: [
+      {
+        titleEn: "Study essentials",
+        titleAr: "أساسيات الدراسة",
+        bodyEn: [
+          "A specific title that names the design, population and setting.",
+          "One primary objective with how it will be measured, plus any secondary objectives.",
+          "The study design, setting, procedures, timeline and analysis plan.",
+          "A sample size with its justification: power or precision calculation, qualitative saturation, or a defined census of all eligible records.",
+        ],
+        bodyAr: [
+          "عنوان محدد يذكر التصميم والفئة والمكان.",
+          "هدف رئيس واحد مع طريقة قياسه، إضافة إلى الأهداف الثانوية.",
+          "تصميم الدراسة ومكانها وإجراءاتها وجدولها الزمني وخطة التحليل.",
+          "حجم العينة مع مبرراته: حساب القوة أو الدقة، أو التشبع في البحث النوعي، أو حصر شامل لجميع السجلات المؤهلة.",
+        ],
+      },
+      {
+        titleEn: "Participants and consent",
+        titleAr: "المشاركون والموافقة",
+        bodyEn: [
+          "Concrete inclusion and exclusion criteria (age range, condition, setting, time window).",
+          "A consent process covering voluntary participation, the right to withdraw without penalty, risks, confidentiality, who obtains consent and a contact for questions — in Arabic and English where participants need it.",
+          "For retrospective record reviews, a consent waiver request that explains why consent is impracticable, why risk is minimal and how identities are protected. The committee decides whether to grant it.",
+          "Extra safeguards for children (guardian consent and child assent), students and employees (protection from pressure), and other vulnerable groups.",
+        ],
+        bodyAr: [
+          "معايير إدراج واستبعاد محددة (الفئة العمرية، الحالة، المكان، الفترة الزمنية).",
+          "عملية موافقة تغطي طوعية المشاركة وحق الانسحاب دون عقوبة والمخاطر والسرية ومن يحصل على الموافقة وجهة التواصل، بالعربية والإنجليزية حسب حاجة المشاركين.",
+          "في مراجعة السجلات بأثر رجعي: طلب إعفاء من الموافقة يوضح سبب تعذرها وأن المخاطر في حدها الأدنى وكيف تُحمى الهويات، والقرار للجنة.",
+          "ضمانات إضافية للأطفال (موافقة ولي الأمر وموافقة الطفل)، والطلاب والموظفين (الحماية من الضغط)، وغيرهم من الفئات المستضعفة.",
+        ],
+      },
+      {
+        titleEn: "Data, risk and integrity",
+        titleAr: "البيانات والمخاطر والنزاهة",
+        bodyEn: [
+          "A data protection plan aligned with the Personal Data Protection Law: de-identification or coding, who can access the data and how it is secured, the retention period and disposal, and any transfer outside Saudi Arabia.",
+          "Realistic risks (including privacy and psychological risks) with a specific mitigation for each, and realistic benefits.",
+          "A conflict of interest statement — or a clear statement that there is none.",
+          "For clinical trials: trial registration plans (for example the Saudi Clinical Trials Registry) and any Saudi Food and Drug Authority (SFDA) authorization needed for drugs or devices.",
+          "No unresolved placeholders such as TBD, [MISSING] or [ASSUMPTION] left in the final text.",
+        ],
+        bodyAr: [
+          "خطة لحماية البيانات متوافقة مع نظام حماية البيانات الشخصية: إخفاء الهوية أو الترميز، ومن يصل إلى البيانات وكيف تُؤمَّن، ومدة الاحتفاظ وطريقة الإتلاف، وأي نقل خارج المملكة.",
+          "مخاطر واقعية (بما فيها الخصوصية والمخاطر النفسية) مع إجراء تخفيف محدد لكل منها، وفوائد واقعية.",
+          "إفصاح عن تعارض المصالح، أو تصريح واضح بعدم وجوده.",
+          "للتجارب السريرية: خطة تسجيل التجربة (مثل السجل السعودي للتجارب السريرية) وأي موافقة لازمة من الهيئة العامة للغذاء والدواء للأدوية أو الأجهزة.",
+          "لا توجد عناصر ناقصة معلّمة مثل «يُحدد لاحقاً» أو [MISSING] أو [ASSUMPTION] في النص النهائي.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "exempt-expedited-full-board-review",
+    titleEn: "Exempt, Expedited or Full Board Review: Which One Applies?",
+    titleAr: "المراجعة المعفاة أو المسرّعة أو الكاملة: أيها ينطبق على دراستك؟",
+    descEn: "How research ethics committees decide the level of review, with common examples. The committee confirms the category for each study.",
+    descAr: "كيف تحدد لجان أخلاقيات البحث مستوى المراجعة، مع أمثلة شائعة. تؤكد اللجنة الفئة لكل دراسة.",
+    sections: [
+      {
+        titleEn: "The short version",
+        titleAr: "باختصار",
+        bodyEn: [
+          "The level of review follows risk. Minimal-risk studies may qualify for exempt or expedited review; research involving more than minimal risk, interventions or vulnerable participants usually needs review by the full committee.",
+          "You may request a category, but only the committee can confirm it. Requesting a lighter category never authorizes a study to begin.",
+        ],
+        bodyAr: [
+          "يتبع مستوى المراجعة درجة المخاطر. قد تؤهل الدراسات ذات الحد الأدنى من المخاطر للمراجعة المعفاة أو المسرّعة، بينما تحتاج البحوث التي تتجاوز الحد الأدنى من المخاطر أو تتضمن تدخلات أو فئات مستضعفة عادة إلى مراجعة اللجنة الكاملة.",
+          "يمكنك طلب فئة معينة، لكن اللجنة وحدها تؤكدها، وطلب فئة أخف لا يجيز بدء الدراسة.",
+        ],
+      },
+      {
+        titleEn: "Common examples",
+        titleAr: "أمثلة شائعة",
+        bodyEn: [
+          "Often exempt or expedited: anonymous surveys of adults on non-sensitive topics; retrospective reviews of de-identified records; analysis of publicly available data.",
+          "Often expedited: minimal-risk prospective studies such as routine blood draws in healthy adults or non-invasive measurements.",
+          "Usually full board: clinical trials of drugs or devices; studies with children, prisoners or people who cannot consent; sensitive topics where disclosure could cause harm; genetic research with identifiable samples.",
+        ],
+        bodyAr: [
+          "غالباً معفاة أو مسرّعة: الاستبانات المجهولة للبالغين في موضوعات غير حساسة، ومراجعة السجلات منزوعة الهوية بأثر رجعي، وتحليل البيانات المتاحة للعموم.",
+          "غالباً مسرّعة: الدراسات المستقبلية ذات الحد الأدنى من المخاطر مثل سحب الدم الروتيني من بالغين أصحاء أو القياسات غير الجراحية.",
+          "عادة مراجعة كاملة: التجارب السريرية للأدوية أو الأجهزة، والدراسات على الأطفال أو السجناء أو من لا يستطيعون الموافقة، والموضوعات الحساسة التي قد يضر كشفها، والبحوث الجينية على عينات قابلة للتعريف.",
+        ],
+      },
+      {
+        titleEn: "How this platform handles it",
+        titleAr: "كيف تتعامل المنصة مع ذلك",
+        bodyEn: [
+          "Full board requests are assigned to more reviewers than expedited or exempt requests. Automated screening highlights items that need a reviewer's judgement, and every final decision is recorded by an authorized person.",
+        ],
+        bodyAr: [
+          "تُحال طلبات المراجعة الكاملة إلى عدد أكبر من المراجعين مقارنة بالطلبات المسرّعة أو المعفاة. يبرز الفحص الآلي العناصر التي تحتاج تقدير المراجع، ويسجل شخص مخول كل قرار نهائي.",
+        ],
+      },
+    ],
+  },
+  {
     slug: "nbce-ethical-guidelines",
     titleEn: "NCBE Ethical Guidelines for Research",
     titleAr: "الإرشادات الأخلاقية للجنة الوطنية للأخلاقيات الحيوية",
@@ -277,8 +464,8 @@ export const GUIDELINE_DOCS: GuidelineDoc[] = [
     slug: "privacy-policy",
     titleEn: "Privacy Policy",
     titleAr: "سياسة الخصوصية",
-    descEn: "How IRB Ultimate collects, uses, and protects your personal information.",
-    descAr: "كيف تجمع منصة IRB Ultimate معلوماتك الشخصية وتستخدمها وتحميها.",
+    descEn: "How IRB Saudi Arabia collects, uses, and protects your personal information.",
+    descAr: "كيف تجمع منصة IRB السعودية معلوماتك الشخصية وتستخدمها وتحميها.",
     sections: [
       {
         titleEn: "Information We Collect",

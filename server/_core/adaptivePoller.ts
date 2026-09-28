@@ -19,6 +19,8 @@ export interface AdaptivePollerOptions {
   onError?: (error: unknown) => void;
   /** Start immediately (default) or after `minMs`. */
   immediate?: boolean;
+  /** Overrides the first delay (for example a short warm-up after boot). */
+  initialDelayMs?: number;
 }
 
 export function startAdaptivePoller(options: AdaptivePollerOptions): AdaptivePoller {
@@ -41,9 +43,13 @@ export function startAdaptivePoller(options: AdaptivePollerOptions): AdaptivePol
     timer = null;
     if (stopped || running) return;
     wakeRequested = false;
-    running = options.run()
+    // Promise.resolve().then() also captures a synchronous throw from run().
+    running = Promise.resolve().then(() => options.run())
       .then(busy => { delay = busy ? minMs : Math.min(maxMs, delay * 2); })
-      .catch(error => { delay = Math.min(maxMs, Math.max(minMs, delay) * 2); options.onError?.(error); })
+      .catch(error => {
+        delay = Math.min(maxMs, Math.max(minMs, delay) * 2);
+        try { options.onError?.(error); } catch { /* a failing reporter must not stop the loop */ }
+      })
       .finally(() => {
         running = null;
         if (wakeRequested) { delay = minMs; schedule(0); }
@@ -51,7 +57,8 @@ export function startAdaptivePoller(options: AdaptivePollerOptions): AdaptivePol
       });
   };
 
-  if (options.immediate === false) schedule(minMs); else tick();
+  if (options.initialDelayMs !== undefined) schedule(Math.max(0, options.initialDelayMs));
+  else if (options.immediate === false) schedule(minMs); else tick();
 
   return {
     wake() {

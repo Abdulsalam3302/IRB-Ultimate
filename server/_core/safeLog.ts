@@ -19,15 +19,16 @@ function classify(error: Diagnostic): string | undefined {
   return undefined;
 }
 
-export function safeErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
+export function safeErrorCode(error: unknown, depth = 0): string | undefined {
+  // Bounded walk: cyclic `cause` chains must never overflow the stack inside the logger.
+  if (!error || typeof error !== "object" || depth > 4) return undefined;
   const value = error as Diagnostic;
   if (typeof value.code === "string" && SAFE_CODE.test(value.code)) return value.code;
   // Node reports multi-address connection failures as AggregateError without a top-level code.
   if (Array.isArray(value.errors)) {
-    for (const nested of value.errors) { const code = safeErrorCode(nested); if (code) return code; }
+    for (const nested of value.errors.slice(0, 8)) { const code = safeErrorCode(nested, depth + 1); if (code) return code; }
   }
-  if (value.cause && value.cause !== error) return safeErrorCode(value.cause);
+  if (value.cause && value.cause !== error) return safeErrorCode(value.cause, depth + 1);
   return undefined;
 }
 

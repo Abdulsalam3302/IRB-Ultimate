@@ -89,6 +89,13 @@ describe.skipIf(!isolated)("durable submission screening with isolated SQL and s
     expect((await runSubmissionScreeningBatch({ applicationId: f.app })).outcome).toBe("ready_for_human_decision");
     expect(mocks.model).not.toHaveBeenCalled(); expect(mocks.reserve).not.toHaveBeenCalled();
   });
+  it("routes deterministic attention flags (vulnerable groups without safeguards) to human attention even when AI passes", async () => {
+    const f = await fixture({ patch: { targetPopulation: "Children aged 8 to 12 years attending primary schools" } });
+    expect((await runSubmissionScreeningBatch({ applicationId: f.app })).outcome).toBe("human_review_required");
+    const status = await getSubmissionScreeningStatus(f.app);
+    expect(status).toMatchObject({ status: "escalated", outcome: "human_review_required", stage1: { status: "completed" }, stage2: { status: "completed" } });
+    expect(status?.attention?.map(item => item.id)).toEqual(["vulnerable_safeguards"]);
+  });
   it("escalates missing evidence without claiming all populated protocol fields are empty", async () => {
     const f = await fixture({ patch: { sampleSize: "50", methodology: "Existing applicant text [MISSING: recruitment procedure]" } });
     expect((await runSubmissionScreeningBatch({ applicationId: f.app })).outcome).toBe("human_review_required");

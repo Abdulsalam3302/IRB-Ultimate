@@ -1,6 +1,27 @@
 /** Lightweight public-page metadata. Keep in sync with guidelineDocs (covered by tests). */
 export const GUIDELINE_METADATA = [
   {
+    "slug": "how-to-get-irb-approval-saudi-arabia",
+    "titleEn": "How to Get IRB Approval in Saudi Arabia: Step by Step",
+    "titleAr": "كيف تحصل على موافقة لجنة أخلاقيات البحث (IRB) في السعودية: خطوة بخطوة",
+    "descEn": "A practical, step-by-step guide to preparing and submitting a research ethics application in Saudi Arabia, from protocol to decision.",
+    "descAr": "دليل عملي خطوة بخطوة لإعداد طلب أخلاقيات البحث وتقديمه في السعودية، من البروتوكول حتى القرار."
+  },
+  {
+    "slug": "irb-application-checklist",
+    "titleEn": "IRB Application Checklist for Researchers in Saudi Arabia",
+    "titleAr": "قائمة التحقق لطلب أخلاقيات البحث للباحثين في السعودية",
+    "descEn": "What a complete, high-quality research ethics application contains — the items committees check first.",
+    "descAr": "ما يتضمنه طلب أخلاقيات بحث مكتمل وعالي الجودة — العناصر التي تتحقق منها اللجان أولاً."
+  },
+  {
+    "slug": "exempt-expedited-full-board-review",
+    "titleEn": "Exempt, Expedited or Full Board Review: Which One Applies?",
+    "titleAr": "المراجعة المعفاة أو المسرّعة أو الكاملة: أيها ينطبق على دراستك؟",
+    "descEn": "How research ethics committees decide the level of review, with common examples. The committee confirms the category for each study.",
+    "descAr": "كيف تحدد لجان أخلاقيات البحث مستوى المراجعة، مع أمثلة شائعة. تؤكد اللجنة الفئة لكل دراسة."
+  },
+  {
     "slug": "nbce-ethical-guidelines",
     "titleEn": "NCBE Ethical Guidelines for Research",
     "titleAr": "الإرشادات الأخلاقية للجنة الوطنية للأخلاقيات الحيوية",
@@ -32,7 +53,7 @@ export const GUIDELINE_METADATA = [
     "slug": "privacy-policy",
     "titleEn": "Privacy Policy",
     "titleAr": "سياسة الخصوصية",
-    "descEn": "How IRB Ultimate collects, uses, and protects your personal information.",
-    "descAr": "كيف تجمع منصة IRB Ultimate معلوماتك الشخصية وتستخدمها وتحميها."
+    "descEn": "How IRB Saudi Arabia collects, uses, and protects your personal information.",
+    "descAr": "كيف تجمع منصة IRB السعودية معلوماتك الشخصية وتستخدمها وتحميها."
   }
 ] as const;

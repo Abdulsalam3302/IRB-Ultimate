@@ -177,7 +177,7 @@ ${stage1Score !== null || stage2Score !== null ? `
 </table>
 
 <footer>
-  Generated ${escapeHtml(new Date().toLocaleString("en-US"))} by IRB Ultimate ·
+  Generated ${escapeHtml(new Date().toLocaleString("en-US"))} by IRB Saudi Arabia ·
   Verify any IRB number at the platform's public registry · Document is human-readable;
   print to PDF via your browser for an archival copy.
 </footer>
@@ -236,7 +236,7 @@ export function buildInspectorZip(data: ExportData): { stream: PassThrough; file
   archive.append(manifest, { name: "manifest.json" });
   // README so downstream consumers understand what they're looking at
   archive.append(
-    `IRB Ultimate — Inspector Export
+    `IRB Saudi Arabia — Inspector Export
 ================================
 
 This archive contains a checksum-indexed snapshot of an IRB application.

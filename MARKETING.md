@@ -76,6 +76,27 @@ Monthly evidence review prompts:
 
 Record the date, engine, exact question, observed response, cited URL, claim accuracy, and whether a citation was present. A mention, citation, search impression, site visit, draft, and approved decision are separate measurements. Missing data is unknown, not zero. Do not submit private protocols to external brand-monitoring tools.
 
+### What the build publishes for search and answer engines (2.6)
+
+- Every public route is pre-rendered with bilingual answer-first content, a canonical URL on `irb-sa.org`, Open Graph/Twitter large cards (`/og-image.jpg`) and one schema.org `@graph`: `Organization`, `WebSite`, `WebPage`/`Article`, `BreadcrumbList`, plus `Service` and `FAQPage` on the home and resources pages. None of it asserts licensing, accreditation, pricing, reviews or guaranteed turnaround.
+- New answer-first guides target the questions researchers actually ask: *How to get IRB approval in Saudi Arabia*, *IRB application checklist*, and *Exempt vs expedited vs full board review*.
+- `sitemap.xml` carries `lastmod`; `robots.txt` welcomes all crawlers (including AI search crawlers) to public pages and keeps the workspace out; `llms.txt` summarises key facts and links, and `llms-full.txt` carries the full public guide text for engines that do not run JavaScript.
+- `www.irb-sa.org` permanently redirects to `irb-sa.org`, and the `*.vercel.app` alias sends `X-Robots-Tag: noindex` so only the canonical host is indexed.
+
+## Off-site authority and backlinks (operator actions)
+
+Links must be earned from relevant, real pages — never bought, exchanged in bulk, or placed in comment spam (these can trigger search penalties). Priority order:
+
+1. **Verify ownership** of `irb-sa.org` in Google Search Console and Bing Webmaster Tools; submit `https://irb-sa.org/sitemap.xml`; request indexing for the three new guides.
+2. **Own profiles** that link back and reuse the same name, logo and one-line description: LinkedIn company page, X/Twitter, YouTube (short walkthroughs), GitHub organization README, Google Business Profile if an address is published.
+3. **Saudi research ecosystem**: ask university research deanships, medical-city research centres and graduate-studies offices to list the checklist or how-to guide on their "research ethics resources" pages; offer a short Arabic/English webinar or workshop in exchange for the listing.
+4. **Researcher communities and societies**: share the guides (not sales copy) in Saudi medical/nursing/pharmacy research societies, student research clubs and journal-club newsletters.
+5. **Content partnerships**: guest articles on research-methods blogs and academic newsletters explaining consent waivers, PDPL data protection plans or review categories, each linking to the matching guide.
+6. **Directories**: research-tool and bioethics-resource directories, open-science tool lists, and relevant "awesome" lists on GitHub.
+7. **Digital PR**: announce the 24-hour review target and bilingual chat application to Saudi higher-education and health-tech media once measured results support it.
+
+Track referring domains monthly (Search Console "Links"), not raw link counts. A link from one university research office is worth more than hundreds of directory entries.
+
 ## Measurement without research-data exposure
 
 Third-party analytics scripts are intentionally not injected in the research SPA: a script loaded on a marketing page can retain access after navigation into a private application. This also removes session replay/debug collection from the shipped public assets.
@@ -95,7 +116,7 @@ Performance/operation targets must be documented separately from measurements: e
 | Verifiable issued record | Conditional on authorized issuance | Real decision, active status, verification and revocation checks |
 | NCBE/government licensing or accreditation | Do not assert | Current official operator/committee documentation and scope |
 | PDPL-compliant / encrypted end-to-end / Saudi-only residency | Do not assert from source code | Controller assessment, deployed controls, provider/region/transfer evidence |
-| Review within 24–48 hours | Do not guarantee | Capacity-backed commitment and measured representative results |
+| First review within 24 hours | Publish only as a **target** for complete applications, never a guarantee | Automated 24-hour assignment windows, reassignment and admin escalation (2.6); measured by "Decided within 24h (30d)" in Observability |
 | Hundreds/thousands of expert reviewers | Do not assert for AI panels | Actual appointed human roster; AI calls are analyses only |
 | Globally valid starting in 2027 | Do not assert | Jurisdiction-specific authority and institutional acceptance |
 | Free or paid pricing | Publish only confirmed offer | Operator-approved pricing, taxes, contract and billing configuration |

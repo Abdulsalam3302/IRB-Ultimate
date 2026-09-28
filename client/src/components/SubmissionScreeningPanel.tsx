@@ -7,6 +7,10 @@ export type ScreeningView = {
   outcome?: "ready_for_human_decision" | "human_review_required";
   stage1?: unknown;
   stage2?: unknown;
+  /** Applicants receive progress only; screening findings stay in the confidential review workspace. */
+  audience?: "applicant";
+  /** Deterministic checks that need a reviewer's attention (staff view only). */
+  attention?: { id: string; titleEn: string; titleAr: string }[];
 };
 export function screeningView(value: unknown): ScreeningView | null {
   if (
@@ -28,7 +32,68 @@ export function screeningView(value: unknown): ScreeningView | null {
         : undefined,
     stage1: source.stage1,
     stage2: source.stage2,
+    audience: source.audience === "applicant" ? "applicant" : undefined,
+    attention: Array.isArray(source.attention)
+      ? source.attention.filter(
+          (item): item is { id: string; titleEn: string; titleAr: string } =>
+            Boolean(item) &&
+            typeof item === "object" &&
+            typeof (item as Record<string, unknown>).id === "string" &&
+            typeof (item as Record<string, unknown>).titleEn === "string" &&
+            typeof (item as Record<string, unknown>).titleAr === "string"
+        )
+      : undefined,
   };
+}
+
+function ApplicantProgress({
+  screening,
+  isAr,
+  refresh,
+  refreshing,
+}: {
+  screening: ScreeningView;
+  isAr: boolean;
+  refresh: () => void;
+  refreshing: boolean;
+}) {
+  const active =
+    screening.status === "pending" || screening.status === "running";
+  return (
+    <section
+      aria-labelledby="submission-progress-title"
+      className="mb-6 rounded-xl border bg-card p-4 sm:p-5 space-y-3"
+    >
+      <h2 id="submission-progress-title" className="font-semibold">
+        {isAr ? "حالة طلبك" : "Your application status"}
+      </h2>
+      <p role="status" className="font-medium">
+        {active
+          ? isAr
+            ? "تم استلام طلبك — الفحوص الأولية جارية"
+            : "Application received — initial checks in progress"
+          : isAr
+            ? "طلبك لدى لجنة المراجعة"
+            : "Your application is with the review committee"}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {isAr
+          ? "لا حاجة لإعادة التقديم. هدفنا إتمام المراجعة الأولى خلال 24 ساعة للطلبات المكتملة، وسنبلغك بأي استفسار أو بالقرار عبر المنصة والبريد الإلكتروني. القرار النهائي بشري ومخوّل."
+          : "There is no need to submit again. Our target is a first review within 24 hours for complete applications, and we will notify you of any questions or the decision in the platform and by email. The final decision is made by authorized people."}
+      </p>
+      {active && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={refreshing}
+          onClick={refresh}
+        >
+          {isAr ? "تحديث الحالة" : "Refresh status"}
+        </Button>
+      )}
+    </section>
+  );
 }
 export function SubmissionScreeningPanel({
   screening,
@@ -41,6 +106,15 @@ export function SubmissionScreeningPanel({
   refresh: () => void;
   refreshing: boolean;
 }) {
+  if (screening.audience === "applicant")
+    return (
+      <ApplicantProgress
+        screening={screening}
+        isAr={isAr}
+        refresh={refresh}
+        refreshing={refreshing}
+      />
+    );
   const active =
     screening.status === "pending" || screening.status === "running";
   const status =
@@ -80,6 +154,18 @@ export function SubmissionScreeningPanel({
             ? "نتائج الفحص مساعدة للمراجعين. لا تُعد موافقة أخلاقية ولا تجيز بدء البحث؛ يلزم القرار البشري المخول."
             : "Screening supports reviewers. It is not ethics approval and does not authorize research to begin; an authorized human decision is still required."}
       </p>
+      {screening.attention && screening.attention.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="font-medium">
+            {isAr ? "عناصر تتطلب انتباه المراجع" : "Items needing reviewer attention"}
+          </p>
+          <ul className="mt-1 list-disc ps-5">
+            {screening.attention.map(item => (
+              <li key={item.id}>{isAr ? item.titleAr : item.titleEn}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {[1, 2].map(stage => {
         const result = stage === 1 ? screening.stage1 : screening.stage2;
         return result ? (

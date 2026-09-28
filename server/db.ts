@@ -24,6 +24,7 @@ import {
   notifications,
   analyticsSessions, analyticsEvents, llmUsageDaily,
   chatApplicationMessages, InsertChatApplicationMessage,
+  emailOutbox,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createMysqlPool } from "./_core/mysql";
@@ -826,7 +827,8 @@ export async function getPendingReviewsByMember(committeeMemberId: number) {
   return db.select().from(reviewAssignments).where(
     and(
       eq(reviewAssignments.committeeMemberId, committeeMemberId),
-      eq(reviewAssignments.status, "pending")
+      eq(reviewAssignments.status, "pending"),
+      gt(reviewAssignments.expiresAt, new Date())
     )
   ).orderBy(desc(reviewAssignments.assignedAt));
 }
@@ -842,15 +844,6 @@ export async function getReviewAssignmentById(id: number) {
   if (!db) return undefined;
   const result = await db.select().from(reviewAssignments).where(eq(reviewAssignments.id, id)).limit(1);
   return result.length > 0 ? result[0] : undefined;
-}
-
-export async function expireOldReviews() {
-  const db = await getDb();
-  if (!db) return;
-  const now = new Date();
-  await db.update(reviewAssignments)
-    .set({ status: "expired" })
-    .where(and(eq(reviewAssignments.status, "pending"), lte(reviewAssignments.expiresAt, now)));
 }
 
 export async function countApprovalsByApplication(applicationId: number): Promise<number> {
@@ -950,25 +943,6 @@ export async function getFileUploadByKey(fileKey: string) {
   if (!db) return null;
   const rows = await db.select().from(fileUploads).where(eq(fileUploads.fileKey, fileKey)).limit(1);
   return rows[0] ?? null;
-}
-
-// ─── Expire and reassign reviews ──────────────────────────────────────────
-
-export async function expireAndGetExpiredReviews() {
-  const db = await getDb();
-  if (!db) return [];
-  const now = new Date();
-  // Find pending reviews that have expired
-  const expired = await db.select().from(reviewAssignments).where(
-    and(eq(reviewAssignments.status, "pending"), lte(reviewAssignments.expiresAt, now))
-  );
-  // Mark them as expired
-  if (expired.length > 0) {
-    await db.update(reviewAssignments)
-      .set({ status: "expired" })
-      .where(and(eq(reviewAssignments.status, "pending"), lte(reviewAssignments.expiresAt, now)));
-  }
-  return expired;
 }
 
 // ─── Analytics helpers ────────────────────────────────────────────────────
@@ -1583,6 +1557,22 @@ export async function getObservabilityMetrics() {
   const [retr] = await dbi.select({ cnt: count() }).from(applications)
     .where(eq(applications.status, "retracted"));
 
+  // Review operations against the 24-hour first-review target.
+  const [awaiting] = await dbi.select({
+    total: count(),
+    overdue: sql<number>`COALESCE(SUM(CASE WHEN ${applications.submittedAt} <= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END), 0)`,
+  }).from(applications).where(and(inArray(applications.status, ["under_review", "pending_admin"]), sql`${applications.submittedAt} IS NOT NULL`,
+    sql`(${applications.humanDecisionAt} IS NULL OR ${applications.humanDecisionAt} < ${applications.submittedAt})`));
+  const [decided30] = await dbi.select({
+    total: count(),
+    within24h: sql<number>`COALESCE(SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, ${applications.submittedAt}, ${applications.humanDecisionAt}) <= 1440 THEN 1 ELSE 0 END), 0)`,
+    avgHours: sql<number | null>`AVG(TIMESTAMPDIFF(MINUTE, ${applications.submittedAt}, ${applications.humanDecisionAt})) / 60`,
+  }).from(applications).where(and(sql`${applications.humanDecisionAt} >= DATE_SUB(NOW(), INTERVAL 30 DAY)`, sql`${applications.submittedAt} IS NOT NULL`, sql`${applications.humanDecisionAt} >= ${applications.submittedAt}`));
+  const screeningRows = await dbi.select({ status: applicationScreeningJobs.status, cnt: count() }).from(applicationScreeningJobs)
+    .where(sql`${applicationScreeningJobs.createdAt} >= DATE_SUB(NOW(), INTERVAL 30 DAY)`).groupBy(applicationScreeningJobs.status);
+  const outboxRows = await dbi.select({ status: emailOutbox.status, cnt: count() }).from(emailOutbox)
+    .where(sql`${emailOutbox.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`).groupBy(emailOutbox.status);
+
   // drizzle-orm mysql2 `execute` returns [rows, fields] — same shape as
   // getPublicStats(). Prefer that tuple form over treating the pair as rows.
   const asRows = (raw: unknown): Record<string, unknown>[] => {
@@ -1640,5 +1630,14 @@ export async function getObservabilityMetrics() {
     submissions7d: Number(sub7?.cnt ?? 0),
     approvals7d: Number(appr7?.cnt ?? 0),
     retractions: Number(retr?.cnt ?? 0),
+    reviewOps: {
+      awaitingDecision: Number(awaiting?.total ?? 0),
+      overdue24h: Number(awaiting?.overdue ?? 0),
+      decisions30d: Number(decided30?.total ?? 0),
+      decisionsWithin24h30d: Number(decided30?.within24h ?? 0),
+      avgHoursToDecision30d: decided30?.avgHours == null ? null : Math.round(Number(decided30.avgHours) * 10) / 10,
+      screening30d: Object.fromEntries(screeningRows.map(row => [row.status, Number(row.cnt)])) as Record<string, number>,
+      email7d: Object.fromEntries(outboxRows.map(row => [row.status, Number(row.cnt)])) as Record<string, number>,
+    },
   };
 }

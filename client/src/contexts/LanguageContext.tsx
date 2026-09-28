@@ -112,8 +112,8 @@ const en: Record<string, string> = {
   // Hero
   "hero.badge": "Digital research ethics · Saudi Arabia",
   "hero.title": "Institutional Review Board",
-  "hero.subtitle": "Research ethics workflows, without the paperwork",
-  "hero.desc": "Prepare clear research applications, organize your documents, and follow every review step in one place. AI helps identify gaps while the responsible human committee retains decision authority.",
+  "hero.subtitle": "IRB approval in Saudi Arabia — guided, fast and fully digital",
+  "hero.desc": "Apply in Arabic or English by guided form or chat, get instant quality tips before you submit, and follow your review online. Screening starts the moment you submit, with a 24-hour first-review target for complete applications. Qualified people make every ethics decision.",
   "hero.apply": "Prepare an application",
   "hero.verify": "Verify an IRB Certificate",
   "hero.learnMore": "Learn More",
@@ -121,8 +121,8 @@ const en: Record<string, string> = {
   "hero.cta.desc": "Start a structured application and review your protocol, consent materials, and responsibilities before submission.",
 
   // Stats
-  "stats.target": "Track progress",
-  "stats.targetDesc": "From draft to decision",
+  "stats.target": "24-hour target",
+  "stats.targetDesc": "First review for complete applications",
   "stats.ai": "AI-Powered",
   "stats.aiDesc": "Preparation assistance",
   "stats.committee": "Human review",
@@ -548,8 +548,8 @@ const ar: Record<string, string> = {
   // Hero
   "hero.badge": "أخلاقيات البحث رقمياً · السعودية",
   "hero.title": "لجنة أخلاقيات البحث العلمي",
-  "hero.subtitle": "إجراءات أخلاقيات البحث، من الورق إلى المنصة",
-  "hero.desc": "أعدّ طلباً بحثياً واضحاً ونظّم مستنداتك وتابع مراحل المراجعة في مكان واحد. يساعد الذكاء الاصطناعي على اكتشاف النواقص، وتبقى صلاحية القرار لدى اللجنة البشرية المختصة.",
+  "hero.subtitle": "موافقة أخلاقيات البحث في السعودية — موجّهة وسريعة ورقمية بالكامل",
+  "hero.desc": "قدّم بالعربية أو الإنجليزية عبر نموذج موجّه أو محادثة، واحصل على نصائح جودة فورية قبل التقديم، وتابع مراجعتك إلكترونياً. يبدأ الفحص فور التقديم، وهدفنا إتمام المراجعة الأولى خلال 24 ساعة للطلبات المكتملة. يتخذ أشخاص مؤهلون كل قرار أخلاقي.",
   "hero.apply": "إعداد طلب",
   "hero.verify": "التحقق من شهادة IRB",
   "hero.learnMore": "اعرف المزيد",
@@ -557,8 +557,8 @@ const ar: Record<string, string> = {
   "hero.cta.desc": "ابدأ طلباً منظماً وراجع بروتوكولك ومستندات الموافقة المستنيرة ومسؤولياتك قبل التقديم.",
 
   // Stats
-  "stats.target": "تابع التقدم",
-  "stats.targetDesc": "من المسودة إلى القرار",
+  "stats.target": "هدف 24 ساعة",
+  "stats.targetDesc": "للمراجعة الأولى للطلبات المكتملة",
   "stats.ai": "ذكاء اصطناعي",
   "stats.aiDesc": "مساعدة في الإعداد",
   "stats.committee": "مراجعة بشرية",

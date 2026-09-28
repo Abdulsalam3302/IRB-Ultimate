@@ -28,3 +28,9 @@ it("rejects attacker-shaped codes and SQL states", () => {
   expect(safeLogError(error)).toBe("Error");
   expect(safeLogError(Object.assign(new Error("x"), { code: "PARTICIPANT_JANE_DOE" }))).toBe("Error");
 });
+
+it("survives cyclic error causes", () => {
+  const a = new Error("a") as Error & { cause?: unknown }; const b = new Error("b") as Error & { cause?: unknown };
+  a.cause = b; b.cause = a;
+  expect(safeLogError(a)).toBe("Error");
+});

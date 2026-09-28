@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { useT } from "@/contexts/LanguageContext";
 import { Logo } from "@/components/design/Logo";
+import { APP_VERSION } from "@shared/const";
 import {
   Activity, ArrowLeft, Globe, Loader2, Shield, Users, FileText, Clock, BarChart3, Bot,
 } from "lucide-react";
@@ -117,7 +118,7 @@ export default function AdminObservability() {
               ? "زيارات، مواقع تقريبية، الوقت المستغرق، الحسابات، والطلبات — للمالك فقط."
               : "Visits, approximate locations, time on site, accounts, and applications — owner only."}
           </p>
-          <p className="font-mono text-[11px] text-muted-foreground mt-2">v2.1.0</p>
+          <p className="font-mono text-[11px] text-muted-foreground mt-2">v{APP_VERSION}</p>
         </div>
 
         {error && (
@@ -188,6 +189,43 @@ export default function AdminObservability() {
           </div>
         ) : (
           <>
+            {data.reviewOps && (
+              <Card className={data.reviewOps.overdue24h > 0 ? "border-amber-500/50" : "border-emerald-500/40"}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Clock className="h-4 w-4" />
+                    {isAr ? "عمليات المراجعة (هدف 24 ساعة)" : "Review operations (24-hour target)"}
+                  </CardTitle>
+                  <CardDescription>
+                    {isAr
+                      ? "تُعاد إحالة التكليفات المنتهية تلقائياً، ويُنبَّه المسؤولون عند تجاوز 24 ساعة."
+                      : "Lapsed assignments are renewed or reassigned automatically; admins are alerted past 24 hours."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <MetricCard icon={FileText} label={isAr ? "بانتظار القرار" : "Awaiting decision"} value={data.reviewOps.awaitingDecision} />
+                  <MetricCard icon={Clock} label={isAr ? "تجاوزت 24 ساعة" : "Past 24 hours"} value={data.reviewOps.overdue24h} />
+                  <MetricCard
+                    icon={Activity}
+                    label={isAr ? "قرارات خلال 24 ساعة (30ي)" : "Decided within 24h (30d)"}
+                    value={data.reviewOps.decisions30d ? `${Math.round((data.reviewOps.decisionsWithin24h30d / data.reviewOps.decisions30d) * 100)}% (${data.reviewOps.decisionsWithin24h30d}/${data.reviewOps.decisions30d})` : "—"}
+                  />
+                  <MetricCard
+                    icon={Clock}
+                    label={isAr ? "متوسط الساعات حتى القرار (30ي)" : "Avg hours to decision (30d)"}
+                    value={data.reviewOps.avgHoursToDecision30d ?? "—"}
+                  />
+                  <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4 font-mono">
+                    {isAr ? "الفحص (30ي): " : "Screening (30d): "}
+                    {Object.entries(data.reviewOps.screening30d).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"}
+                    {"  |  "}
+                    {isAr ? "البريد (7ي): " : "Email (7d): "}
+                    {Object.entries(data.reviewOps.email7d).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <MetricCard icon={Activity} label={isAr ? "الجلسات" : "Sessions"} value={data.sessions} />
               <MetricCard icon={BarChart3} label={isAr ? "مشاهدات الصفحات" : "Pageviews"} value={data.pageviews} />

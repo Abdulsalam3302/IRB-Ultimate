@@ -5,6 +5,7 @@ import {
   STAGE2_FIELDS,
   validateApplicationReadiness,
 } from "./irb.validation";
+import { assessSubmissionQuality } from "../../shared/submissionQuality";
 
 const LABELS: Record<string, [string, string]> = {
   researchType: ["Study type", "نوع الدراسة"],
@@ -83,6 +84,9 @@ export function getSubmissionReadiness(app: Application) {
       stage1: reviewState(app.stage1AiFeedback, app.stage1AiScore),
       stage2: reviewState(app.stage2AiFeedback, app.stage2AiScore),
     },
+    // Instant, deterministic guidance that helps applicants exceed the minimum; never blocks submission.
+    // After submission the same checks feed confidential screening, so they are not returned to the applicant.
+    ...(alreadySubmitted ? {} : { quality: assessSubmissionQuality(app) }),
     alreadySubmitted,
   };
 }

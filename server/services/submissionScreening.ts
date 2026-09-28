@@ -9,6 +9,8 @@ import { getColorFromScore, normalizeReviewJson, STAGE1_REVIEW_FIELDS, type AiRe
 import { evaluateStageSnapshot, stageReviewFingerprint, stageReviewInput, STAGE_REVIEW_VERSION } from "./applicationStageReview";
 import { STAGE1_FIELDS, STAGE2_FIELDS } from "./irb.validation";
 import { startAdaptivePoller, type AdaptivePoller } from "../_core/adaptivePoller";
+import { notifyScreeningEscalation } from "./reviewSla";
+import { ATTENTION_CHECKS, assessSubmissionQuality, isAttentionCheck, type AttentionCheck } from "../../shared/submissionQuality";
 
 const LEASE_MS = 120_000;
 const MAX_ATTEMPTS = 3;
@@ -24,9 +26,15 @@ export function parseScreeningSnapshot(job: Pick<ApplicationScreeningJob, "snaps
   return { ...fields, id: job.applicationId, applicantId: job.applicantId } as Application;
 }
 
-export function screeningOutcome(stage1: AiReviewResult, stage2: AiReviewResult) {
-  return [stage1, stage2].every(result => result.status === "completed" && result.passed && result.score >= 70 && !result.hasRedFlags)
+/** Any AI concern, unavailable assessment or deterministic attention flag routes the submission to focused human attention. */
+export function screeningOutcome(stage1: AiReviewResult, stage2: AiReviewResult, attention: readonly string[] = []) {
+  return attention.length === 0 && [stage1, stage2].every(result => result.status === "completed" && result.passed && result.score >= 70 && !result.hasRedFlags)
     ? "ready_for_human_decision" as const : "human_review_required" as const;
+}
+
+/** Deterministic checks on the immutable snapshot (no model call). */
+function attentionFlags(snapshot: Application): AttentionCheck[] {
+  return assessSubmissionQuality(snapshot).items.filter(item => item.status === "attention" && isAttentionCheck(item.id)).map(item => item.id as AttentionCheck);
 }
 
 function unavailable(reason: string): AiReviewResult {
@@ -171,10 +179,15 @@ export async function runSubmissionScreeningBatch(options: { applicationId?: num
       };
       if (!await checkpoint(job, progress)) return { processed: 1, outcome: "superseded" };
     }
-    const outcome = screeningOutcome(results[0], results[1]);
-    progress = { ...progress, outcome, completedAt: typeof progress.completedAt === "string" && Number.isFinite(Date.parse(progress.completedAt)) ? progress.completedAt : new Date().toISOString() };
+    const attention = attentionFlags(snapshot);
+    const outcome = screeningOutcome(results[0], results[1], attention);
+    progress = { ...progress, outcome, attention, completedAt: typeof progress.completedAt === "string" && Number.isFinite(Date.parse(progress.completedAt)) ? progress.completedAt : new Date().toISOString() };
     const retryMail = notificationRetry && job.attempts < MAX_ATTEMPTS;
     const written = await checkpoint(job, progress, retryMail ? undefined : outcome === "ready_for_human_decision" ? "completed" : "escalated", notificationRetry ? "notification_enqueue_unavailable" : null);
+    if (written && outcome === "human_review_required") {
+      // Escalate to administrators without exposing findings outside the confidential review workspace.
+      await notifyScreeningEscalation(job.applicationId, job.applicationVersion, job.applicantId).catch(() => undefined);
+    }
     if (written && retryMail) {
       const db = await getDb(); if (!db) throw new Error("screening_storage_unavailable");
       await db.update(applicationScreeningJobs).set({ status: "pending", leaseToken: null, leaseUntil: null, nextAttemptAt: new Date(Date.now() + 30_000 * 2 ** (job.attempts - 1)) })
@@ -226,10 +239,12 @@ export async function getSubmissionScreeningStatus(applicationId: number) {
   try { const parsed = JSON.parse(job.resultJson || "{}"); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) saved = parsed; } catch { /* pending or unavailable result */ }
   const stage1 = sanitizeScreeningStageResult(1, saved.stage1), stage2 = sanitizeScreeningStageResult(2, saved.stage2);
   const finished = saved.outcome === "ready_for_human_decision" || saved.outcome === "human_review_required";
-  const outcome = finished ? stage1 && stage2 ? screeningOutcome(stage1, stage2) : "human_review_required" : undefined;
+  const attention = Array.isArray(saved.attention) ? [...new Set(saved.attention.filter(isAttentionCheck))] : [];
+  const outcome = finished ? stage1 && stage2 ? screeningOutcome(stage1, stage2, attention) : "human_review_required" : undefined;
 
   return { status: outcome ? (outcome === "ready_for_human_decision" ? "completed" as const : "escalated" as const) : job.status,
     outcome, stage1, stage2,
+    ...(attention.length ? { attention: attention.map(id => ({ id, titleEn: ATTENTION_CHECKS[id][0], titleAr: ATTENTION_CHECKS[id][1] })) } : {}),
     ...(typeof saved.completedAt === "string" && Number.isFinite(Date.parse(saved.completedAt)) ? { completedAt: saved.completedAt } : {}),
     ...(job.lastErrorCode ? { lastError: job.lastErrorCode === "notification_enqueue_unavailable" ? "Email notification could not be queued; the assessment remains available here." : "Automated processing could not be completed for this submission. Human review is required." } : {}),
   };
@@ -239,6 +254,13 @@ let screeningPoller: AdaptivePoller | null = null;
 
 /** Start work on a fresh submission now instead of waiting for the idle poll. */
 export function wakeSubmissionScreeningWorker(): void { screeningPoller?.wake(); }
+
+/** Applicants see progress only. Scores, findings and outcomes stay in the confidential reviewer workspace. */
+export function applicantScreeningView(status: Awaited<ReturnType<typeof getSubmissionScreeningStatus>>) {
+  if (!status) return null;
+  const active = status.status === "pending" || status.status === "running";
+  return { status: active ? status.status : "completed" as const, audience: "applicant" as const };
+}
 
 /** Single bounded job per tick; process crashes are recovered by the durable lease.
  * Polls every 5s while jobs exist and backs off to 60s when idle or when storage is unavailable. */

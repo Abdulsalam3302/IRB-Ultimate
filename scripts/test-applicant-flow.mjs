@@ -83,6 +83,15 @@ const ready = {
   blockers: [],
   alreadySubmitted: false,
   ai: { stage1: "not_reviewed", stage2: "unavailable" },
+  quality: {
+    score: 67,
+    level: "needs_work",
+    items: [
+      { id: "primary_objective", status: "pass", field: "researchObjectives", stage: 2, titleEn: "Clear primary objective", titleAr: "هدف رئيس واضح", tipEn: "State one primary objective.", tipAr: "اذكر هدفاً رئيساً واحداً." },
+      { id: "sample_justification", status: "improve", field: "sampleSize", stage: 2, titleEn: "Justified sample size", titleAr: "حجم عينة مبرر", tipEn: "Give the planned number and how it was derived.", tipAr: "اذكر العدد المخطط وطريقة اشتقاقه." },
+      { id: "vulnerable_safeguards", status: "attention", field: "targetPopulation", stage: 2, titleEn: "Safeguards for vulnerable participants", titleAr: "ضمانات للمشاركين من الفئات المستضعفة", tipEn: "Describe guardian consent and child assent.", tipAr: "صف موافقة ولي الأمر وموافقة الطفل." },
+    ],
+  },
 };
 const sourceFiles = [
   "client/src/pages/ApplyStage1.tsx",
@@ -621,6 +630,24 @@ try {
         `${lang} complete application can submit without AI score`,
         (await final.isEnabled()) && state.submissions === 0
       );
+      check(
+        `${lang} quality tips guide without blocking submission`,
+        (await page
+          .getByRole("heading", {
+            name: isAr
+              ? "تحسينات مقترحة قبل التقديم"
+              : "Suggested improvements before you submit",
+            exact: true,
+          })
+          .count()) === 1 &&
+          (await page
+            .getByRole("link", {
+              name: isAr ? "حجم عينة مبرر" : "Justified sample size",
+              exact: true,
+            })
+            .getAttribute("href")) === "/apply/42/stage2#sampleSize" &&
+          (await final.isEnabled())
+      );
       await page.screenshot({
         path: path.join(output, `${lang}-submit.png`),
         fullPage: true,
@@ -766,6 +793,30 @@ try {
         fullPage: true,
       });
       await f.finish("background screening presentation");
+    }
+    {
+      const f = await fixture(lang);
+      const { page, state } = f;
+      state.app.screening = { status: "completed", audience: "applicant" };
+      state.app.status = "under_review";
+      await f.navigate("/application/42");
+      await page
+        .getByText(
+          isAr
+            ? "طلبك لدى لجنة المراجعة"
+            : "Your application is with the review committee",
+          { exact: true }
+        )
+        .waitFor();
+      check(
+        `${lang} applicant sees confidential progress without screening findings`,
+        (await page
+          .locator("summary")
+          .filter({ hasText: isAr ? "ملاحظات المرحلة" : "feedback" })
+          .count()) === 0 &&
+          (await page.locator('[data-testid="ai-review-score"]').count()) === 0
+      );
+      await f.finish("confidential applicant screening");
     }
     {
       const f = await fixture(lang, { submissionDelay: 800 });

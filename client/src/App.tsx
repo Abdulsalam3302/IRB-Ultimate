@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AnalyticsBeacon } from "./components/AnalyticsBeacon";
 import { RouteMetadata } from "./components/RouteMetadata";
+import { MaintenanceBanner } from "./components/MaintenanceBanner";
 
 // Experimental tool definitions load only in browsers exposing WebMCP.
 const WebMcpProvider = lazy(() => import("./components/WebMcpProvider").then(module => ({ default: module.WebMcpProvider })));
@@ -108,6 +109,7 @@ function App() {
         <LanguageProvider>
           <TooltipProvider>
             <Toaster />
+            <MaintenanceBanner />
             <BrowserTools />
             <Router />
           </TooltipProvider>

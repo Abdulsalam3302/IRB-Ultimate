@@ -5,6 +5,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      allow_unready:
+        description: "Continue to the frontend even if the backend reports its database unavailable (maintenance deploys)"
+        type: boolean
+        default: false
 concurrency:
   group: deploy-irb-sa
   cancel-in-progress: false
@@ -14,7 +19,7 @@ permissions:
 jobs:
   verified-revision:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       sha: ${{ steps.revision.outputs.sha }}
     steps:
@@ -31,7 +36,7 @@ jobs:
           echo "sha=$CANDIDATE" >> "$GITHUB_OUTPUT"
   deploy-render:
     needs: verified-revision
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Deploy verified backend revision
@@ -57,22 +62,39 @@ jobs:
               -H "Authorization: Bearer ${RENDER_API_KEY}" > /tmp/render-status.json
             STATUS=$(jq -er .status /tmp/render-status.json)
             case "$STATUS" in
-              live) jq -e --arg sha "$VERIFIED_SHA" '.commit.id == $sha' /tmp/render-status.json; exit 0 ;;
+              live) jq -e --arg sha "$VERIFIED_SHA" '.commit.id == $sha' /tmp/render-status.json; break ;;
               build_failed|update_failed|pre_deploy_failed|canceled|deactivated) echo "Backend deployment failed: $STATUS"; exit 1 ;;
             esac
             sleep 15
           done
-          echo 'Backend deployment did not reach live before the deadline.'; exit 1
+          [ "$STATUS" = live ] || { echo 'Backend deployment did not reach live before the deadline.'; exit 1; }
+      - name: Confirm backend readiness (database and schema)
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL }}
+          ALLOW_UNREADY: ${{ inputs.allow_unready || false }}
+        run: |
+          set -uo pipefail
+          # Render's liveness check keeps the process up during database outages; a release is
+          # only complete once /api/ready confirms the database and schema.
+          for i in {1..20}; do
+            if curl -fsS --max-time 30 "$RENDER_URL/api/ready" -o /tmp/ready.json && jq -e '.ok == true' /tmp/ready.json >/dev/null; then
+              echo "Backend ready: $(cat /tmp/ready.json)"; exit 0
+            fi
+            sleep 15
+          done
+          echo "::error title=Backend not ready::The new backend is live but /api/ready did not pass: $(head -c 300 /tmp/ready.json 2>/dev/null). Check Render logs for the [migrate]/[ready] driver code."
+          [ "$ALLOW_UNREADY" = "true" ] && { echo "::warning::Continuing because allow_unready was set."; exit 0; }
+          exit 1
   deploy-vercel:
     needs: [verified-revision, deploy-render]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.verified-revision.outputs.sha }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with: {node-version: 24, cache: pnpm}
       - run: npm install -g vercel@55.0.0
       - name: Check deployment credential rotation date

@@ -40,6 +40,18 @@
       "destination": "/verify/index.html"
     },
     {
+      "source": "/resources/guideline/how-to-get-irb-approval-saudi-arabia",
+      "destination": "/resources/guideline/how-to-get-irb-approval-saudi-arabia/index.html"
+    },
+    {
+      "source": "/resources/guideline/irb-application-checklist",
+      "destination": "/resources/guideline/irb-application-checklist/index.html"
+    },
+    {
+      "source": "/resources/guideline/exempt-expedited-full-board-review",
+      "destination": "/resources/guideline/exempt-expedited-full-board-review/index.html"
+    },
+    {
       "source": "/resources/guideline/nbce-ethical-guidelines",
       "destination": "/resources/guideline/nbce-ethical-guidelines/index.html"
     },
@@ -60,11 +72,22 @@
       "destination": "/resources/guideline/privacy-policy/index.html"
     },
     {
-      "source": "/((?!assets/|robots\\.txt$|sitemap\\.xml$|llms\\.txt$|favicon\\.svg$|logo\\.svg$|ahss-logo\\.png$).*)",
+      "source": "/((?!assets/|robots\\.txt$|sitemap\\.xml$|llms\\.txt$|llms-full\\.txt$|og-image\\.jpg$|site\\.webmanifest$|favicon\\.svg$|logo\\.svg$|ahss-logo\\.png$|email-logo\\.png$).*)",
       "destination": "/workspace.html"
     }
   ],
   "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.irb-sa.org"
+        }
+      ],
+      "destination": "https://irb-sa.org/:path*",
+      "permanent": true
+    },
     {
       "source": "/sign-in",
       "destination": "/auth",
@@ -308,6 +331,43 @@
         {
           "key": "X-Robots-Tag",
           "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "irb-saudi-arabia.vercel.app"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/(llms\\.txt|llms-full\\.txt)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/og-image.jpg",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
         }
       ]
     }

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useT } from "@/contexts/LanguageContext";
 import { Navbar } from "@/components/Navbar";
 import { ArrowLeft, Send, Loader2, FileText } from "lucide-react";
+import { SubmissionQualityPanel } from "@/components/SubmissionQualityPanel";
 
 export default function SubmitApplication() {
   const { id } = useParams<{ id: string }>();
@@ -197,6 +198,13 @@ export default function SubmitApplication() {
                         </p>
                       )}
                   </section>
+                  {readiness.quality && (
+                    <SubmissionQualityPanel
+                      quality={readiness.quality}
+                      appId={appId}
+                      isAr={isAr}
+                    />
+                  )}
                   <details className="rounded-lg border p-4">
                     <summary className="cursor-pointer font-medium">
                       {isAr
@@ -230,8 +238,8 @@ export default function SubmitApplication() {
                     </p>
                     <p>
                       {isAr
-                        ? "تعتمد المدة على مخاطر الدراسة ومتطلبات اللجنة وتوفر المراجعين. يتطلب القرار النهائي صلاحية مؤسسية مخولة؛ التقديم بحد ذاته لا يجيز بدء البحث."
-                        : "Timing depends on study risk, committee requirements and reviewer availability. The final decision requires verified institutional authority; submitting does not authorize research to begin."}
+                        ? "يبدأ الفحص فور التقديم، وهدفنا إتمام المراجعة الأولى خلال 24 ساعة للطلبات المكتملة. قد تطول المدة بحسب مخاطر الدراسة ومتطلبات اللجنة. يتطلب القرار النهائي صلاحية مؤسسية مخولة؛ التقديم بحد ذاته لا يجيز بدء البحث."
+                        : "Screening starts the moment you submit, and our target is a first review within 24 hours for complete applications. Higher-risk studies or committee requirements can take longer. The final decision requires verified institutional authority; submitting does not authorize research to begin."}
                     </p>
                     <p className="text-muted-foreground">
                       {isAr

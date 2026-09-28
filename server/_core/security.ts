@@ -69,10 +69,22 @@ export function rateScope(path: string): "auth" | "strict" | "general" {
   return "general";
 }
 
+/**
+ * Express matches routes case-insensitively, so `/API/auth/login` reaches the
+ * same handler as `/api/auth/login`. Normalize the API prefix (tRPC procedure
+ * names stay case-sensitive, as tRPC resolves them) before policy checks.
+ */
+export function normalizeApiPath(path: string): string {
+  if (/^\/api\/trpc\//i.test(path)) return "/api/trpc/" + path.slice("/api/trpc/".length);
+  if (/^\/api(?:\/|$)/i.test(path)) return path.toLowerCase();
+  return path;
+}
+
 async function rateLimit(req: Request, res: Response, next: NextFunction) {
-  if (!req.path.startsWith("/api/") || ["/api/health", "/api/ready"].includes(req.path)) return next();
+  const apiPath = normalizeApiPath(req.path);
+  if (!apiPath.startsWith("/api/") || ["/api/health", "/api/ready"].includes(apiPath)) return next();
   if (req.method === "OPTIONS") return next();
-  const scope = rateScope(req.path);
+  const scope = rateScope(apiPath);
   const limit = scope === "auth" ? AUTH_RATE_LIMIT : scope === "strict" ? STRICT_RATE_LIMIT : RATE_LIMIT;
   try {
     // Reject an exhausted caller before charging shared capacity. Otherwise one
@@ -80,6 +92,7 @@ async function rateLimit(req: Request, res: Response, next: NextFunction) {
     const result = await consumeRateLimit(`api-${scope}`, clientIpKey(req), limit, RATE_WINDOW_MS);
     if (!result.allowed) {
       res.setHeader("Retry-After", result.retryAfter);
+      if (result.unavailable) res.setHeader("X-Service-State", "maintenance");
       res.status(result.unavailable ? 503 : 429).json({ error: result.unavailable ? "Service temporarily unavailable" : "Too many requests" });
       return;
     }

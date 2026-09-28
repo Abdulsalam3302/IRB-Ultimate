@@ -1,0 +1,16 @@
+{
+  "name": "IRB Saudi Arabia",
+  "short_name": "IRB SA",
+  "description": "Research ethics (IRB) applications in Saudi Arabia — guided, fast and fully digital.",
+  "lang": "en",
+  "dir": "auto",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6faf8",
+  "theme_color": "#064e3b",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

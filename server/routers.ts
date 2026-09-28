@@ -20,7 +20,8 @@ import { notifyOwner } from "./_core/notification";
 import { runApplicationStageReview } from "./services/applicationStageReview";
 import { mailAdminRouter } from "./email/adminRouter";
 import { chatApplicationTurn } from "./services/chatApplication.service";
-import { getSubmissionScreeningStatus, wakeSubmissionScreeningWorker } from "./services/submissionScreening";
+import { applicantScreeningView, getSubmissionScreeningStatus, wakeSubmissionScreeningWorker } from "./services/submissionScreening";
+import { reassignExpiredReviews } from "./services/reviewSla";
 import { getSubmissionReadiness } from "./services/submissionReadiness";
 import { IRB_REQUIREMENTS } from "./services/irb.validation";
 import { assertStorageBinding, storagePut } from "./storage";
@@ -235,7 +236,10 @@ const applicationRouter = router({
       const app = await loadApplicationForViewer(ctx, input.id);
       const applicant = await db.getUserById(app.applicantId);
       const authors = await db.getAuthorsByApplication(input.id);
-      return { ...app, applicantName: applicant?.name, applicantEmail: applicant?.email, authors, screening: await getSubmissionScreeningStatus(input.id) };
+      const screening = await getSubmissionScreeningStatus(input.id);
+      // Automated screening is a confidential reviewer aid: the applicant sees progress, never findings or outcome.
+      return { ...app, applicantName: applicant?.name, applicantEmail: applicant?.email, authors,
+        screening: app.applicantId === ctx.user.id ? applicantScreeningView(screening) : screening };
     }),
 
   myApplications: protectedProcedure.query(async ({ ctx }) => {
@@ -1151,7 +1155,7 @@ const reviewRouter = router({
   myPendingReviews: staffProcedure.query(async ({ ctx }) => {
     const member = await db.getCommitteeMemberByUserId(ctx.user.id);
     if (!member?.isActive || !member.appointedAt || !member.qualificationReference) return [];
-    await db.expireOldReviews();
+    // Only live assignments; the background sweep renews or reassigns lapsed ones.
     const reviews = await db.getPendingReviewsByMember(member.id);
     const enriched = await Promise.all(reviews.map(async (r) => {
       const app = await db.getApplicationById(r.applicationId);
@@ -1578,44 +1582,10 @@ const adminRouter = router({
     return db.getResearchTypeDistribution();
   }),
 
-  // Expire and reassign reviews (cron-like endpoint)
+  // Expire lapsed assignments and reassign (also runs automatically every 30 minutes).
   expireAndReassignReviews: adminProcedure.mutation(async ({ ctx }) => {
-    const expired = await db.expireAndGetExpiredReviews();
-    let reassigned = 0;
-
-    for (const review of expired) {
-      const app = await db.getApplicationById(review.applicationId);
-      if (!app || app.status !== "under_review") continue;
-
-      // Find a new committee member not already assigned
-      const existingAssignments = await db.getReviewsByApplication(review.applicationId);
-      const assignedMemberIds = existingAssignments.map(r => r.committeeMemberId);
-      const activeMembers = await db.getActiveCommitteeMembers();
-      const available = activeMembers.filter(m => !assignedMemberIds.includes(m.id));
-
-      if (available.length > 0) {
-        const newMember = available[Math.floor(Math.random() * available.length)];
-        try {
-          await db.assignHumanReviewer(review.applicationId, newMember.id);
-        } catch (error) {
-          if (error instanceof TRPCError && error.code === "CONFLICT") continue;
-          throw error;
-        }
-        reassigned++;
-
-        try {
-          await emailService.notifyCommitteeAssigned(newMember.id, review.applicationId, app.researchTitle || "Untitled");
-        } catch (e) { /* best-effort */ }
-      }
-    }
-
-    await db.addAuditLog({
-      userId: ctx.user.id,
-      action: "cron_expire_reassign",
-      details: `Expired ${expired.length} reviews, reassigned ${reassigned}`,
-    });
-
-    return { expired: expired.length, reassigned };
+    const result = await reassignExpiredReviews(ctx.user.id);
+    return { expired: result.expired, reassigned: result.reassigned + result.renewed };
   }),
   // ─── Continuing-review cron — runs daily, sends a reminder for any
   //   approved IRB whose anniversary is within `daysAhead` (default 30)

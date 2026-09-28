@@ -1,6 +1,8 @@
-# IRB Ultimate 2.4.2
+# IRB Saudi Arabia 2.6.0
 
-IRB Ultimate is a bilingual Arabic/English research ethics workflow platform being prepared for a controlled Saudi Arabia pilot. It supports protocol drafting, advisory AI checks, qualified human committee review, decision records, and public verification of eligible decisions.
+Official site: **[irb-sa.org](https://irb-sa.org)** · Release notes: [docs/release-2.6.md](docs/release-2.6.md)
+
+IRB Saudi Arabia (repository: IRB Ultimate) is a bilingual Arabic/English research ethics workflow platform being prepared for a controlled Saudi Arabia pilot. It supports protocol drafting, advisory AI checks, qualified human committee review, decision records, and public verification of eligible decisions.
 
 **The software does not confer IRB registration, government endorsement, institutional authority, or international recognition.** Approval and issuance remain disabled by default (`IRB_ISSUANCE_ENABLED=false`). A qualified, authorized human committee must make final decisions. Planned global expansion in 2027 requires validation for each jurisdiction and institution; recognition is not activated by the calendar.
 
@@ -11,6 +13,9 @@ IRB Ultimate is a bilingual Arabic/English research ethics workflow platform bei
 - Runs two advisory model panels, each comprising six domain analyses and a synthesis. These are model outputs, not hundreds of experts, independent human votes, or a committee quorum.
 - Records human committee assignments, decisions, audit history and decision provenance. Draft edits invalidate prior AI checks, and locked applications reject chat changes.
 - Generates status-aware PDF/DOCX decision records, draft proposals, and bilingual resource templates. Public decision copies are redacted and require recorded human provenance; legacy automated approvals are not retroactively attested.
+- Screens every submission automatically as a confidential reviewer aid (AI stage reviews plus deterministic attention checks). Applicants see progress only; reviewers and administrators see findings, and anything needing judgement is escalated to people.
+- Helps applicants exceed the minimum with instant, bilingual pre-submission quality tips and a coaching chat assistant.
+- Runs a 24-hour first-review service standard: 24-hour assignment windows, due-soon reminders, automatic renewal/reassignment of lapsed assignments (least-loaded independent reviewer first) and administrator escalation, with measured results in Observability.
 - Exposes public information for search/answer engines and read-only browser WebMCP tools and authenticated server MCP workflow tools (including draft edits and submission). Automation receives no authority to approve research or bypass authentication.
 
 ## Runtime and local setup

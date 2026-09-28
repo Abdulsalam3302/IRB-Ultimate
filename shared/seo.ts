@@ -11,8 +11,8 @@ export type PublicPageMetadata = {
 
 /** Public information only. Never add application, identity, or certificate-number routes. */
 export const PUBLIC_PAGES: PublicPageMetadata[] = [
-  { path: "/", titleEn: "Digital IRB workflows for Saudi Arabia", titleAr: "إدارة طلبات أخلاقيات البحث رقمياً في السعودية", descriptionEn: "Prepare research ethics applications, organize documents, and support accountable committee review with AI assistance. Built for Saudi Arabia; global expansion planned from 2027.", descriptionAr: "أعدّ طلبات أخلاقيات البحث ونظّم المستندات وتابع مراجعة اللجنة بمساعدة الذكاء الاصطناعي. منصة للسعودية مع توسع دولي مخطط له ابتداءً من 2027." },
-  { path: "/resources", titleEn: "Research ethics resources and templates", titleAr: "موارد ونماذج أخلاقيات البحث", descriptionEn: "Preparation guides and draft templates for research protocols, informed consent, and research ethics applications in Saudi Arabia.", descriptionAr: "أدلة إعداد ونماذج أولية لبروتوكولات البحث والموافقة المستنيرة وطلبات أخلاقيات البحث في السعودية." },
+  { path: "/", titleEn: "Online IRB & Research Ethics Approval in Saudi Arabia", titleAr: "طلب موافقة أخلاقيات البحث (IRB) إلكترونياً في السعودية", descriptionEn: "Apply for research ethics (IRB) approval in Saudi Arabia online: guided Arabic/English form or chat, instant quality checks and a 24-hour first-review target.", descriptionAr: "قدّم طلب موافقة أخلاقيات البحث (IRB) إلكترونياً في السعودية: نموذج موجّه أو محادثة بالعربية والإنجليزية، ونصائح جودة فورية، وهدف مراجعة أولى خلال 24 ساعة." },
+  { path: "/resources", titleEn: "IRB Guides, Checklists and Templates for Saudi Researchers", titleAr: "أدلة وقوائم تحقق ونماذج أخلاقيات البحث للباحثين في السعودية", descriptionEn: "Step-by-step IRB guides, an application checklist, review categories, consent and data protection guidance, and draft templates for research in Saudi Arabia.", descriptionAr: "أدلة خطوة بخطوة لطلبات أخلاقيات البحث، وقائمة تحقق، وفئات المراجعة، وإرشادات الموافقة وحماية البيانات، ونماذج أولية للبحث في السعودية." },
   { path: "/policy", titleEn: "Platform use and research review policy", titleAr: "سياسة استخدام المنصة ومراجعة البحوث", descriptionEn: "Understand the platform's scope, researcher responsibilities, AI assistance, human decision authority, and data protection requirements.", descriptionAr: "تعرّف على نطاق المنصة ومسؤوليات الباحث ودور الذكاء الاصطناعي وصلاحية القرار البشري ومتطلبات حماية البيانات." },
   { path: "/disclaimer", titleEn: "About IRB Saudi Arabia and service scope", titleAr: "عن منصة IRB السعودية ونطاق الخدمة", descriptionEn: "Learn about the independent digital research ethics workflow platform, its founder, service limitations, and planned international expansion.", descriptionAr: "تعرّف على المنصة المستقلة لإدارة إجراءات أخلاقيات البحث ومؤسسها وحدود الخدمة وخطط التوسع الدولي." },
   { path: "/support", titleEn: "Researcher support", titleAr: "دعم الباحثين", descriptionEn: "Get help with research ethics applications, account access, document preparation, and platform issues.", descriptionAr: "احصل على المساعدة في طلبات أخلاقيات البحث والدخول إلى الحساب وإعداد المستندات ومشكلات المنصة." },
@@ -34,6 +34,11 @@ export function getPageMetadata(path: string, language: SiteLanguage = "en") {
     indexable: Boolean(page),
   };
 }
+
+export const SITE_NAME = "IRB Saudi Arabia";
+/** Update when public page or guide content changes (drives sitemap lastmod and schema dateModified). */
+export const PUBLIC_CONTENT_UPDATED = "2026-09-28";
+export const SITE_NAME_AR = "منصة IRB السعودية";
 
 /** Only a configured HTTPS origin can become a canonical or sitemap hostname. */
 export function getPublicSiteOrigin(value: unknown): string | null {

@@ -36,6 +36,10 @@ The GitHub **Runtime readiness monitor** opens one issue titled "Production read
 
 Idle database load is deliberately small: readiness answers are cached for 30 s with a full schema check at most every 10 minutes, and the screening, email and storage-deletion workers back off to 60 s / 60 s / 5 min when idle (submissions and queued mail wake them immediately).
 
+### 24-hour review service standard
+
+Assignments carry a 24-hour window. A self-healing background sweep every 30 minutes tops each awaiting application back up to its required reviewers (five for full board, otherwise one, counting votes already cast) under the application row lock, preferring the least-loaded independent reviewer and renewing a lapsed reviewer only when nobody else is available. It reminds reviewers six hours before their window ends and notifies administrators (never the applicant) once per submission when an application waits more than 24 hours for a human decision. Administrators can also run **Expire & reassign** manually. Track results under Observability → Review operations. The target is published as a target, not a guarantee.
+
 The owner observability interface is restricted; staff MFA applies. Optional error reporting must be privacy-filtered and covered by a processor agreement. In-app notifications are not external email delivery. Assign a monitored on-call/security channel and committee escalation owner outside the application.
 
 Do not log passwords, JWTs, signed download URLs, API keys, raw prompts, attachments or participant information. Diagnose failures using event categories, timestamps and authorized record references.

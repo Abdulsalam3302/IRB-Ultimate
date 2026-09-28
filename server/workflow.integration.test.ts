@@ -106,6 +106,10 @@ run("transactional workflow authority and privacy (isolated local database)", ()
     const result = await caller(applicant).application.submit({ id: app.id });
     expect(result).toMatchObject({ success: true, assignedMembers: 1, reviewStatus: "queued" });
     expect((await db.getApplicationById(app.id))?.humanDecisionAt).toBeNull();
+    // Screening is a confidential reviewer aid; the applicant receives progress only.
+    const view = await caller(applicant).application.getById({ id: app.id });
+    expect(view.screening).toEqual({ status: "pending", audience: "applicant" });
+    expect(readiness.quality).toMatchObject({ score: expect.any(Number), items: expect.any(Array) });
   });
 
   it("edits a legacy passed draft and records its real submission only once under concurrent retries", async () => {

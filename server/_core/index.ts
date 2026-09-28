@@ -1,6 +1,6 @@
+import "dotenv/config";
 import { safeErrorCode, safeLogError } from "./safeLog";
 import { isDatabaseAvailabilityError } from "./dbAvailability";
-import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
 import net from "net";
@@ -14,7 +14,7 @@ import { registerEmailRoutes } from "../email/routes";
 import { startEmailOutboxWorker } from "../email/outbox";
 import { registerNativeAuthRoutes } from "./nativeAuth";
 import { registerAuthRedirectRoutes } from "./authRedirects";
-import { registerSecurity, registerApiGuards, registerErrorHandler, createUploadAdmission } from "./security";
+import { registerSecurity, registerApiGuards, registerErrorHandler, createUploadAdmission, normalizeApiPath } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -32,6 +32,7 @@ import { pingDatabase, verifyDatabaseReadiness } from "./readiness";
 import { assertStaffMfa } from "./staffAuth";
 import { attachRemoteScanner } from "../services/remoteScanner";
 import { startStorageDeletionWorker } from "../services/storageDeletion";
+import { startReviewSlaWorker } from "../services/reviewSla";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -91,7 +92,7 @@ async function startServer() {
   const startWorkers = () => {
     if (workersStarted) return;
     workersStarted = true;
-    stops.push(startEmailOutboxWorker(), startSubmissionScreeningWorker(), startStorageDeletionWorker());
+    stops.push(startEmailOutboxWorker(), startSubmissionScreeningWorker(), startStorageDeletionWorker(), startReviewSlaWorker());
     startCertificateBackupScheduler();
     void ensureDefaultCommittee()
       .then(r => console.log("[committee] auto-enroll", r))
@@ -131,10 +132,12 @@ async function startServer() {
   // While the database is unavailable, answer API and private-file requests with a
   // clear, retryable message instead of hanging on connection timeouts.
   registerSecurity(app, { beforeRateLimit: (req, res, next) => {
-    if (databaseGate.ready || req.path === "/api/health" || req.path === "/api/ready") return next();
-    if (!(req.path.startsWith("/api/") || req.path.startsWith("/uploads/"))) return next();
+    const path = normalizeApiPath(req.path);
+    if (databaseGate.ready || path === "/api/health" || path === "/api/ready") return next();
+    if (!(path.startsWith("/api/") || path.toLowerCase().startsWith("/uploads/"))) return next();
     res.setHeader("Retry-After", "60");
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Service-State", "maintenance");
     res.status(503).json({
       error: "temporarily_unavailable",
       message: "The service is briefly unavailable for maintenance. Your saved work is safe — please try again in a few minutes.",

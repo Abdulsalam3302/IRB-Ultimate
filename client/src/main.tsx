@@ -7,6 +7,7 @@ import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
+import { observeApiResponse } from "./lib/serviceStatus";
 
 const queryClient = new QueryClient();
 
@@ -44,11 +45,13 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: `${API_BASE}/api/trpc`,
       transformer: superjson,
-      fetch(input, init) {
-        return globalThis.fetch(input, {
+      async fetch(input, init) {
+        const response = await globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
         });
+        observeApiResponse(response);
+        return response;
       },
     }),
   ],

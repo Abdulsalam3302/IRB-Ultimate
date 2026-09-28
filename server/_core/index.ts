@@ -83,7 +83,6 @@ async function startServer() {
     }
   }
   const app = express();
-  registerEmailRoutes(app);
   const server = createServer(app);
   const closeRemoteScanner = attachRemoteScanner(server);
   const stops: Array<() => unknown> = [];
@@ -144,6 +143,10 @@ async function startServer() {
       messageAr: "الخدمة غير متاحة مؤقتاً للصيانة. أعمالك المحفوظة آمنة — يرجى المحاولة بعد دقائق.",
     });
   } });
+  // Signed email webhooks and unsubscribe links need their raw/urlencoded bodies, so they
+  // mount before the JSON parsers but after security headers, the maintenance gate and
+  // the shared rate limiter.
+  registerEmailRoutes(app);
   app.use(createUploadAdmission(req => sdk.authenticateRequest(req)));
   // Body parser sizing — the 21 MB cap covers a 15 MB upload + base64 +
   // wrapping JSON, but only for the upload route. Everything else is

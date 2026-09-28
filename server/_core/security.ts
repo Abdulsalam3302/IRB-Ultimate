@@ -336,7 +336,8 @@ function originGuard(req: Request, res: Response, next: NextFunction) {
  */
 function corsForApi(req: Request, res: Response, next: NextFunction) {
   const origin = req.headers.origin as string | undefined;
-  if (origin && ENV.allowedOrigins.some(entry => originMatches(entry, origin))) {
+  // Credentialed CORS is only reflected for explicit HTTPS/HTTP allowlisted origins, never "null".
+  if (origin && origin !== "null" && /^https?:\/\//.test(origin) && ENV.allowedOrigins.some(entry => originMatches(entry, origin))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.vary("Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");

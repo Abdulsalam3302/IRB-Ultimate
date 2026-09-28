@@ -78,6 +78,17 @@
   ],
   "redirects": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.irb-sa.org"
+        }
+      ],
+      "destination": "https://irb-sa.org/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [
         {

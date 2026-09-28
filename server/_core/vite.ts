@@ -65,8 +65,11 @@ export function serveStatic(app: Express) {
     const metadata = getPageMetadata(req.path);
     res.setHeader("Cache-Control", metadata.indexable ? "public, max-age=0, must-revalidate" : "private, no-store");
     if (!metadata.indexable) res.setHeader("X-Robots-Tag", "noindex, nofollow");
-    const staticPage = path.join(distPath, req.path, "index.html");
-    if (metadata.indexable && fs.existsSync(staticPage)) return res.sendFile(staticPage);
+    // Only a known public route (never raw request input) selects a pre-rendered page,
+    // and the resolved file must stay inside the build directory.
+    const root = path.resolve(distPath);
+    const staticPage = metadata.indexable ? path.resolve(root, `.${metadata.path}`, "index.html") : "";
+    if (staticPage && staticPage.startsWith(root + path.sep) && fs.existsSync(staticPage)) return res.sendFile(staticPage);
     res.sendFile(path.resolve(distPath, "workspace.html"));
   });
 }

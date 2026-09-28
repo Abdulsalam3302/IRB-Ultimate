@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -27,7 +28,7 @@ try {
   check('anonymous application read denied', (await first.rpc('application.myApplications')).status === 401);
   check('cross-origin mutation denied', (await first.request('/api/auth/login', { method: 'POST', headers: { origin: 'https://untrusted.invalid' }, body: '{}' })).status === 403);
   check('malformed JSON classified400', (await first.request('/api/auth/login', { method: 'POST', body: '{' })).status === 400);
-  const seed = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const seed = `${Date.now()}-${randomUUID().slice(0, 8)}`;
   for (const [i, c] of [first, second].entries()) {
     const res = await c.request('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: `readiness-${seed}-${i}@example.test`, password: `Disposable-${seed}-Only!`, name: 'Synthetic Researcher' }) });
     check(`synthetic researcher${i + 1} registered`, res.status === 200);

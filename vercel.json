@@ -72,7 +72,7 @@
       "destination": "/resources/guideline/privacy-policy/index.html"
     },
     {
-      "source": "/((?!assets/|robots\\.txt$|sitemap\\.xml$|llms\\.txt$|llms-full\\.txt$|og-image\\.jpg$|site\\.webmanifest$|favicon\\.svg$|logo\\.svg$|ahss-logo\\.png$|email-logo\\.png$).*)",
+      "source": "/((?!assets/|robots\\.txt$|sitemap\\.xml$|llms\\.txt$|llms-full\\.txt$|og-image\\.jpg$|site\\.webmanifest$|favicon\\.svg$|logo\\.svg$|ahss-logo\\.png$|email-logo\\.png$|google[0-9a-f]+\\.html$|[0-9a-f]{32}\\.txt$).*)",
       "destination": "/workspace.html"
     }
   ],

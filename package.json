@@ -76,7 +76,7 @@
     "playwright": "^1.63.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
-    "react-day-picker": "^9.14.0",
+    "react-day-picker": "^10.0.2",
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.89.0",
     "react-resizable-panels": "^3.0.6",

@@ -47,6 +47,14 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$RENDER_API_KEY" && test -n "$RENDER_SERVICE_ID"
+          # Keep the existing IDs so a same-commit configuration redeploy cannot
+          # be mistaken for an older live instance while its new build is pending.
+          curl -fsS --max-time 30 "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys?limit=20" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" > /tmp/render-before.json || {
+              echo '::error title=Render deployment lookup failed::Cannot inspect existing deployments. Verify RENDER_API_KEY and service access.'; exit 1;
+            }
+          PREVIOUS_IDS=$(jq -ce '[.[].deploy.id]' /tmp/render-before.json)
+          REQUEST_STARTED_AT=$(date +%s)
           jq -n --arg sha "$VERIFIED_SHA" '{commitId:$sha,clearCache:"do_not_clear"}' > /tmp/render-deploy.json
           CODE=$(curl -sS --max-time 60 -o /tmp/render-receipt.json -w '%{http_code}' -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Content-Type: application/json' \
@@ -56,14 +64,21 @@ jobs:
             401|403) echo "::error title=Render API key rejected::The RENDER_API_KEY secret was rejected (HTTP $CODE). Create a new key in Render → Account Settings → API Keys, then run: gh secret set RENDER_API_KEY -R ${{ github.repository }}"; exit 1 ;;
             *) echo "::error title=Render deploy request failed::HTTP $CODE"; head -c 500 /tmp/render-receipt.json; exit 1 ;;
           esac
-          # Render answers 201 with the deploy, or 202 with no body when it queues behind a running
-          # deploy, so track the revision by commit: done once any deploy of this SHA is live.
+          REQUEST_DEPLOY_ID=$(jq -r '.id // .deploy.id // empty' /tmp/render-receipt.json 2>/dev/null || true)
+          # Follow the returned deploy ID. A queued 202 may have no body; in that
+          # case follow only a new deployment of this revision created after the
+          # request began, excluding every deployment seen before the request.
           find_deploy() {
             curl -fsS --max-time 30 "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys?limit=20" \
               -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            | jq -r --arg sha "$VERIFIED_SHA" '[.[].deploy | select(.commit.id == $sha)] as $d
+            | jq -r --arg sha "$VERIFIED_SHA" --arg requested_id "$REQUEST_DEPLOY_ID" \
+                --argjson previous_ids "$PREVIOUS_IDS" --argjson started_at "$REQUEST_STARTED_AT" '
+                [.[].deploy | select(.commit.id == $sha)
+                  | select(if $requested_id != "" then .id == $requested_id
+                    else .id as $id | ($previous_ids | index($id)) == null
+                      and ((.createdAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) >= $started_at)
+                    end)] as $d
                 | if ($d | length) == 0 then "- pending"
-                  elif any($d[]; .status == "live") then "\($d | map(select(.status == "live")) | .[0].id) live"
                   else ($d | sort_by(.createdAt) | last | "\(.id) \(.status)") end'
           }
           DEPLOY_ID=""; STATUS=""
@@ -71,7 +86,7 @@ jobs:
             read -r DEPLOY_ID STATUS < <(find_deploy || true) || true
             case "$STATUS" in
               live) echo "Backend ${VERIFIED_SHA} is live (deploy ${DEPLOY_ID})."; break ;;
-              build_failed|update_failed|pre_deploy_failed) echo "Backend deployment failed: $STATUS"; exit 1 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated) echo "Backend deployment failed: $STATUS"; exit 1 ;;
             esac
             sleep 15
           done
@@ -80,19 +95,33 @@ jobs:
         env:
           RENDER_URL: ${{ vars.RENDER_URL }}
           ALLOW_UNREADY: ${{ inputs.allow_unready || false }}
+          VERIFIED_SHA: ${{ needs.verified-revision.outputs.sha }}
         run: |
           set -uo pipefail
           # Render's liveness check keeps the process up during database outages; a release is
-          # only complete once /api/ready confirms the database and schema.
+          # only complete once /api/ready confirms the database and schema and
+          # the running process reports the exact revision approved by CI.
+          IDENTITY_OK=false
+          READY_CODE=000
           for i in {1..20}; do
+            IDENTITY_OK=false
+            rm -f /tmp/health.json /tmp/ready.json
+            HEALTH_CODE=$(curl -sS --max-time 30 "$RENDER_URL/api/health" -o /tmp/health.json -w '%{http_code}') || HEALTH_CODE=000
+            if [ "$HEALTH_CODE" = 200 ] && jq -e --arg sha "$VERIFIED_SHA" '.ok == true and .version == $sha' /tmp/health.json >/dev/null 2>&1; then
+              IDENTITY_OK=true
+            fi
             # No -f: keep the 503 body so the failure message names the state.
-            if curl -sS --max-time 30 "$RENDER_URL/api/ready" -o /tmp/ready.json && jq -e '.ok == true' /tmp/ready.json >/dev/null 2>&1; then
-              echo "Backend ready: $(cat /tmp/ready.json)"; exit 0
+            READY_CODE=$(curl -sS --max-time 30 "$RENDER_URL/api/ready" -o /tmp/ready.json -w '%{http_code}') || READY_CODE=000
+            if [ "$IDENTITY_OK" = true ] && [ "$READY_CODE" = 200 ] && jq -e '.ok == true' /tmp/ready.json >/dev/null 2>&1; then
+              echo "Backend ${VERIFIED_SHA} ready: $(cat /tmp/ready.json)"; exit 0
             fi
             sleep 15
           done
+          [ "$IDENTITY_OK" = true ] || { echo '::error title=Backend revision mismatch::The running backend did not confirm the exact CI-approved revision. A maintenance override cannot bypass revision verification.'; exit 1; }
           echo "::error title=Backend not ready::The new backend is live but /api/ready did not pass: $(head -c 300 /tmp/ready.json 2>/dev/null). Check Render logs for the [migrate]/[ready] driver code."
-          [ "$ALLOW_UNREADY" = "true" ] && { echo "::warning::Continuing because allow_unready was set."; exit 0; }
+          if [ "$ALLOW_UNREADY" = "true" ] && [ "$READY_CODE" = 503 ] && jq -e '.ok == false and .state == "database_unavailable"' /tmp/ready.json >/dev/null 2>&1; then
+            echo '::warning::Continuing the verified revision in database maintenance mode because allow_unready was set.'; exit 0;
+          fi
           exit 1
   deploy-vercel:
     needs: [verified-revision, deploy-render]

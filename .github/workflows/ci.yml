@@ -165,6 +165,9 @@ jobs:
       - name: HTTP and browser readiness checks
         run: node scripts/e2e-readiness.mjs
 
+      - name: Optional browser tools and metadata failure isolation
+        run: node scripts/verify-browser-module-boundary.mjs
+
       - name: Bounded load and rate-limit checks
         run: node scripts/load-readiness.mjs
 

@@ -43,6 +43,19 @@ export default function AdminObservability() {
     staleTime: 30_000,
     retry: false,
   });
+  const { data: scannerStatus, error: scannerError, isLoading: scannerLoading, isFetching: scannerFetching, refetch: refetchScanner } = trpc.system.scannerStatus.useQuery(undefined, {
+    enabled: isOwner && isAdmin,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const scannerMessages = {
+    ready: isAr ? "يوجد ماسح جاهز لاستقبال الملفات." : "A scanner is ready for uploads.",
+    busy: isAr ? "جميع الماسحات المتصلة مشغولة حالياً. أعد المحاولة بعد قليل." : "All connected scanners are busy. Retry shortly.",
+    unavailable: isAr ? "لا يوجد ماسح جاهز حالياً. تظل عمليات الرفع التي تتطلب الفحص موقوفة بأمان." : "No scanner is ready. Uploads requiring scanning are safely paused.",
+    not_configured: isAr ? "اتصال الماسح غير مُهيأ." : "The scanner connection is not configured.",
+    not_monitored: isAr ? "مراقبة العمال البعيدين غير نشطة في هذا الوضع. لم تُفحص سلامة المحرك هنا." : "Remote worker monitoring is inactive in this mode. Engine health was not probed here.",
+    disabled: isAr ? "الفحص معطل وفق الإعداد الحالي. لا تُعد الاتصالات دليلاً على فحص الملفات." : "Scanning is disabled by the current policy. Worker connections do not establish that uploads are scanned.",
+  };
 
   if (!isAuthenticated || user?.role !== "admin") {
     return (
@@ -128,6 +141,40 @@ export default function AdminObservability() {
             </CardContent>
           </Card>
         )}
+
+        <Card className={!scannerError && scannerStatus?.state === "ready" ? "border-emerald-500/40" : "border-amber-500/40"}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="h-4 w-4" /> {isAr ? "حالة فحص الملفات" : "Upload scanner status"}
+            </CardTitle>
+            <CardDescription>{isAr ? "حالة اتصالات الماسحات الحالية — تُحدّث كل دقيقة." : "Current scanner connections, refreshed every minute."}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm" aria-live="polite">
+            {scannerError ? (
+              <p className="text-destructive" role="alert">{isAr ? "تعذر تحميل حالة الماسحات. الحالة الحالية غير معروفة؛ أعد المحاولة." : "Scanner status could not be loaded. Current availability is unknown; retry the check."}</p>
+            ) : scannerLoading || !scannerStatus ? (
+              <p className="text-muted-foreground">{isAr ? "جارٍ التحقق…" : "Checking…"}</p>
+            ) : (
+              <>
+                <p className="font-medium">{scannerMessages[scannerStatus.state]}</p>
+                <p className="text-muted-foreground">
+                  {isAr ? "الاتصال مُهيأ: " : "Connection configured: "}{scannerStatus.configured ? (isAr ? "نعم" : "Yes") : (isAr ? "لا" : "No")}
+                  {" · "}{isAr ? "الفحص إلزامي: " : "Scanning required: "}{scannerStatus.required ? (isAr ? "نعم" : "Yes") : (isAr ? "لا" : "No")}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <MetricCard icon={Activity} label={isAr ? "متصلة" : "Connected"} value={scannerStatus.connected ?? "—"} />
+                  <MetricCard icon={Shield} label={isAr ? "جاهزة" : "Available"} value={scannerStatus.available ?? "—"} />
+                  <MetricCard icon={Clock} label={isAr ? "فحوص نشطة" : "Active scans"} value={scannerStatus.active ?? "—"} />
+                </div>
+                <p className="text-xs text-muted-foreground">{isAr ? "وقت التحقق: " : "Checked: "}<time dateTime={scannerStatus.checkedAt}>{new Date(scannerStatus.checkedAt).toLocaleString(isAr ? "ar-SA" : "en-GB")}</time></p>
+                <p className="text-xs text-muted-foreground">{isAr ? "يعرض هذا الفحص الحالة الحالية فقط، ولا يحدد سبب الانقطاع أو يضمن توافر الجهاز المضيف." : "This snapshot does not identify outage causes or guarantee host availability."}</p>
+              </>
+            )}
+            <Button variant="outline" size="sm" disabled={scannerFetching} onClick={() => { void refetchScanner(); }}>
+              {scannerFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (isAr ? "تحديث حالة الماسحات" : "Refresh scanner status")}
+            </Button>
+          </CardContent>
+        </Card>
 
         <Card className={aiStatus?.ok ? "border-emerald-500/40" : "border-amber-500/40"}>
           <CardHeader className="pb-2">

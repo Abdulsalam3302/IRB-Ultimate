@@ -1,4 +1,4 @@
-import { PUBLIC_PATHS } from "@shared/seo";
+import { PUBLIC_PATHS } from "@shared/publicPaths";
 
 /** Paths are controlled names, never identifiers, arbitrary URLs, or search strings. */
 export function analyticsPath(path: string): string | null {

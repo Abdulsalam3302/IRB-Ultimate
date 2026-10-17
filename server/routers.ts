@@ -2187,7 +2187,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Session revocation is temporarily unavailable. Please retry signing out." });
       }
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(COOKIE_NAME, cookieOptions);
       return { success: true } as const;
     }),
     // ORCID linking — applicant types their iD; we validate format and
@@ -2227,7 +2227,7 @@ export const appRouter = router({
           details: `Drafts removed: ${result.deletedDraftApplications}; regulatory records retained: ${result.retainedRegulatoryApplications}; object deletions queued: ${result.queuedStorageDeletions}; object deletions blocked for review: ${result.blockedStorageDeletions}`,
         }).catch(() => {});
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        ctx.res.clearCookie(COOKIE_NAME, cookieOptions);
         return { success: true, ...result };
       }),
   }),

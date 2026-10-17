@@ -1,9 +1,11 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, RotateCcw, Home } from "lucide-react";
 import { Component, ErrorInfo, ReactNode } from "react";
+import { isChunkLoadError } from "@/lib/chunkLoadError";
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 
 interface State {
@@ -36,6 +38,8 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
+      const chunkError = isChunkLoadError(this.state.error);
       return (
         <div className="flex items-center justify-center min-h-screen p-8 bg-background">
           <div className="flex flex-col items-center w-full max-w-2xl p-8 text-center">
@@ -44,9 +48,9 @@ class ErrorBoundary extends Component<Props, State> {
               className="text-destructive mb-6 flex-shrink-0"
             />
 
-            <h2 className="text-2xl font-semibold mb-2">Something went wrong.</h2>
+            <h2 className="text-2xl font-semibold mb-2">{chunkError ? "The page update could not load." : "Something went wrong."}</h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-md">
-              The page could not finish loading. Reload it or return to your dashboard.
+              {chunkError ? "Check your connection and reload to load the current version." : "The page could not finish loading. Reload it or return to your dashboard."}
               Unsaved changes may need to be entered again.
             </p>
 

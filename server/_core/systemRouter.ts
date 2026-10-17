@@ -6,6 +6,7 @@ import { invokeLLM } from "./llm";
 import { describeAiOutage } from "../aiReview";
 import { inspectLlmBudget, reserveLlmCall } from "./budget";
 import { TRPCError } from "@trpc/server";
+import { remoteScannerStatus } from "../services/remoteScanner";
 
 export const systemRouter = router({
   health: publicProcedure
@@ -17,6 +18,27 @@ export const systemRouter = router({
     .query(() => ({
       ok: true,
     })),
+
+  /** In-process operator snapshot only: no document, credential or upstream probe. */
+  scannerStatus: ownerProcedure.query(() => {
+    const selected = process.env.UPLOAD_SCANNER_MODE || "clamav";
+    const mode = selected === "remote" ? "remote" : selected === "clamav" ? "clamav" : "unsupported";
+    const configured = mode === "remote"
+      ? Boolean(process.env.SCANNER_WORKER_TOKENS?.trim())
+      : mode === "clamav" && Boolean(process.env.CLAMAV_HOST?.trim());
+    const bypassed = process.env.UPLOAD_SCAN_REQUIRED === "false";
+    const required = ENV.isProduction ? !bypassed : process.env.UPLOAD_SCAN_REQUIRED === "true";
+    let counts: ReturnType<typeof remoteScannerStatus> | null = null;
+    if (mode === "remote") {
+      try { counts = remoteScannerStatus(); }
+      catch { throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Scanner status is temporarily unavailable." }); }
+    }
+    const state = bypassed ? "disabled" : !configured ? "not_configured" : !counts ? "not_monitored"
+      : counts.available > 0 ? "ready"
+      : counts.connected > 0 && counts.active === counts.connected ? "busy" : "unavailable";
+    return { mode, configured, required, state, checkedAt: new Date().toISOString(),
+      connected: counts?.connected ?? null, available: counts?.available ?? null, active: counts?.active ?? null } as const;
+  }),
 
   /** Owner-only AI provider probe — does not leak the API key. */
   aiStatus: ownerProcedure.query(async ({ ctx }) => {

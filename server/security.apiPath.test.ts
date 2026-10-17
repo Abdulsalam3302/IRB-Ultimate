@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedCorsOrigin, normalizeApiPath, rateScope } from "./_core/security";
+import { isAllowedCorsOrigin, isUploadRequestPath, normalizeApiPath, rateScope } from "./_core/security";
 
 describe("API path normalization for policy checks", () => {
   it("normalizes the case-insensitive API prefix but keeps tRPC procedure names", () => {
@@ -12,6 +12,25 @@ describe("API path normalization for policy checks", () => {
   it("applies the same rate scope regardless of prefix case", () => {
     expect(rateScope(normalizeApiPath("/API/auth/login"))).toBe(rateScope("/api/auth/login"));
     expect(rateScope(normalizeApiPath("/API/TRPC/application.uploadFile"))).toBe(rateScope("/api/trpc/application.uploadFile"));
+  });
+  it("keeps admission, parser selection and rate scope aligned with tRPC batch and nested paths", () => {
+    for (const path of [
+      "/api/trpc/application.uploadFile",
+      "/API/TRPC/application.uploadFile",
+      "/api/trpc/nested/application.uploadFile",
+      "/api/trpc/auth.me,application.uploadFile",
+      "/api/trpc/nested/application.uploadFile,auth.me",
+    ]) {
+      expect(isUploadRequestPath(path)).toBe(true);
+      expect(rateScope(normalizeApiPath(path))).toBe("strict");
+    }
+    for (const path of [
+      "/api/trpc/application.uploadFile/unknownProcedure",
+      "/api/trpc/application.uploadFileExtra",
+      "/api/trpc/Application.uploadFile",
+      "/other/application.uploadFile",
+    ]) expect(isUploadRequestPath(path)).toBe(false);
+    expect(rateScope("/api/trpc/nested/application.runStage2Review")).toBe("strict");
   });
 });
 

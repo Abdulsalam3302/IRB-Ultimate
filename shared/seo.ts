@@ -1,4 +1,6 @@
 import { GUIDELINE_METADATA } from "./guidelineMetadata";
+import { getWorkspaceMetadata } from "./publicPaths";
+export { PUBLIC_PATHS } from "./publicPaths";
 
 export type SiteLanguage = "en" | "ar";
 export type PublicPageMetadata = {
@@ -20,18 +22,17 @@ export const PUBLIC_PAGES: PublicPageMetadata[] = [
   ...GUIDELINE_METADATA.map(doc => ({ path: `/resources/guideline/${doc.slug}`, titleEn: doc.titleEn, titleAr: doc.titleAr, descriptionEn: doc.descEn, descriptionAr: doc.descAr })),
 ];
 
-export const PUBLIC_PATHS = PUBLIC_PAGES.map(page => page.path);
-
 export function getPageMetadata(path: string, language: SiteLanguage = "en") {
   const barePath = path.split(/[?#]/, 1)[0] || "/";
   const page = PUBLIC_PAGES.find(row => row.path === barePath);
+  if (!page) return getWorkspaceMetadata(path, language);
   const isAr = language === "ar";
   return {
     path: barePath,
-    title: `${page ? (isAr ? page.titleAr : page.titleEn) : (isAr ? "مساحة العمل" : "Workspace")} | IRB Saudi Arabia`,
-    description: page ? (isAr ? page.descriptionAr : page.descriptionEn) : (isAr ? "مساحة عمل خاصة لإدارة طلبات أخلاقيات البحث." : "Private workspace for managing research ethics applications."),
-    robots: page ? "index, follow" : "noindex, nofollow, noarchive",
-    indexable: Boolean(page),
+    title: `${isAr ? page.titleAr : page.titleEn} | IRB Saudi Arabia`,
+    description: isAr ? page.descriptionAr : page.descriptionEn,
+    robots: "index, follow",
+    indexable: true,
   };
 }
 

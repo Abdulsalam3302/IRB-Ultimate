@@ -15,7 +15,17 @@ const WebMcpProvider = lazy(() => import("./components/WebMcpProvider").then(mod
 
 function BrowserTools() {
   if (typeof window === "undefined" || !window.isSecureContext || !("modelContext" in document || "modelContext" in navigator)) return null;
-  return <Suspense fallback={null}><WebMcpProvider /></Suspense>;
+  return (
+    <ErrorBoundary fallback={
+      <div role="status" className="border-b bg-muted px-4 py-2 text-center text-sm">
+        Browser agent tools could not load. You can continue using the website. Save your draft before reloading.
+        {" "}<button type="button" className="underline" onClick={() => window.location.reload()}>Reload to reconnect tools</button>
+        <span className="block" lang="ar" dir="rtl">تعذّر تحميل أدوات وكيل المتصفح. يمكنك متابعة استخدام الموقع. احفظ المسودة قبل إعادة التحميل.</span>
+      </div>
+    }>
+      <Suspense fallback={null}><WebMcpProvider /></Suspense>
+    </ErrorBoundary>
+  );
 }
 
 // Lazy-loaded route pages — each becomes its own chunk so first paint

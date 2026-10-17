@@ -59,12 +59,22 @@ export function clientIpKey(req: Request): string {
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
+/** Match the Express adapter's final-segment procedure lookup, including batches.
+ * Policy checks must see every procedure the downstream adapter can execute.
+ */
+function trpcRoutePaths(path: string): string[] | null {
+  if (!path.startsWith("/api/trpc/")) return null;
+  return path.slice(path.lastIndexOf("/") + 1).split(",").map(procedure => `/api/trpc/${procedure}`);
+}
+
+export function isUploadRequestPath(path: string): boolean {
+  return trpcRoutePaths(normalizeApiPath(path))?.includes("/api/trpc/application.uploadFile") ?? false;
+}
+
 export function rateScope(path: string): "auth" | "strict" | "general" {
   if (AUTH_ROUTES.some(p => path === p || path.startsWith(p + "/"))) return "auth";
   // A comma-separated tRPC batch must not bypass the expensive-route policy.
-  const paths = path.startsWith("/api/trpc/")
-    ? path.slice("/api/trpc/".length).split(",").map(p => `/api/trpc/${p}`)
-    : [path];
+  const paths = trpcRoutePaths(path) ?? [path];
   if (paths.some(p => STRICT_ROUTES.some(strict => p === strict || p.startsWith(strict + "/")))) return "strict";
   return "general";
 }
@@ -126,7 +136,7 @@ export function createUploadAdmission(
   const bodyTimeout = Number.isFinite(options.bodyTimeoutMs)
     ? Math.max(25, Math.min(UPLOAD_BODY_TIMEOUT_MS, options.bodyTimeoutMs!)) : UPLOAD_BODY_TIMEOUT_MS;
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (req.path !== "/api/trpc/application.uploadFile") return next();
+    if (!isUploadRequestPath(req.path)) return next();
     // Preflight must finish before JSON parsing; preserve split-host CORS.
     let continueRequest = false;
     corsForApi(req, res, () => { continueRequest = true; });
@@ -233,7 +243,7 @@ function buildCsp(): string {
 }
 
 function securityHeaders(req: Request, res: Response, next: NextFunction) {
-  if (req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) {
+  if (normalizeApiPath(req.path).startsWith("/api/") || /^\/uploads\//i.test(req.path)) {
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Robots-Tag", "noindex, nofollow");
   }

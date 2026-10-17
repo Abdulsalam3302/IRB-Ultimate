@@ -3,6 +3,8 @@ import express, { type Response as ExpressResponse } from "express";
 import { createServer, request as httpRequest, type Server, type ClientRequest } from "node:http";
 import { once } from "node:events";
 import { EventEmitter } from "node:events";
+import { initTRPC } from "@trpc/server";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 const { limiter, userLookup, revoked } = vi.hoisted(() => ({ limiter: vi.fn(), userLookup: vi.fn(), revoked: vi.fn() }));
 vi.mock("./_core/env", () => ({ ENV: { isProduction: true, cookieSecret: "synthetic-upload-admission-cookie-secret-32plus", appId: "upload-admission-test", allowedOrigins: ["https://public.example"], supabaseUrl: "", publicAppUrl: "https://public.example" } }));
@@ -10,7 +12,7 @@ vi.mock("./_core/requestLimits", () => ({ consumeRateLimit: limiter }));
 vi.mock("./db", () => ({ getUserByOpenId: userLookup }));
 vi.mock("./_core/sessions", () => ({ isSessionRevoked: revoked, revokeSession: vi.fn() }));
 vi.mock("./_core/observability", () => ({ captureException: vi.fn() }));
-import { registerSecurity, createUploadAdmission } from "./_core/security";
+import { registerSecurity, createUploadAdmission, isUploadRequestPath } from "./_core/security";
 import { sdk } from "./_core/sdk";
 import { assertStaffMfa } from "./_core/staffAuth";
 import { COOKIE_NAME } from "../shared/const";
@@ -28,7 +30,9 @@ async function appServer(bodyTimeoutMs = 30_000) {
   registerSecurity(app);
   app.use(createUploadAdmission(req => sdk.authenticateRequest(req), { bodyTimeoutMs }));
   app.use((req, _res, next) => { if (req.path === UPLOAD_PATH) events.emit("admitted"); next(); });
-  app.use(express.json({ limit: "21mb" }));
+  const smallBody = express.json({ limit: "1mb" });
+  const uploadBody = express.json({ limit: "21mb" });
+  app.use((req, res, next) => (isUploadRequestPath(req.path) ? uploadBody : smallBody)(req, res, next));
   app.post(UPLOAD_PATH, async (req, res) => {
     parsedCount++;
     // Admission does not cache a user or bypass final ownership/staff checks.
@@ -39,6 +43,15 @@ async function appServer(bodyTimeoutMs = 30_000) {
     if (req.body.hold) { held.push(res); events.emit("held"); return; }
     res.json({ success: true, authLevel: user.authLevel });
   });
+  // Exercise the real adapter's batch and nested-path resolution, rather than
+  // assuming it resolves only the exact Express route above.
+  const trpc = initTRPC.create();
+  app.use("/api/trpc", createExpressMiddleware({ router: trpc.router({
+    application: trpc.router({ uploadFile: trpc.procedure.mutation(() => {
+      parsedCount++;
+      return { success: true };
+    }) }),
+  }) }));
   app.get("/api/ordinary", (_req, res) => res.json({ ok: true }));
   app.all(["/api/export/test", "/api/auth/login"], (_req, res) => res.json({ ok: true }));
   app.use((err: unknown, _req: express.Request, res: ExpressResponse, _next: express.NextFunction) => {
@@ -113,6 +126,53 @@ describe("shared rate allowance protection", () => {
 });
 
 describe("upload admission before request-body parsing", () => {
+  it.each([
+    "/api/trpc/nested/application.uploadFile",
+    "/api/trpc/application.uploadFile,application.uploadFile?batch=1",
+  ])("applies early authentication to every upload URL resolved by tRPC: %s", async path => {
+    const server = await appServer();
+    // A complete body keeps a missing admission guard observable without
+    // relying on a client timeout or allowing an unfinished test request.
+    const result = await server.send(path).response;
+    expect(result.status).toBe(401);
+    expect(server.parsedCount()).toBe(0);
+  });
+
+  it("shares the account upload slot across batched and nested tRPC URLs", async () => {
+    const server = await appServer();
+    const cookie = await sdk.createSessionToken("native:applicant");
+    const ready = once(server.events, "held");
+    const holding = server.send(UPLOAD_PATH, { cookie, data: JSON.stringify({ hold: true }) });
+    await ready;
+    const statuses: number[] = [];
+    for (const path of [
+      "/API/TRPC/application.uploadFile",
+      "/api/trpc/nested/application.uploadFile",
+      "/api/trpc/application.uploadFile,application.uploadFile?batch=1",
+    ]) {
+      statuses.push((await server.send(path, { cookie }).response).status);
+    }
+    server.held[0].json({ complete: true }); await holding.response;
+    expect(statuses).toEqual([429, 429, 429]);
+    expect((await server.send("/api/trpc/nested/application.uploadFile", { cookie }).response).status).toBe(200);
+  });
+
+  it("admits a legitimate upload batch above the ordinary API body limit", async () => {
+    const server = await appServer();
+    const cookie = await sdk.createSessionToken("native:applicant");
+    const data = JSON.stringify({ "0": { fileData: "a".repeat(1024 * 1024 + 16) }, "1": {} });
+    const result = await server.send("/API/TRPC/application.uploadFile,application.uploadFile?batch=1", { cookie, data }).response;
+    expect(result.status).toBe(200);
+    expect(server.parsedCount()).toBe(2);
+  });
+
+  it.each(["/API/ordinary", "/Uploads/private.pdf"])("prevents caching and indexing on equivalent private paths: %s", async path => {
+    const server = await appServer();
+    const result = await server.send(path, { method: "GET", data: "" }).response;
+    expect(result.headers["cache-control"]).toBe("private, no-store");
+    expect(result.headers["x-robots-tag"]).toBe("noindex, nofollow");
+  });
+
   it("rejects two anonymous unfinished bodies immediately while a valid applicant can upload", async () => {
     const server = await appServer();
     const first = server.send(UPLOAD_PATH, { partial: true });

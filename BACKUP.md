@@ -1,81 +1,64 @@
-# Backup & restore — IRB Ultimate
+# Backup and recovery — IRB Saudi Arabia
 
-Daily MySQL backup via `scripts/backup.sh`, restore via `scripts/restore.sh`.
-Backups are gzipped SQL dumps with optional encryption and optional S3 upload.
+`scripts/backup.sh` creates a complete logical MySQL/MariaDB database snapshot. `scripts/restore.sh` restores a verified snapshot into an explicitly selected, existing database. These utilities do not schedule themselves, provision offsite storage, or establish a recovery guarantee. The web process's certificate-copy scheduler is separate from database backups.
 
-## What gets backed up
+## Coverage and recovery material
 
-A full logical dump of the `irb_platform` (or whatever `DATABASE_URL` points to)
-database — schema, data, routines, triggers, events. Uploaded files in S3 are
-NOT covered by this script (S3 has its own versioning + lifecycle); the local
-`uploads/` fallback directory is also not covered here — if you're running with
-the local-disk fallback, see "Files & uploads" below.
+The database dump includes schema, data, routines, triggers and events from the database selected by `DATABASE_URL`. This includes applications, immutable submission versions, decisions, audit records, account/session state, request limits, AI budgets, the encrypted mail outbox and other database tables. Uploaded objects and certificate files stored in Supabase, S3 or another storage provider are not included in the SQL archive.
 
-## Quick start (local / dev)
+Protect object storage separately with a verified backup/export and provider retention controls. Object versioning is useful when supported but does not establish an independent backup or prove that deleted objects can be recovered. Verify the actual provider policy and restoration path.
 
-```bash
-# Snapshot into ./backups/ with no encryption (dev only)
-DATABASE_URL='mysql://root@127.0.0.1:3306/irb_platform' \
-  bash scripts/backup.sh
+Store the backup decryption material separately from the archives. Preserve the durable `MAIL_ENCRYPTION_KEY` separately as well: restoring the outbox rows alone does not decrypt their recipients, reset links or attachments. Document the required deployment settings and their recovery process without copying credentials into a release receipt or repository.
 
-# Restore the latest snapshot
-DATABASE_URL='mysql://root@127.0.0.1:3306/irb_platform' \
-  bash scripts/restore.sh ./backups/irb-irb_platform-*.sql.gz
+## Requirements and encryption
+
+Both scripts require Node.js, a compatible MySQL or MariaDB client, and an explicitly injected `DATABASE_URL`. They never source `.env`. Use the project's Node 24 runtime and an existing database name consisting of letters, numbers or underscores, at most 64 characters. URL-encode credentials and inject secrets through the operator's secret store; do not paste them into a shell command, command history or shared log.
+
+Remote database connections require a readable provider CA certificate in `BACKUP_DB_SSL_CA`. The scripts require certificate and hostname verification and reject an explicit insecure remote TLS setting. An isolated loopback database can run without TLS. `MYSQLDUMP_BIN` and `MYSQL_BIN` can select compatible dump and restore executables.
+
+Backups require one of:
+
+- `BACKUP_GPG_RECIPIENT`: a previously verified GPG recipient; `gpg` must be installed and its recovery key available to the recovery operator.
+- `BACKUP_PASSPHRASE`: at least 20 characters, generated and stored securely. This produces an authenticated AES-256-GCM `.sql.gz.enc` archive with the `IRBBK01` header, a random salt and IV, and PBKDF2-SHA256 at 600,000 iterations.
+
+When both are supplied, GPG takes precedence. A `.sha256` sidecar accompanies every completed archive. Plaintext `.sql.gz` archives require `ALLOW_UNENCRYPTED_BACKUP=true`; use that exception only for disposable synthetic tests. Historical CBC `.enc` files are not accepted as the current authenticated format.
+
+The utilities use private temporary directories, `umask 077`, and cleanup traps. Database snapshot contents exist temporarily before encryption, so the backup execution host and its temporary storage must also be trusted and protected. The scripts log the selected database name, hostname, destination and safe errors; keep operational logs access controlled.
+
+## Run a backup
+
+Inject these settings privately before running the script:
+
+| Setting | Purpose |
+|---|---|
+| `DATABASE_URL` | Source database, with verified transport |
+| `BACKUP_DB_SSL_CA` | Readable provider CA certificate for any remote source |
+| `BACKUP_PASSPHRASE` or `BACKUP_GPG_RECIPIENT` | Archive encryption and separate recovery material |
+| `BACKUP_DIR` | Private persistent destination; defaults to `./backups` |
+| `BACKUP_RETENTION_DAYS` | Local pruning horizon, default 30; 0 disables pruning, maximum 3650 |
+| `BACKUP_S3_BUCKET` | Optional offsite upload target; requires AWS CLI and restricted credentials |
+| `BACKUP_S3_PREFIX` | Optional target prefix, default `irb-ultimate/mysql` |
+
+Run from the checkout with the protected environment already loaded:
+
+```sh
+bash scripts/backup.sh
 ```
 
-## Production setup
+The utility completes the dump, compression, encryption and checksum before publishing the local archive. If S3 is selected, it uploads both archive and checksum with AES256 server-side encryption. An upload failure returns a failure status and retains the completed local copy. Check both objects and their permissions before recording an offsite success.
 
-The recommended posture for **real** production is **encrypted + off-host**:
+Use a backup identity restricted to the approved destination; the web application should not be able to erase the independent backup. Enable provider versioning, deletion protection or object lock where supported and institutionally approved. `BACKUP_RETENTION_DAYS` only prunes matching local archives after a successful run; remote lifecycle retention is configured separately. Retention periods and legal holds must follow the responsible institution's approved policy. No universal IRB or medical-record duration is implied here.
 
-```bash
-# .env (production server)
-DATABASE_URL=mysql://user:pass@host:3306/irb_platform
-BACKUP_DIR=/var/lib/irb/backups          # persistent volume
-BACKUP_RETENTION_DAYS=30                  # local prune horizon
-BACKUP_PASSPHRASE=<64-char-random>        # OR use BACKUP_GPG_RECIPIENT
-BACKUP_S3_BUCKET=irb-ultimate-backups     # separate bucket from uploads
-BACKUP_S3_PREFIX=mysql/irb_platform
-AWS_REGION=me-central-1                   # KSA-adjacent; consider STC Cloud for true KSA-resident
-AWS_ACCESS_KEY_ID=...                     # IAM user scoped to s3:PutObject on the backup bucket ONLY
-AWS_SECRET_ACCESS_KEY=...
-```
+## Scheduling and alerting
 
-Notes:
+A separate scheduler must run the backup command on a persistent, trusted host with a compatible database client. A daily timer is one possible operating policy; choose the frequency from the approved recovery point objective. Verify current provider pricing before creating a hosted cron service. The free web-service configuration does not establish a daily database backup.
 
-- **Encryption is non-optional in prod.** Without `BACKUP_PASSPHRASE` or
-  `BACKUP_GPG_RECIPIENT` the dump is plaintext and the script warns. A leaked
-  unencrypted dump = a full PHI breach.
-- **Use a separate bucket** for backups, not the file-upload bucket. Give the
-  app's IAM user no read/write access to it. Give the backup IAM user no
-  access to the upload bucket.
-- **Enable S3 versioning + object-lock** on the backup bucket so an attacker
-  who pops the production host can't `aws s3 rm` your history.
-- **Enable S3 lifecycle** to transition objects to Glacier after ~30 days and
-  expire after your retention requirement (Saudi PDPL is generally 5y for
-  medical records — check with your DPO).
-- **Test restore quarterly.** A backup nobody has restored is a placebo.
-
-## Scheduling
-
-### Railway / Render cron
-
-Both expose a cron-jobs feature. Create a daily job:
-
-```
-schedule: "0 3 * * *"            # 03:00 UTC daily
-command:  "bash scripts/backup.sh"
-```
-
-Make sure the cron task inherits the same env vars as the web service
-(including `DATABASE_URL` and the `BACKUP_*` set above).
-
-### Linux systemd (self-hosted)
-
-Drop this in `/etc/systemd/system/irb-backup.service`:
+For a host that already has systemd, a service and timer can run the command:
 
 ```ini
+# /etc/systemd/system/irb-backup.service
 [Unit]
-Description=IRB Ultimate daily MySQL backup
+Description=IRB Saudi Arabia encrypted database backup
 After=network-online.target
 
 [Service]
@@ -86,101 +69,46 @@ WorkingDirectory=/opt/irb
 ExecStart=/usr/bin/env bash scripts/backup.sh
 ```
 
-And `/etc/systemd/system/irb-backup.timer`:
-
 ```ini
+# /etc/systemd/system/irb-backup.timer
 [Unit]
-Description=Daily timer for irb-backup.service
+Description=IRB Saudi Arabia daily backup schedule
 
 [Timer]
 OnCalendar=*-*-* 03:00:00 UTC
-Persistent=true                          # catches up missed runs after downtime
+Persistent=true
 
 [Install]
 WantedBy=timers.target
 ```
 
-`systemctl enable --now irb-backup.timer`.
+Restrict the environment file and archive directory to the backup operator, enable the timer on the chosen host, and route nonzero exits and overdue successful receipts to a monitored operator channel. A scheduler configuration or timer status is not evidence that an archive completed. Record archive time, checksum, local/offsite completion, latest successful restore, and measured recovery point/time. Alert before the acceptable backup age is exceeded.
 
-### Crontab (POSIX)
+## Restore drill
 
-```cron
-0 3 * * *  cd /opt/irb && /usr/bin/env bash scripts/backup.sh >> /var/log/irb-backup.log 2>&1
+Restore only into a new isolated database with no outbound email/model credentials. Never use the production database as a drill target. Before invoking the utility, review the destination hostname and database name independently of the source. Supply the selected target via `DATABASE_URL` and the matching decryption material and remote CA through protected environment injection.
+
+For an already created isolated target named `irb_restore_test`, run:
+
+```sh
+RESTORE_CONFIRM_DB=irb_restore_test \
+  bash scripts/restore.sh /private/backups/exact-approved-archive.sql.gz.enc
 ```
 
-## Restore drill (do this once a quarter)
+`RESTORE_CONFIRM_DB` must equal the exact target database name; `CONFIRM=yes` does not authorize restoration. Pass one exact archive path with its adjacent `.sha256` sidecar. Do not use a wildcard that could expand to several snapshots. For a GPG archive select its `.sql.gz.gpg` path and make the appropriate private key available. Plaintext synthetic fixtures additionally require `ALLOW_UNENCRYPTED_BACKUP=true`.
 
-```bash
-# 1. Spin up a throwaway MySQL
-mysql -e "CREATE DATABASE irb_restore_drill;"
+The utility copies the input into a private workspace, verifies the checksum, authenticates/decrypts the entire archive, validates gzip and decompression, and rejects SQL database-switching directives before making database writes. It then restores matching objects into the confirmed target. Once SQL execution begins, a database failure can leave a partial target; inspect or recreate the isolated target before retrying. This is not an atomic rollback mechanism.
 
-# 2. Restore the most recent encrypted snapshot
-DATABASE_URL='mysql://root@127.0.0.1:3306/irb_restore_drill' \
-BACKUP_PASSPHRASE="$(cat /run/secrets/irb-backup-pass)" \
-CONFIRM=yes \
-  bash scripts/restore.sh /var/lib/irb/backups/irb-irb_platform-LATEST.sql.gz.enc
+Compare restored table and row counts, application/version/decision relationships, audit and authorization state, and representative object references against a snapshot manifest. Verify private object recovery and access denial separately. Compare immutable snapshot hashes rather than a changing live source. Record any unsupported layer and the elapsed recovery time. A successful SQL import alone does not prove a complete disaster recovery capability.
 
-# 3. Sanity-check
-mysql irb_restore_drill -e "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM applications;"
+After a real incident restore, rotate `JWT_SECRET` before reopening access because restored session revocations may be older than current tokens. Reconcile mail outbox/provider receipts before enabling outbound delivery, and review AI spend, rate limits and audit intervals against external evidence. See [the operations runbook](docs/operations-runbook.md).
 
-# 4. Drop the drill DB
-mysql -e "DROP DATABASE irb_restore_drill;"
-```
+## Certificate convenience copies
 
-If the row counts match what you expect from prod, the chain works. If they
-don't, fix the script BEFORE you need it.
+`server/services/certificateBackup.ts` writes private local day-folder copies under `UPLOADS_DIR/certificate-backups/YYYY-MM-DD/`. When the selected storage provider is remote, it also attempts a copy through that provider. A failed remote copy leaves the local cache and a safe warning; it is not an offsite success receipt.
 
-## Files & uploads
+The scheduler runs after database initialization, at API startup and each 24 hours while the process is running. It copies files still present in the local `certificates/` directory and prunes local day folders older than its 30-day cache horizon. It does not enumerate or back up the entire remote bucket, and it does not prune remote copies. Local copies on an ephemeral service can disappear on restart or deploy. Configure the authoritative object's independent recovery and retention accordingly.
 
-The backup script handles MySQL only. Three cases for files:
+## Failures
 
-| Where files live | Backup strategy |
-|---|---|
-| S3 / R2 (recommended for prod) | Enable bucket versioning + lifecycle. No script needed. |
-| `BUILT_IN_FORGE_API_URL` | Provider's responsibility. Document the SLA. |
-| Local `uploads/` (dev fallback) | Add `tar -czf` of `uploads/` to the backup script if you ever run prod this way (do not — it doesn't survive container restarts). |
-
-## What this script does NOT do
-
-- Does not back up Sentry, mail queue, or AI prompt history. None of those
-  are sources of truth.
-- Does not snapshot the running Node process — restore brings up a fresh
-  process against the restored DB.
-- Does not exfiltrate keys. The script never logs `DATABASE_URL`,
-  `BACKUP_PASSPHRASE`, or AWS credentials.
-
-## When this script fails
-
-Common cases:
-
-- `mysqldump: command not found` — install mysql-client / mariadb-client.
-- `Access denied` — the DB user needs at least `SELECT, SHOW VIEW, RELOAD,
-  PROCESS, LOCK TABLES, EVENT, TRIGGER` on the target database.
-- S3 `403` — IAM user lacks `s3:PutObject` on `arn:aws:s3:::$BUCKET/$PREFIX/*`.
-- Restore stalls — the dump is large; pipe through `pv` to see throughput.
-
-If the script aborts mid-run, the partial dump file is deleted automatically.
-
-
-## Certificate file backups (last 30 days)
-
-Generated IRB certificates (PDF, or HTML-print fallback when Playwright/Chromium
-is unavailable on Render free RAM) are snapshotted daily:
-
-1. **On each issue** the artifact is copied to `uploads/certificate-backups/YYYY-MM-DD/`
-   and, if `S3_BUCKET` + AWS keys are set, also to `s3://$S3_BUCKET/certificate-backups/YYYY-MM-DD/`.
-2. **At API boot** (and every 24h) `startCertificateBackupScheduler()` copies any
-   files still under `uploads/certificates/` into today's folder, then **prunes**
-   day folders older than 30 days.
-
-### Operator path
-
-- **Preferred (production):** configure `S3_BUCKET` / `AWS_*` so certificates and
-  their 30-day copies live off-box. Enable bucket versioning.
-- **Render free / disk fallback:** files live on the instance under
-  `uploads/certificate-backups/`. This does **not** survive disk-less deploys —
-  attach a persistent disk or use S3.
-- Verify: `GET /api/health` (`appVersion` 2.1.0+) and list
-  `uploads/certificate-backups/` after issuing a certificate.
-- Word download: `GET /api/export/certificate/:id?format=docx` (signed-in owner/admin).
-  HTML print fallback: `?format=html` or automatic when PDF generation fails.
+Treat any nonzero exit or missing/overdue archive receipt as a failed backup. Check client availability and provider-supported dump permissions, CA access, database quota/connectivity, free disk space, encryption material, and destination upload permissions without printing credentials or raw research data. Failed temporary dumps are cleaned up; completed encrypted local archives remain after an offsite upload failure. Do not bypass encryption or TLS checks to clear an alert.

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getPageMetadata, getPublicSiteOrigin, PUBLIC_PATHS } from "./seo";
+import { getPageMetadata, getPublicSiteOrigin, PUBLIC_PATHS, PUBLIC_PAGES } from "./seo";
 
 describe("public discovery contract", () => {
   it("has unique routes and protects all private and verification-record paths", () => {
     expect(new Set(PUBLIC_PATHS).size).toBe(PUBLIC_PATHS.length);
+    expect(PUBLIC_PATHS).toEqual(PUBLIC_PAGES.map(page => page.path));
     for (const path of ["/dashboard", "/auth", "/admin", "/profile", "/application/123", "/verify/IRB-SA-2026-00001", "/registry", "/unknown"]) expect(getPageMetadata(path).robots).toContain("noindex");
     expect(getPageMetadata("/resources").indexable).toBe(true);
     expect(getPageMetadata("/verify").indexable).toBe(true);

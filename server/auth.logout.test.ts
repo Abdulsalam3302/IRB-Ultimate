@@ -73,11 +73,12 @@ describe("auth.logout", () => {
     // allowlist on /api/trpc is the CSRF defence; None left the cookie
     // attached to cross-site POSTs which any phishing page could exploit.
     expect(clearedCookies[0]?.options).toMatchObject({
-      maxAge: -1,
       secure: true,
       sameSite: "lax",
       httpOnly: true,
       path: "/",
     });
+    expect(clearedCookies[0]?.options).not.toHaveProperty("maxAge");
+    expect(clearedCookies[0]?.options).not.toHaveProperty("expires");
   });
 });

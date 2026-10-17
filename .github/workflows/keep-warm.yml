@@ -25,9 +25,22 @@ jobs:
           PUBLIC_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: |
           set -uo pipefail
-          test -n "$RENDER_URL" && test -n "$PUBLIC_URL" || { echo "::error::Set RENDER_URL and PUBLIC_SITE_URL repository variables."; exit 1; }
           failures=0
           report="| Endpoint | HTTP | Seconds | Result |\n|---|---|---|---|\n"
+          write_report() {
+            printf '### Readiness %s\n\n%b' "$( [ $failures -eq 0 ] && echo ✅ || echo ❌ )" "$report" >> "$GITHUB_STEP_SUMMARY"
+            printf '%b' "$report" > /tmp/report.md
+            echo "failures=$failures" >> "$GITHUB_OUTPUT"
+          }
+          if [ -z "$RENDER_URL" ] || [ -z "$PUBLIC_URL" ]; then
+            failures=1
+            report+='| Configuration | — | — | fail — Set both RENDER_URL and PUBLIC_SITE_URL repository variables. No endpoint requests were made. |\n'
+            echo '::error::Set RENDER_URL and PUBLIC_SITE_URL repository variables.'
+            # Publish the same output and report as a failed probe so the outage
+            # issue is created even when monitoring is not fully configured.
+            write_report
+            exit 1
+          fi
           probe() {
             local url="$1" expect="$2" out code time body ok
             # Retry only when there is no HTTP answer (cold start, network). A 503 from the
@@ -40,10 +53,13 @@ jobs:
               sleep 5
             done
             body=$(head -c 300 /tmp/body.json 2>/dev/null | tr -d '\n|' || true)
-            if [ "$expect" = ready ]; then
-              jq -e '.ok == true and (.appVersion | type == "string")' /tmp/body.json >/dev/null 2>&1 && ok=pass || ok=fail
-            else
-              jq -e '.ok == true' /tmp/body.json >/dev/null 2>&1 && ok=pass || ok=fail
+            ok=fail
+            if [ "$code" = 200 ]; then
+              if [ "$expect" = ready ]; then
+                jq -e '.ok == true and (.appVersion | type == "string")' /tmp/body.json >/dev/null 2>&1 && ok=pass
+              else
+                jq -e '.ok == true' /tmp/body.json >/dev/null 2>&1 && ok=pass
+              fi
             fi
             [ "$code" = 000 ] && body="no response ($(head -c 120 /tmp/curl.err | tr -d '\n|'))"
             echo "$url -> HTTP $code in ${time}s: $ok ${body}"
@@ -53,9 +69,7 @@ jobs:
           probe "$RENDER_URL/api/health" health
           probe "$RENDER_URL/api/ready" ready
           probe "$PUBLIC_URL/api/ready" ready
-          printf '### Readiness %s\n\n%b' "$( [ $failures -eq 0 ] && echo ✅ || echo ❌ )" "$report" >> "$GITHUB_STEP_SUMMARY"
-          printf '%b' "$report" > /tmp/report.md
-          echo "failures=$failures" >> "$GITHUB_OUTPUT"
+          write_report
           [ $failures -eq 0 ]
       - name: Open or update the outage issue
         if: failure() && steps.probe.outputs.failures != ''

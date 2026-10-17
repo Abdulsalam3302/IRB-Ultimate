@@ -98,8 +98,10 @@ describe("auth.logout", () => {
     expect(result).toEqual({ success: true });
     expect(ctx.res.clearCookie).toHaveBeenCalledWith(
       COOKIE_NAME,
-      expect.objectContaining({ maxAge: -1 })
+      expect.objectContaining({ httpOnly: true, path: "/", sameSite: "lax" })
     );
+    expect(ctx.res.clearCookie).not.toHaveBeenCalledWith(COOKIE_NAME, expect.objectContaining({ maxAge: expect.anything() }));
+    expect(ctx.res.clearCookie).not.toHaveBeenCalledWith(COOKIE_NAME, expect.objectContaining({ expires: expect.anything() }));
   });
 });
 

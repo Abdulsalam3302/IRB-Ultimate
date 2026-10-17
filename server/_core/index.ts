@@ -14,7 +14,7 @@ import { registerEmailRoutes } from "../email/routes";
 import { startEmailOutboxWorker } from "../email/outbox";
 import { registerNativeAuthRoutes } from "./nativeAuth";
 import { registerAuthRedirectRoutes } from "./authRedirects";
-import { registerSecurity, registerApiGuards, registerErrorHandler, createUploadAdmission, normalizeApiPath } from "./security";
+import { registerSecurity, registerApiGuards, registerErrorHandler, createUploadAdmission, isUploadRequestPath, normalizeApiPath } from "./security";
 import { registerExportRoutes } from "./exportRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -156,7 +156,7 @@ async function startServer() {
   const urlencodedSmall = express.urlencoded({ limit: "1mb", extended: true });
   app.use((req, res, next) => {
     if (
-      req.path === "/api/trpc/application.uploadFile"
+      isUploadRequestPath(req.path)
     ) {
       return jsonLarge(req, res, next);
     }

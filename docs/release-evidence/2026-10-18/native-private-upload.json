@@ -1,0 +1,119 @@
+{
+  "scope": "Synthetic deployed native upload/download/malware/access-control and account cleanup; no applications or decisions",
+  "checks": [
+    {
+      "name": "exact_runtime_revision",
+      "passed": true,
+      "httpStatus": 200
+    },
+    {
+      "name": "synthetic_account_1",
+      "passed": true,
+      "httpStatus": 200
+    },
+    {
+      "name": "synthetic_account_2",
+      "passed": true,
+      "httpStatus": 200
+    },
+    {
+      "name": "clean_upload_required_scanner",
+      "passed": true,
+      "httpStatus": 200
+    },
+    {
+      "name": "application_controlled_file_route",
+      "passed": true
+    },
+    {
+      "name": "anonymous_file_denied",
+      "passed": true,
+      "httpStatus": 401
+    },
+    {
+      "name": "other_applicant_file_denied",
+      "passed": true,
+      "httpStatus": 403
+    },
+    {
+      "name": "authenticated_private_redirect",
+      "passed": true,
+      "httpStatus": 302
+    },
+    {
+      "name": "signed_download_exact_bytes",
+      "passed": true,
+      "httpStatus": 200,
+      "detail": {
+        "bytes": 68,
+        "sha256": "084ac20b62863e2e21938e88c79b2d7f541c3211543c3e80ef93b717d337febb"
+      }
+    },
+    {
+      "name": "malware_fixture_rejected_before_storage",
+      "passed": true,
+      "httpStatus": 400
+    },
+    {
+      "name": "synthetic_account_1_erased",
+      "passed": true,
+      "httpStatus": 200,
+      "result": {
+        "success": true,
+        "deletedDraftApplications": 0,
+        "retainedRegulatoryApplications": 0,
+        "queuedStorageDeletions": 1,
+        "blockedStorageDeletions": 0,
+        "queuedIdentityDeletions": 0,
+        "blockedIdentityDeletions": 0,
+        "identityDeletionStatus": "not_required",
+        "storageDeletionStatus": "pending"
+      }
+    },
+    {
+      "name": "erased_session_1_denied",
+      "passed": true,
+      "httpStatus": 401
+    },
+    {
+      "name": "synthetic_account_2_erased",
+      "passed": true,
+      "httpStatus": 200,
+      "result": {
+        "success": true,
+        "deletedDraftApplications": 0,
+        "retainedRegulatoryApplications": 0,
+        "queuedStorageDeletions": 0,
+        "blockedStorageDeletions": 0,
+        "queuedIdentityDeletions": 0,
+        "blockedIdentityDeletions": 0,
+        "identityDeletionStatus": "not_required",
+        "storageDeletionStatus": "not_required"
+      }
+    },
+    {
+      "name": "erased_session_2_denied",
+      "passed": true,
+      "httpStatus": 401
+    }
+  ],
+  "status": "PASS",
+  "finishedAt": "2026-10-17T23:40:13Z",
+  "syntheticObject": {
+    "fileKey": "1050003/1792280389082-943f8f7cb217aa4c-irb-maintenance-c2bdd6ea831f4003af7536802f46f18a.txt",
+    "userId": 1050003,
+    "physicalCleanup": "PASS"
+  },
+  "physicalCleanupVerification": {
+    "job": {
+      "status": "completed",
+      "attempts": 1,
+      "lastErrorCode": null
+    },
+    "fileMetadataAbsent": true,
+    "accountAnonymised": true,
+    "providerListHttp": 200,
+    "syntheticUserPrefixEmpty": true,
+    "status": "PASS"
+  }
+}

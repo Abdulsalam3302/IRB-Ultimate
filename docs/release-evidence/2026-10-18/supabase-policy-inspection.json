@@ -1,0 +1,11 @@
+{
+  "scope": "Read-only pg_policies/pg_class inspection via the already-linked authenticated Supabase CLI Management API",
+  "projectRef": "yimtuqerflrqminsujfn",
+  "date": "2026-10-18 Asia/Riyadh",
+  "policies": [],
+  "rowLevelSecurity": {
+    "storage.buckets": true,
+    "storage.objects": true
+  },
+  "changedPolicies": false
+}

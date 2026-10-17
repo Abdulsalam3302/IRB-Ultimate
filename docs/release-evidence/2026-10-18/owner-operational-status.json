@@ -1,0 +1,36 @@
+{
+  "scope": "Normal owner email/password sign-in followed by authenticated operational queries; no application or decision mutation",
+  "runtimeSourceRevision": "18add2f110a8cd927ba2fca34a2699ab895b0834",
+  "checkedAt": "2026-10-17T23:43:32.299Z",
+  "nativeOwnerLogin": {
+    "httpStatus": 200,
+    "ok": true
+  },
+  "ownerSession": {
+    "role": "admin",
+    "isOwner": true,
+    "staffMfaRequired": false,
+    "authLevel": "aal1"
+  },
+  "scanner": {
+    "mode": "remote",
+    "configured": true,
+    "required": true,
+    "state": "ready",
+    "connected": 2,
+    "available": 2,
+    "active": 0
+  },
+  "aiConnection": {
+    "configured": true,
+    "ok": true,
+    "sample": "OK",
+    "configuredModel": "MiniMax-M3",
+    "limitation": "Configured model metadata and a connectivity response do not independently attest provider or model identity, ethical review accuracy, or decision quality."
+  },
+  "probeSessionLogout": {
+    "httpStatus": 200,
+    "ok": true
+  },
+  "credentialsPersisted": false
+}

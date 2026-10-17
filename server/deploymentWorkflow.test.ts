@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 // exercises jq selection and the override path without credentials or network.
 const workflow = readFileSync(new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8");
 const monitorWorkflow = readFileSync(new URL("../.github/workflows/keep-warm.yml", import.meta.url), "utf8");
+const frontendDeployment = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
 const sha = "a".repeat(40);
 const scratch: string[] = [];
 afterEach(() => { for (const path of scratch.splice(0)) rmSync(path, { recursive: true, force: true }); });
@@ -205,4 +206,21 @@ describe("production readiness monitoring", () => {
     expect(runStep(monitorStep, { ready: { ok: false, appVersion: "2.6.0" } }, monitorWorkflow).status).toBe(1);
     expect(runStep(monitorStep, { ready: { ok: true } }, monitorWorkflow).status).toBe(1);
   });
+});
+
+describe("frontend account recovery privacy", () => {
+  it.each(["/auth", "/forgot-password", "/reset-password"])(
+    "prevents shared caching and indexing of %s, including query-bearing recovery links",
+    path => {
+      // Vercel matches sources against the pathname; a reset token in the query
+      // must receive the same unconditional privacy headers as the bare route.
+      const rules = frontendDeployment.headers.filter((rule: { source: string; has?: unknown }) =>
+        !rule.has && (rule.source === path || rule.source === `${path}/:path*`));
+      expect(rules).toHaveLength(1);
+      const headers = Object.fromEntries(rules[0].headers.map((header: { key: string; value: string }) =>
+        [header.key.toLowerCase(), header.value]));
+      expect(headers["cache-control"]).toBe("private, no-store");
+      expect(headers["x-robots-tag"]).toBe("noindex, nofollow");
+    }
+  );
 });

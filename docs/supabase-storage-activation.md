@@ -2,6 +2,8 @@
 
 This runbook describes the IRB platform's private object storage in the new Supabase project. Activation and private-access verification were completed on 5 September 2026; see the [2.4 release record](release-2.4-readiness.md) and its source-bound live receipts. This does not migrate the MySQL application database, provision an ethics committee, enable certificate issuance, or establish regulatory compliance.
 
+**2026-10-18 recovery:** the owner resumed this paused project. The project returned to Healthy, the complete synthetic provider probe passed including ordinary authenticated denial, and current policy inspection found no policies on the two managed storage tables with RLS enabled on both. The deployed native application then passed clean upload, exact-byte signed download, anonymous/other-applicant denial, malware rejection, and completed synthetic object erasure. See [the dated activation receipts](release-evidence/2026-10-18/) and [the maintenance release](release-2.6.1.md). These are dated operational observations; free-tier availability and quota limits still apply.
+
 Use the project origin `https://yimtuqerflrqminsujfn.supabase.co` only after confirming that the operator has selected that project. Store research documents only after the institution has approved the hosting region, processor contracts, retention rules, and incident procedures. The platform's existing upload malware scanner remains required.
 
 ## Provision the bucket and inspect access policies

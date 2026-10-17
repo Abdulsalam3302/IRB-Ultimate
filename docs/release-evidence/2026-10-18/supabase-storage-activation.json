@@ -1,0 +1,156 @@
+{
+  "scope": "Supabase synthetic activation and exact test-identity cleanup",
+  "bucketStatus": 200,
+  "syntheticIdentityCreated": true,
+  "probe": {
+    "status": "PASS",
+    "startedAt": "2026-10-17T23:37:15.918Z",
+    "finishedAt": "2026-10-17T23:37:30.618Z",
+    "projectOrigin": "https://yimtuqerflrqminsujfn.supabase.co",
+    "bucket": "irb-private",
+    "syntheticPrefix": "irb-storage-probe/3c4c8416-86e1-42ab-9e11-048b9b98d3f8",
+    "requests": 27,
+    "checks": [
+      {
+        "name": "bucket.private_15MiB_mime_allowlist",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "publishable_key.valid",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "server.synthetic_upload",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "server.duplicate_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "server.short_download_signed",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "server.signed_download_original_bytes",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "anonymous.direct_download_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "anonymous.public_download_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "anonymous.list_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "anonymous.upload_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "anonymous.sign_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "publishable.direct_download_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "publishable.public_download_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "publishable.list_denied",
+        "status": "PASS",
+        "httpStatus": 200,
+        "detail": "RLS returned an empty visible list."
+      },
+      {
+        "name": "publishable.upload_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "publishable.sign_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "publishable_key.still_valid",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "authenticated.synthetic_identity_validated",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "authenticated.direct_download_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "authenticated.public_download_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "authenticated.list_denied",
+        "status": "PASS",
+        "httpStatus": 200,
+        "detail": "RLS returned an empty visible list."
+      },
+      {
+        "name": "authenticated.upload_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "authenticated.sign_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "authenticated.identity_still_valid",
+        "status": "PASS",
+        "httpStatus": 200
+      },
+      {
+        "name": "server.expired_link_denied",
+        "status": "PASS",
+        "httpStatus": 400
+      },
+      {
+        "name": "cleanup.own_prefix_empty",
+        "status": "PASS",
+        "httpStatus": 200
+      }
+    ],
+    "scope": "Synthetic private-storage provider activation probe; no research records or application database changes.",
+    "limitations": [
+      "A random-prefix behavioral probe does not replace review of all storage RLS policies.",
+      "This does not verify the deployed app, malware scanner, residency, contracts, backups, or document semantics.",
+      "The probe's five-second signing expiry is for verification only; application downloads are bounded to 60\u2013300 seconds."
+    ]
+  },
+  "syntheticIdentityCleanupHttp": 200,
+  "syntheticIdentityAbsent": true
+}
